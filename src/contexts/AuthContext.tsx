@@ -9,7 +9,7 @@ import React, {
 } from "react";
 import { onAuthStateChanged, type User } from "firebase/auth";
 import { auth } from "@/lib/firebase";
-import { getUserDocument, type UserDocument } from "@/lib/firestore";
+import { getUserDocument, createUserDocument, type UserDocument } from "@/lib/firestore";
 
 interface AuthContextValue {
   user: User | null;
@@ -32,16 +32,35 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const refreshUserDoc = useCallback(async () => {
     if (!user) return;
-    const doc = await getUserDocument(user.uid);
-    setUserDoc(doc);
+    try {
+      const doc = await getUserDocument(user.uid);
+      setUserDoc(doc);
+    } catch (error) {
+      console.error("Failed to refresh user document (offline?):", error);
+    }
   }, [user]);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       setUser(firebaseUser);
       if (firebaseUser) {
-        const doc = await getUserDocument(firebaseUser.uid);
-        setUserDoc(doc);
+        try {
+          let doc = await getUserDocument(firebaseUser.uid);
+          if (!doc) {
+            // Auto-create the user profile in Firestore if it's missing (e.g. from failed earlier registrations)
+            await createUserDocument(firebaseUser.uid, {
+              uid: firebaseUser.uid,
+              name: firebaseUser.displayName || firebaseUser.email?.split("@")[0] || "Student",
+              email: firebaseUser.email || "",
+              assessmentCompleted: false,
+            });
+            doc = await getUserDocument(firebaseUser.uid);
+          }
+          setUserDoc(doc);
+        } catch (error) {
+          console.error("Failed to fetch user document (offline?):", error);
+          setUserDoc(null);
+        }
       } else {
         setUserDoc(null);
       }
