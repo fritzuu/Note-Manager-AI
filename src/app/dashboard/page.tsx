@@ -162,7 +162,7 @@ export default function DashboardPage() {
   return (
     <DashboardShell>
       {/* Welcome Row */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 animate-slide-up">
+      <div className="relative z-20 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 animate-slide-up">
         <div>
           <h1 className="text-2xl font-bold text-[#1F2937] tracking-tight">
             Good {new Date().getHours() < 12 ? "morning" : new Date().getHours() < 18 ? "afternoon" : "evening"},{" "}
