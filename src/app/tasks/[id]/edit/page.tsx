@@ -315,7 +315,7 @@ export default function EditTaskPage() {
                   <span className="text-sm font-bold text-gray-800">Smart Priority Result</span>
                 </div>
                 <span className="text-[10px] font-semibold text-primary bg-primary-50 border border-primary/20 px-2 py-0.5 rounded-full flex items-center gap-1">
-                  <GitBranch className="w-2.5 h-2.5" /> Mamdani · 15 rules
+                  <GitBranch className="w-2.5 h-2.5" /> Mamdani · 20 rules
                 </span>
               </div>
               <div className="flex items-center gap-6">
@@ -359,7 +359,7 @@ export default function EditTaskPage() {
                   <span className="text-sm font-bold text-gray-800">Activated Rules</span>
                 </div>
                 <span className="text-[10px] text-gray-400 bg-gray-50 border border-border px-2 py-0.5 rounded-full">
-                  {preview.activatedRules.length} / 15 fired
+                  {preview.activatedRules.length} / 20 fired
                 </span>
               </div>
               {preview.activatedRules.slice(0, 5).map((rule) => {
