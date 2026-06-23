@@ -48,7 +48,7 @@ export async function POST(request: NextRequest) {
 
     const result = await new Promise<string>((resolve, reject) => {
       const child = execFile(
-        "python3",
+        "python",
         [predictScript],
         { timeout: 15000 },
         (error, stdout, stderr) => {
