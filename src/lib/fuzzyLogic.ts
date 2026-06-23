@@ -214,18 +214,21 @@ function evaluateRules(inputs: FuzzyInputs): Activation {
   const r10 = Math.min(dlM, pM);   // DlMed ∧ ProgMed   → Medium
   const r15 = Math.min(iM, dMf);   // ImpMed ∧ DifMed   → Medium
   const r16 = Math.min(iM, pL);    // ImpMed ∧ ProgLow  → Medium
+  const r18 = Math.min(iM, Math.max(pL, pM)); // ImpMed ∧ ProgLow/Med → Medium
+  const r19 = Math.min(dH, pL);    // DifHard ∧ ProgLow → Medium
 
   // Low
   const r11 = Math.min(dlF, pH);   // Far ∧ ProgHigh    → Low
   const r12 = Math.min(dlF, iL);   // Far ∧ ImpLow      → Low
   const r13 = Math.min(pH, dE);    // ProgHigh ∧ DifEasy → Low
   const r14 = Math.min(aL, pH);    // RiskLow ∧ ProgHigh → Low
+  const r20 = iL;                  // ImpLow            → Low
 
   return {
     critical: Math.max(r1, r2, r3, r4, r7),
     high:     Math.max(r5, r6, r8, r9, r17),
-    medium:   Math.max(r10, r15, r16),
-    low:      Math.max(r11, r12, r13, r14),
+    medium:   Math.max(r10, r15, r16, r18, r19),
+    low:      Math.max(r11, r12, r13, r14, r20),
   };
 }
 
@@ -457,6 +460,9 @@ export function computePriorityDetailed(inputs: FuzzyInputs): FuzzyDetailedResul
     { id: 15, strength: Math.min(impMedium(imp), difMedium(dif)), conditions: ["Importance Medium", "Difficulty Medium"],   conclusion: "Priority Medium",   outputLevel: "Medium"   },
     { id: 16, strength: Math.min(impMedium(imp), proLow(pro)),  conditions: ["Importance Medium", "Progress Low"],          conclusion: "Priority Medium",   outputLevel: "Medium"   },
     { id: 17, strength: Math.min(dlMedium(dl), difHard(dif)),   conditions: ["Deadline Medium", "Difficulty Hard"],         conclusion: "Priority High",     outputLevel: "High"     },
+    { id: 18, strength: Math.min(impMedium(imp), Math.max(proLow(pro), proMedium(pro))), conditions: ["Importance Medium", "Progress Low/Medium"], conclusion: "Priority Medium", outputLevel: "Medium" },
+    { id: 19, strength: Math.min(difHard(dif), proLow(pro)), conditions: ["Difficulty Hard", "Progress Low"], conclusion: "Priority Medium", outputLevel: "Medium" },
+    { id: 20, strength: impLow(imp), conditions: ["Importance Low"], conclusion: "Priority Low", outputLevel: "Low" },
   ];
 
   const activatedRules = rules
