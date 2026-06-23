@@ -63,3 +63,20 @@
     background-color: var(--color-background);
   }
 }
+
+/* Global cursor overrides at root level */
+button,
+button *,
+a,
+a *,
+select,
+select *,
+[role="button"],
+[role="button"] *,
+input[type="range"],
+input[type="radio"],
+input[type="checkbox"],
+.cursor-pointer,
+.cursor-pointer * {
+  cursor: pointer !important;
+}
