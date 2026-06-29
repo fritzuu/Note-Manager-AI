@@ -46,11 +46,26 @@ function longFocus(x: number) { return tri(x, 42, 50, 60); }
 
 export interface PomodoroFuzzyResult {
   recommendedMinutes: number;
-  label: "Short" | "Medium" | "Long";
+  label: "Micro" | "Short" | "Medium" | "Long";
   breakMinutes: number;
 }
 
-export function computePomodoroFocus(priorityScore: number, difficulty: number): PomodoroFuzzyResult {
+export function computePomodoroFocus(
+  priorityScore: number, 
+  difficulty: number, 
+  estimatedTotalMinutes?: number
+): PomodoroFuzzyResult {
+  // MICRO-TASK BYPASS
+  // If the total estimated time is less than a standard Pomodoro (25m),
+  // just return the remaining time as a "Micro" session with a short break.
+  if (estimatedTotalMinutes !== undefined && estimatedTotalMinutes < 25 && estimatedTotalMinutes > 0) {
+    return {
+      recommendedMinutes: estimatedTotalMinutes,
+      label: "Micro",
+      breakMinutes: 5,
+    };
+  }
+
   const pLow = priorityLow(priorityScore);
   const pMed = priorityMedium(priorityScore);
   const pHigh = priorityHigh(priorityScore);
@@ -108,7 +123,7 @@ export function computePomodoroFocus(priorityScore: number, difficulty: number):
 
   // Snap to nearest standard duration
   let recommendedMinutes: number;
-  let label: "Short" | "Medium" | "Long";
+  let label: "Micro" | "Short" | "Medium" | "Long";
   if (rawMinutes < 33) { recommendedMinutes = 25; label = "Short"; }
   else if (rawMinutes < 45) { recommendedMinutes = 40; label = "Medium"; }
   else { recommendedMinutes = 50; label = "Long"; }
