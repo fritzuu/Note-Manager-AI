@@ -34,7 +34,7 @@ export function computePriorityDetailed(inputs: FuzzyInputs): FuzzyDetailedResul
       priorityScore: 0,
       priorityLevel: "Low",
       riskLevel: "Low",
-      estimatedFocusMinutes: 0,
+      estimatedTotalMinutes: 0,
       reasoning: "Task is fully complete — no action needed.",
       activatedRules: [],
       activation: { low: 1, medium: 0, high: 0, critical: 0 },
@@ -80,7 +80,7 @@ export function computePriorityDetailed(inputs: FuzzyInputs): FuzzyDetailedResul
     .sort((a, b) => b.strength - a.strength);
 
   const riskLevel = deriveRiskLevel(dl, pro, ar, finalScore);
-  const estimatedFocusMinutes = estimateFocusMinutes(dif, finalScore, pro);
+  const estimatedTotalMinutes = estimateFocusMinutes(dif, finalScore, pro);
   const reasoning = buildReasoning(
     { deadlineDays: dl, importance: imp, difficulty: dif, progress: pro, academicRisk: ar },
     priorityLevel, activatedRules
@@ -90,7 +90,7 @@ export function computePriorityDetailed(inputs: FuzzyInputs): FuzzyDetailedResul
     priorityScore: finalScore,
     priorityLevel,
     riskLevel,
-    estimatedFocusMinutes,
+    estimatedTotalMinutes,
     reasoning,
     activatedRules,
     activation,
@@ -107,7 +107,7 @@ export function computePriority(inputs: FuzzyInputs) {
     priorityScore: detailed.priorityScore,
     priorityLevel: detailed.priorityLevel,
     riskLevel: detailed.riskLevel,
-    estimatedFocusMinutes: detailed.estimatedFocusMinutes,
+    estimatedTotalMinutes: detailed.estimatedTotalMinutes,
     reasoning: detailed.reasoning
   };
 }

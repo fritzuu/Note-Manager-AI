@@ -41,7 +41,7 @@ export interface FuzzyResult {
   priorityScore: number;
   priorityLevel: PriorityLevel;
   riskLevel: RiskLevel;
-  estimatedFocusMinutes: number;
+  estimatedTotalMinutes: number;
   reasoning: string;
 }
 
