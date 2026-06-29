@@ -103,6 +103,9 @@ export function computePomodoroFocus(
   // Rule 8: IF Priority Low AND Difficulty Hard THEN Medium Focus
   medAct = Math.max(medAct, Math.min(pLow, dHard));
 
+  // Rule 9: IF Priority Medium AND Difficulty Easy THEN Short Focus
+  shortAct = Math.max(shortAct, Math.min(pMed, dEasy));
+
   // Defuzzify (centroid)
   let numerator = 0;
   let denominator = 0;
