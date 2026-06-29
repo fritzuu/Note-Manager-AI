@@ -120,14 +120,22 @@ export default function AcademicInsightPage() {
           </p>
         </div>
         {state === "ready" && (
-          <button
-            onClick={handleRegenerate}
-            id="regenerate-insight"
-            className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-primary bg-primary/5 hover:bg-primary/10 rounded-xl transition-colors cursor-pointer"
-          >
-            <RefreshCw className="w-4 h-4" />
-            Regenerate
-          </button>
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              onClick={() => router.push("/assessment")}
+              className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 border border-border rounded-xl transition-colors cursor-pointer shadow-sm"
+            >
+              Edit Profile
+            </button>
+            <button
+              onClick={handleRegenerate}
+              id="regenerate-insight"
+              className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-primary bg-primary/5 hover:bg-primary/10 rounded-xl transition-colors cursor-pointer"
+            >
+              <RefreshCw className="w-4 h-4" />
+              Regenerate
+            </button>
+          </div>
         )}
       </div>
 

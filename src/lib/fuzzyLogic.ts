@@ -251,23 +251,13 @@ function defuzzify(act: Activation): number {
   return den < 0.001 ? 0 : num / den;
 }
 
-// ── Level from argmax activation ─────────────────────────────────────────────
-//
-//  Using argmax(activation) as primary level ensures the output region with
-//  the STRONGEST firing strength determines the label — immune to centroid bleed.
-//  Score is still the continuous defuzzified value for ranking tasks.
+// ── Level from Score Thresholds ──────────────────────────────────────────────
 
-function levelFromActivation(act: Activation): PriorityLevel {
-  const entries: [PriorityLevel, number][] = [
-    ["Critical", act.critical],
-    ["High",     act.high],
-    ["Medium",   act.medium],
-    ["Low",      act.low],
-  ];
-  // If no rule fired, fall back to score-based thresholds (handled in computePriority)
-  const total = act.critical + act.high + act.medium + act.low;
-  if (total < 0.02) return "Low";
-  return entries.reduce((a, b) => b[1] > a[1] ? b : a)[0];
+function levelFromScore(score: number): PriorityLevel {
+  if (score >= 81) return "Critical";
+  if (score >= 61) return "High";
+  if (score >= 31) return "Medium";
+  return "Low";
 }
 
 // ── Risk Level ────────────────────────────────────────────────────────────────
@@ -378,10 +368,12 @@ export function computePriority(inputs: FuzzyInputs): FuzzyResult {
   // Defuzzified score (continuous, for task ranking)
   const defuzzValue  = defuzzify(activation);
   const overdueBonus = dl < 0 ? Math.min(8, Math.abs(dl) * 1.5) : 0;
-  const priorityScore = Math.round(Math.min(100, Math.max(0, defuzzValue + overdueBonus)));
+  // Small monotonic difficulty scaling adjustment (-4 to +5 pts)
+  const diffAdjust    = (dif - 5) * 1.0;
+  const priorityScore = Math.round(Math.min(100, Math.max(0, defuzzValue + overdueBonus + diffAdjust)));
 
-  // Level from argmax — immune to centroid bleed
-  const priorityLevel = levelFromActivation(activation);
+  // Level from score thresholds
+  const priorityLevel = levelFromScore(priorityScore);
 
   const riskLevel             = deriveRiskLevel(dl, pro, ar, priorityScore);
   const estimatedFocusMinutes = estimateFocusMinutes(dif, priorityScore, pro);
