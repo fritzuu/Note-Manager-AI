@@ -34,8 +34,8 @@ export function shoulderR(x: number, a: number, b: number): number {
 // ── Input 1: Deadline (days remaining, clamped 0–30) ─────────────────────────
 // Deadline monotonicity constraint: Deadline ↓ = Priority ↑
 export function dlNear(d: number): number   { return shoulderL(d, 1, 6); }
-export function dlMedium(d: number): number { return trap(d, 4, 7, 12, 18); }
-export function dlFar(d: number): number    { return shoulderR(d, 14, 23); }
+export function dlMedium(d: number): number { return trap(d, 4, 6, 8, 12); }
+export function dlFar(d: number): number    { return shoulderR(d, 8, 12); }
 
 // ── Input 2: Importance (1–10) ────────────────────────────────────────────────
 // Importance monotonicity constraint: Importance ↑ = Priority ↑

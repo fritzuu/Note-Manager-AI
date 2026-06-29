@@ -24,7 +24,7 @@ export function deriveAcademicRiskFromInsight(academicScore: number, prediction:
     risk = Math.max(0, risk - 10);
   else if (label.includes("below average") || label.includes("at risk"))
     risk = Math.min(100, risk + 15);
-  else if (label.includes("fail") || label.includes("poor") || label.includes("critical"))
+  else if (label.includes("fail") || label.includes("poor") || label.includes("critical") || label.includes("low"))
     risk = Math.min(100, risk + 25);
   return Math.max(0, Math.min(100, risk));
 }

@@ -1,4 +1,4 @@
-import type { FuzzyInputs, FuzzyDetailedResult, FuzzyMemberships } from "./types";
+import type { FuzzyInputs, FuzzyDetailedResult, FuzzyMemberships, PriorityLevel } from "./types";
 import { CONSTRAINTS } from "./config";
 import { buildRules } from "./rules";
 import { aggregateRules, argmaxLevel } from "./aggregation";
@@ -70,9 +70,15 @@ export function computePriorityDetailed(inputs: FuzzyInputs): FuzzyDetailedResul
   // Final clamping to [0, 100]
   finalScore = Math.round(Math.min(CONSTRAINTS.MAX_SCORE, Math.max(CONSTRAINTS.MIN_SCORE, finalScore)));
 
-  // 6. Level Determination via Argmax
-  // Since the rule base is partitioned carefully, argmax matches human intuition.
-  const priorityLevel = argmaxLevel(activation);
+  // 6. Level Determination via Score Thresholds
+  let priorityLevel: PriorityLevel = "Low";
+  if (finalScore >= 80) {
+    priorityLevel = "Critical";
+  } else if (finalScore >= 60) {
+    priorityLevel = "High";
+  } else if (finalScore >= 30) {
+    priorityLevel = "Medium";
+  }
 
   // Filter rules for debugging/UI
   const activatedRules = rules
