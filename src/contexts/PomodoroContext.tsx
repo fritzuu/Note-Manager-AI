@@ -67,7 +67,7 @@ export function PomodoroProvider({ children }: { children: React.ReactNode }) {
   // Compute fuzzy recommendation
   // Note: we scale difficulty down by dividing by 10 (since tasks store difficulty as 0-100, and pomodoroFuzzy uses 1-10)
   const fuzzyResult = selectedTask
-    ? computePomodoroFocus(selectedTask.priorityScore, selectedTask.difficulty / 10)
+    ? computePomodoroFocus(selectedTask.priorityScore, selectedTask.difficulty / 10, selectedTask.estimatedTotalMinutes)
     : computePomodoroFocus(30, 5);
 
   const refreshData = useCallback(async () => {

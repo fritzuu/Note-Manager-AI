@@ -65,7 +65,7 @@ function PomodoroContent() {
 
   const selectedTask = tasks.find((t) => t.id === selectedTaskId) || null;
   const fuzzyResult = selectedTask
-    ? computePomodoroFocus(selectedTask.priorityScore, selectedTask.difficulty)
+    ? computePomodoroFocus(selectedTask.priorityScore, selectedTask.difficulty / 10, selectedTask.estimatedTotalMinutes)
     : computePomodoroFocus(30, 5);
 
   // Load data
