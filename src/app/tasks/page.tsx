@@ -23,9 +23,10 @@ import {
   updateTask,
   deleteTask,
   createNotification,
+  getAcademicInsight,
   type TaskDocument,
 } from "@/lib/firestore";
-import { deadlineToDays } from "@/lib/fuzzyLogic";
+import { deadlineToDays, computePriorityDetailed, deriveAcademicRiskFromInsight } from "@/lib/fuzzyLogic";
 import { DashboardShell } from "@/components/layout/DashboardShell";
 import { Button } from "@/components/ui/Button";
 
@@ -191,12 +192,50 @@ export default function KanbanPage() {
   const loadTasks = useCallback(async () => {
     if (!user) return;
     try {
-      const data = await getUserTasks(user.uid);
-      setTasks(data);
+      const [data, insight] = await Promise.all([
+        getUserTasks(user.uid),
+        getAcademicInsight(user.uid),
+      ]);
+
+      const latestAcademicRisk = insight
+        ? deriveAcademicRiskFromInsight(insight.academicScore, insight.prediction)
+        : 40;
+
+      // Recalculate priority scores on the fly using latest academic risk and current date
+      const updatedTasks = data.map((task) => {
+        if (task.status === "done") {
+          return {
+            ...task,
+            priorityScore: 0,
+            priorityLevel: "Low",
+          };
+        }
+
+        const deadline = task.deadline?.toDate ? task.deadline.toDate() : new Date();
+        const deadlineDays = deadlineToDays(deadline);
+        const result = computePriorityDetailed({
+          deadlineDays,
+          importance: task.importance,
+          difficulty: task.difficulty,
+          progress: task.progress,
+          academicRisk: latestAcademicRisk,
+        });
+
+        return {
+          ...task,
+          academicRisk: latestAcademicRisk,
+          priorityScore: result.priorityScore,
+          priorityLevel: result.priorityLevel,
+          riskLevel: result.riskLevel,
+          estimatedTotalMinutes: result.estimatedTotalMinutes,
+        };
+      });
+
+      setTasks(updatedTasks);
 
       // Run reminder agent on load
       const now = new Date();
-      for (const task of data) {
+      for (const task of updatedTasks) {
         if (task.status === "done") continue;
         const deadline = task.deadline?.toDate ? task.deadline.toDate() : null;
         const deadlineDays = deadline ? deadlineToDays(deadline) : 999;

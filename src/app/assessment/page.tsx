@@ -4,7 +4,7 @@ import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { CheckCircle2, ChevronLeft, ChevronRight, Loader2 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
-import { saveAssessment, markAssessmentComplete, getAssessment } from "@/lib/firestore";
+import { saveAssessment, markAssessmentComplete, getAssessment, saveAcademicInsight } from "@/lib/firestore";
 import { Button } from "@/components/ui/Button";
 import { Select } from "@/components/ui/Select";
 import { Slider } from "@/components/ui/Slider";
@@ -156,10 +156,25 @@ export default function AssessmentPage() {
     try {
       await saveAssessment(user.uid, data);
       await markAssessmentComplete(user.uid);
+
+      // Automatically trigger academic insight regeneration
+      const res = await fetch("/api/academic-insight", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data),
+      });
+
+      if (!res.ok) {
+        throw new Error("Prediction API failed");
+      }
+
+      const prediction = await res.json();
+      await saveAcademicInsight(user.uid, prediction);
+
       setSubmitted(true);
 
       setTimeout(() => {
-        router.push("/dashboard");
+        router.push("/insight");
       }, 2000);
     } catch (err) {
       console.error("Assessment submission error:", err);
