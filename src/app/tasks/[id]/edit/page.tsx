@@ -359,7 +359,7 @@ export default function EditTaskPage() {
                   <span className="text-sm font-bold text-gray-800">Activated Rules</span>
                 </div>
                 <span className="text-[10px] text-gray-400 bg-gray-50 border border-border px-2 py-0.5 rounded-full">
-                  {preview.activatedRules.length} / 20 fired
+                  {preview.activatedRules.length} / 80 fired
                 </span>
               </div>
               {preview.activatedRules.slice(0, 5).map((rule) => {

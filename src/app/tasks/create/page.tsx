@@ -676,7 +676,7 @@ function FuzzyRulesSection({ fuzzy }: { fuzzy: FuzzyDetailedResult }) {
           <span className="text-sm font-bold text-gray-800">Fuzzy Reasoning</span>
         </div>
         <span className="text-[10px] text-gray-400 bg-gray-50 border border-border px-2 py-0.5 rounded-full">
-          {fuzzy.activatedRules.length} / 20 rules fired
+          {fuzzy.activatedRules.length} / 80 rules fired
         </span>
       </div>
 
