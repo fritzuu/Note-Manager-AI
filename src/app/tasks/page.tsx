@@ -141,7 +141,7 @@ function TaskCard({ task, onDelete, onDragStart }: TaskCardProps) {
         <div className="flex items-center gap-1">
           <span className="text-[10px] text-gray-400 flex items-center gap-0.5">
             <Timer className="w-3 h-3" />
-            {task.estimatedFocusMinutes}m
+            {task.estimatedTotalMinutes}m
           </span>
         </div>
       </div>

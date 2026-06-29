@@ -229,8 +229,8 @@ export default function CreateTaskPage() {
   );
 
   const pomodoro = useMemo(
-    () => computePomodoroFocus(fuzzy.priorityScore, form.difficulty),
-    [fuzzy.priorityScore, form.difficulty]
+    () => computePomodoroFocus(fuzzy.priorityScore, form.difficulty, fuzzy.estimatedTotalMinutes),
+    [fuzzy.priorityScore, form.difficulty, fuzzy.estimatedTotalMinutes]
   );
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
@@ -262,7 +262,7 @@ export default function CreateTaskPage() {
         priorityScore:          fuzzy.priorityScore,
         priorityLevel:          fuzzy.priorityLevel,
         riskLevel:              fuzzy.riskLevel,
-        estimatedFocusMinutes:  fuzzy.estimatedFocusMinutes,
+        estimatedTotalMinutes:  fuzzy.estimatedTotalMinutes,
         reasoning:              fuzzy.reasoning,
         status:                 "todo",
       });
@@ -638,8 +638,10 @@ function SmartPrioritySection({
             </span>
           </div>
           <div className="flex items-center justify-between">
-            <span className="text-xs text-gray-500 font-medium">Est. Focus</span>
-            <span className="text-xs font-bold text-gray-700">{fuzzy.estimatedFocusMinutes} min</span>
+            <span className="text-xs text-gray-500 font-medium">Est. Total Time</span>
+            <span className="text-xs font-bold text-gray-700">
+              {fuzzy.estimatedTotalMinutes} min
+            </span>
           </div>
           <div className="flex items-center justify-between">
             <span className="text-xs text-gray-500 font-medium">Deadline</span>
@@ -814,7 +816,7 @@ function MembershipSection({ fuzzy }: { fuzzy: FuzzyDetailedResult }) {
 function PomodoroSection({
   pomodoro, fuzzy, difficulty,
 }: {
-  pomodoro: { recommendedMinutes: number; label: "Short" | "Medium" | "Long"; breakMinutes: number };
+  pomodoro: { recommendedMinutes: number; label: "Micro" | "Short" | "Medium" | "Long"; breakMinutes: number };
   fuzzy: FuzzyDetailedResult;
   difficulty: number;
 }) {
@@ -823,6 +825,10 @@ function PomodoroSection({
     { label: "Medium", minutes: 40, break: 10 },
     { label: "Long",   minutes: 50, break: 15 },
   ] as const;
+
+  // For Micro-Tasks, show a special single-block display
+  const isMicro = pomodoro.label === "Micro";
+  const totalSessions = !isMicro ? Math.max(1, Math.round(fuzzy.estimatedTotalMinutes / pomodoro.recommendedMinutes)) : 1;
 
   return (
     <div className="bg-white rounded-2xl border border-border shadow-card p-5 space-y-4">
@@ -868,6 +874,18 @@ function PomodoroSection({
             </div>
           );
         })}
+      </div>
+
+      {/* Session Count Summary */}
+      <div className="flex items-center justify-between bg-gray-50 border border-border rounded-xl px-3 py-2">
+        <span className="text-xs text-gray-500">Estimated to finish</span>
+        <span className="text-xs font-bold text-gray-700">
+          {isMicro ? (
+            <span className="text-blue-600">Micro-Task ({pomodoro.recommendedMinutes}m)</span>
+          ) : (
+            <>{totalSessions} {pomodoro.label} Session{totalSessions > 1 ? "s" : ""} × {pomodoro.recommendedMinutes}m</>
+          )}
+        </span>
       </div>
 
       {/* Reasoning */}
