@@ -47,13 +47,14 @@ export async function POST(request: NextRequest) {
     const inputJson = JSON.stringify(assessmentData);
 
     const result = await new Promise<string>((resolve, reject) => {
+      const pythonExecutable = process.platform === "win32" ? "python" : "python3";
       const child = execFile(
-        "python",
+        pythonExecutable,
         [predictScript],
         { timeout: 15000 },
         (error, stdout, stderr) => {
           if (error) {
-            console.error("Python prediction error:", error.message);
+            console.error(`${pythonExecutable} prediction error:`, error.message);
             console.error("stderr:", stderr);
             reject(new Error(`Prediction failed: ${error.message}`));
             return;
