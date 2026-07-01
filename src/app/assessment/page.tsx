@@ -4,7 +4,7 @@ import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { CheckCircle2, ChevronLeft, ChevronRight, Loader2 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
-import { saveAssessment, markAssessmentComplete } from "@/lib/firestore";
+import { saveAssessment, markAssessmentComplete, getAssessment, saveAcademicInsight } from "@/lib/firestore";
 import { Button } from "@/components/ui/Button";
 import { Select } from "@/components/ui/Select";
 import { Slider } from "@/components/ui/Slider";
@@ -100,6 +100,36 @@ export default function AssessmentPage() {
   useEffect(() => {
     if (!authLoading && !user) {
       router.replace("/login");
+      return;
+    }
+
+    if (user) {
+      const loadExistingAssessment = async () => {
+        try {
+          const existing = await getAssessment(user.uid);
+          if (existing) {
+            setData({
+              age: existing.age ?? 20,
+              gender: existing.gender ?? 0,
+              study_hours_per_day: existing.study_hours_per_day ?? 3,
+              attendance_percentage: existing.attendance_percentage ?? 80,
+              part_time_job: existing.part_time_job ?? 0,
+              sleep_hours: existing.sleep_hours ?? 7,
+              social_media_hours: existing.social_media_hours ?? 2,
+              netflix_hours: existing.netflix_hours ?? 1,
+              exercise_frequency: existing.exercise_frequency ?? 3,
+              diet_quality: existing.diet_quality ?? 3,
+              internet_quality: existing.internet_quality ?? 3,
+              parental_education_level: existing.parental_education_level ?? 2,
+              extracurricular_participation: existing.extracurricular_participation ?? 0,
+              mental_health_rating: existing.mental_health_rating ?? 7,
+            });
+          }
+        } catch (err) {
+          console.error("Failed to load existing assessment:", err);
+        }
+      };
+      loadExistingAssessment();
     }
   }, [user, authLoading, router]);
 
@@ -126,10 +156,25 @@ export default function AssessmentPage() {
     try {
       await saveAssessment(user.uid, data);
       await markAssessmentComplete(user.uid);
+
+      // Automatically trigger academic insight regeneration
+      const res = await fetch("/api/academic-insight", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data),
+      });
+
+      if (!res.ok) {
+        throw new Error("Prediction API failed");
+      }
+
+      const prediction = await res.json();
+      await saveAcademicInsight(user.uid, prediction);
+
       setSubmitted(true);
 
       setTimeout(() => {
-        router.push("/dashboard");
+        router.push("/insight");
       }, 2000);
     } catch (err) {
       console.error("Assessment submission error:", err);

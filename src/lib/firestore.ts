@@ -347,7 +347,7 @@ export interface TaskDocument {
   priorityScore: number;
   priorityLevel: string;
   riskLevel: string;
-  estimatedFocusMinutes: number;
+  estimatedTotalMinutes: number;
   /** Human-readable reasoning produced by the fuzzy engine. */
   reasoning: string;
   status: "todo" | "doing" | "done";
@@ -388,14 +388,24 @@ export async function getTask(taskId: string): Promise<TaskDocument | null> {
   const taskRef = doc(db, "tasks", taskId);
   const snap = await getDoc(taskRef);
   if (!snap.exists()) return null;
-  return snap.data() as TaskDocument;
+  const data = snap.data();
+  return {
+    ...data,
+    estimatedTotalMinutes: data.estimatedTotalMinutes ?? data.estimatedFocusMinutes ?? 0,
+  } as TaskDocument;
 }
 
 export async function getUserTasks(userId: string): Promise<TaskDocument[]> {
   const q = query(collection(db, "tasks"), where("userId", "==", userId));
   const snap = await getDocs(q);
   const tasks: TaskDocument[] = [];
-  snap.forEach((d) => tasks.push(d.data() as TaskDocument));
+  snap.forEach((d) => {
+    const data = d.data();
+    tasks.push({
+      ...data,
+      estimatedTotalMinutes: data.estimatedTotalMinutes ?? data.estimatedFocusMinutes ?? 0,
+    } as TaskDocument);
+  });
   tasks.sort((a, b) => {
     const aS = a.updatedAt ? (a.updatedAt as { seconds?: number }).seconds || 0 : 0;
     const bS = b.updatedAt ? (b.updatedAt as { seconds?: number }).seconds || 0 : 0;

@@ -21,12 +21,15 @@ import {
   createPomodoroSession,
   completePomodoroSession,
   getUserPomodoroSessions,
+  updateTask,
   type TaskDocument,
   type PomodoroSession,
 } from "@/lib/firestore";
 import { computePomodoroFocus } from "@/lib/pomodoroFuzzy";
 import { DashboardShell } from "@/components/layout/DashboardShell";
 import { Button } from "@/components/ui/Button";
+import { cn } from "@/lib/utils";
+import { Sliders, X } from "lucide-react";
 
 const PRIORITY_BADGE: Record<string, string> = {
   Critical: "bg-red-100 text-red-700",
@@ -60,13 +63,28 @@ function PomodoroContent() {
   const [sessionCompleted, setSessionCompleted] = useState(false);
   const [breakSeconds, setBreakSeconds] = useState(5 * 60);
 
+  // Progress check-in states (Alternatif B)
+  const [showProgressPrompt, setShowProgressPrompt] = useState(false);
+  const [progressIncrement, setProgressIncrement] = useState(0);
+  const [suggestedProgress, setSuggestedProgress] = useState(0);
+  const [adjustedProgress, setAdjustedProgress] = useState(0);
+  const [isUpdatingProgress, setIsUpdatingProgress] = useState(false);
+
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const sessionIdRef = useRef<string | null>(null);
 
   const selectedTask = tasks.find((t) => t.id === selectedTaskId) || null;
   const fuzzyResult = selectedTask
-    ? computePomodoroFocus(selectedTask.priorityScore, selectedTask.difficulty)
+    ? computePomodoroFocus(selectedTask.priorityScore, selectedTask.difficulty / 10, selectedTask.estimatedTotalMinutes)
     : computePomodoroFocus(30, 5);
+
+  const completedTaskSessions = sessions.filter(s => s.taskId === selectedTaskId && s.completed).length;
+  const estimatedTotalSessions = selectedTask && fuzzyResult.recommendedMinutes > 0
+    ? Math.round(selectedTask.estimatedTotalMinutes / fuzzyResult.recommendedMinutes)
+    : 0;
+  const targetSessions = selectedTask && selectedTask.estimatedTotalMinutes > 0 
+    ? Math.max(1, estimatedTotalSessions) 
+    : 0;
 
   // Load data
   useEffect(() => {
@@ -115,13 +133,33 @@ function PomodoroContent() {
         await completePomodoroSession(sessionIdRef.current);
         const updated = await getUserPomodoroSessions(user.uid);
         setSessions(updated);
+
+        // Alternatif B: Calculate progress increment
+        if (selectedTask) {
+          const currentProgress = selectedTask.progress;
+          if (currentProgress < 100) {
+            const remaining = selectedTask.estimatedTotalMinutes;
+            const factor = (100 - currentProgress) / 100;
+            const baseTotalTime = factor > 0 ? remaining / factor : remaining;
+            
+            const focusMinutes = fuzzyResult.recommendedMinutes;
+            if (baseTotalTime > 0) {
+              const increment = Math.round((focusMinutes / baseTotalTime) * 100);
+              const nextProgress = Math.min(100, currentProgress + increment);
+              setProgressIncrement(increment);
+              setSuggestedProgress(nextProgress);
+              setAdjustedProgress(nextProgress);
+              setShowProgressPrompt(true);
+            }
+          }
+        }
       } catch (e) {
         console.error(e);
       }
     }
     setSessionCompleted(true);
     setIsRunning(false);
-  }, [user]);
+  }, [user, selectedTask, fuzzyResult.recommendedMinutes]);
 
   // Timer tick
   useEffect(() => {
@@ -186,6 +224,25 @@ function PomodoroContent() {
     setSessionId(null);
     sessionIdRef.current = null;
     setSessionCompleted(false);
+  };
+
+  const handleSaveProgress = async () => {
+    if (!selectedTask) return;
+    setIsUpdatingProgress(true);
+    try {
+      await updateTask(selectedTask.id, { progress: adjustedProgress });
+      // Refresh tasks list so state updates
+      if (user) {
+        const userTasks = await getUserTasks(user.uid);
+        const activeTasks = userTasks.filter((t) => t.status !== "done");
+        setTasks(activeTasks);
+      }
+      setShowProgressPrompt(false);
+    } catch (e) {
+      console.error("Failed to update task progress:", e);
+    } finally {
+      setIsUpdatingProgress(false);
+    }
   };
 
   // Analytics
@@ -276,16 +333,52 @@ function PomodoroContent() {
 
             {/* Selected Task Info */}
             {selectedTask && (
-              <div className="flex items-center gap-3 pt-1 flex-wrap">
-                <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${PRIORITY_BADGE[selectedTask.priorityLevel]}`}>
-                  {selectedTask.priorityLevel}
-                </span>
-                <span className="text-xs text-gray-500">
-                  Priority Score: <span className="font-bold text-primary">{selectedTask.priorityScore}</span>
-                </span>
-                <span className="text-xs text-gray-500">
-                  Difficulty: <span className="font-bold">{selectedTask.difficulty}/10</span>
-                </span>
+              <div className="space-y-3 pt-1">
+                <div className="flex items-center gap-3 flex-wrap">
+                  <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${PRIORITY_BADGE[selectedTask.priorityLevel]}`}>
+                    {selectedTask.priorityLevel}
+                  </span>
+                  <span className="text-xs text-gray-500">
+                    Priority Score: <span className="font-bold text-primary">{selectedTask.priorityScore}</span>
+                  </span>
+                  <span className="text-xs text-gray-500">
+                    Difficulty: <span className="font-bold">{selectedTask.difficulty}/10</span>
+                  </span>
+                  <span className="text-xs text-gray-500">
+                    Progress: <span className="font-bold">{selectedTask.progress}%</span>
+                  </span>
+                </div>
+
+                {targetSessions > 0 && (
+                  <div className="flex items-center gap-2 py-2 px-3 rounded-xl bg-gray-50 border border-border w-fit">
+                    <span className="text-xs font-semibold text-gray-500 mr-1 flex items-center gap-1">
+                      🍅 Target Sessions:
+                    </span>
+                    <div className="flex gap-1">
+                      {Array.from({ length: Math.max(targetSessions, completedTaskSessions) }).map((_, i) => (
+                        <div
+                          key={i}
+                          className={cn(
+                            "w-2.5 h-2.5 rounded-full transition-all duration-300",
+                            i < completedTaskSessions
+                              ? "bg-primary shadow-sm scale-110"
+                              : i < targetSessions
+                                ? "bg-gray-200 border border-gray-300"
+                                : "bg-orange-200 border border-orange-300"
+                          )}
+                          title={
+                            i < completedTaskSessions
+                              ? `Session ${i + 1} completed`
+                              : `Session ${i + 1} estimated`
+                          }
+                        />
+                      ))}
+                    </div>
+                    <span className="text-xs text-gray-500 ml-1.5 font-medium">
+                      {completedTaskSessions} / {targetSessions} sessions
+                    </span>
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -458,6 +551,82 @@ function PomodoroContent() {
           </div>
         </div>
       </div>
+      {/* Progress Check-in Prompt (Alternatif B) */}
+      {showProgressPrompt && selectedTask && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#1F2937]/50 backdrop-blur-sm p-4">
+          <div className="bg-white rounded-2xl border border-border shadow-2xl max-w-md w-full p-6 space-y-6 animate-scale-in relative">
+            <button
+              onClick={() => setShowProgressPrompt(false)}
+              className="absolute top-4 right-4 p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
+                <Timer className="w-5 h-5 text-primary animate-pulse" />
+              </div>
+              <div>
+                <h3 className="font-bold text-gray-800 text-lg">Focus Session Finished! 🍅</h3>
+                <p className="text-xs text-gray-500">How much progress did you make?</p>
+              </div>
+            </div>
+
+            <div className="bg-gray-50 border border-border rounded-xl p-4 space-y-3">
+              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Session Summary</p>
+              <div className="space-y-1">
+                <p className="text-sm font-bold text-gray-700">{selectedTask.title}</p>
+                <p className="text-xs text-gray-500">
+                  Focused for <span className="font-semibold text-primary">{fuzzyResult.recommendedMinutes} minutes</span>
+                </p>
+              </div>
+              <div className="border-t border-border/60 pt-2 flex items-center justify-between text-xs">
+                <span className="text-gray-500">AI Estimated Progress:</span>
+                <span className="font-bold text-primary">+{progressIncrement}%</span>
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              <div className="flex justify-between items-center">
+                <span className="text-sm font-semibold text-gray-700">Update Progress</span>
+                <span className="text-sm font-bold text-primary">{adjustedProgress}%</span>
+              </div>
+              <input
+                type="range"
+                min={selectedTask.progress}
+                max="100"
+                value={adjustedProgress}
+                onChange={(e) => setAdjustedProgress(Number(e.target.value))}
+                className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-primary"
+              />
+              <div className="flex justify-between text-[10px] text-gray-400 font-medium">
+                <span>Current: {selectedTask.progress}%</span>
+                <span>Suggested: {suggestedProgress}%</span>
+                <span>Complete: 100%</span>
+              </div>
+            </div>
+
+            <div className="flex gap-3">
+              <Button
+                variant="outline"
+                className="flex-1"
+                onClick={() => setShowProgressPrompt(false)}
+                disabled={isUpdatingProgress}
+              >
+                Skip / No Progress
+              </Button>
+              <Button
+                variant="primary"
+                className="flex-1"
+                onClick={handleSaveProgress}
+                loading={isUpdatingProgress}
+              >
+                Update Progress
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </DashboardShell>
   );
 }

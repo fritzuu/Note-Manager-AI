@@ -8,7 +8,7 @@ import { computePriority, type FuzzyInputs } from "@/lib/fuzzyLogic";
  * and returns the computed priority result.
  *
  * Body: { deadlineDays, importance, difficulty, progress, academicRisk }
- * Returns: { priorityScore, priorityLevel, riskLevel, estimatedFocusMinutes, reasoning }
+ * Returns: { priorityScore, priorityLevel, riskLevel, estimatedTotalMinutes, reasoning }
  */
 export async function POST(request: NextRequest) {
   try {

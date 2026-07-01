@@ -83,9 +83,17 @@ export default function SettingsPage() {
               <BookOpen className="w-3.5 h-3.5" />
               Assessment Completed
             </span>
-            <p className="text-sm font-semibold text-primary bg-primary-50/50 border border-primary-100 rounded-xl px-4 py-3">
-              {userDoc?.assessmentCompleted ? "Yes (Active)" : "No"}
-            </p>
+            <div className="flex items-center gap-3">
+              <p className="text-sm font-semibold text-primary bg-primary-50/50 border border-primary-100 rounded-xl px-4 py-3 flex-1">
+                {userDoc?.assessmentCompleted ? "Yes (Active)" : "No"}
+              </p>
+              <button
+                onClick={() => router.push("/assessment")}
+                className="px-4 py-3 bg-white hover:bg-gray-50 border border-border text-sm font-semibold text-gray-700 rounded-xl transition-all duration-200 shadow-sm cursor-pointer shrink-0"
+              >
+                {userDoc?.assessmentCompleted ? "Edit Profile Data" : "Take Assessment"}
+              </button>
+            </div>
           </div>
         </div>
       </div>

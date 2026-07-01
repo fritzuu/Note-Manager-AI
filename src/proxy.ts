@@ -6,7 +6,7 @@ const protectedRoutes = ["/assessment", "/dashboard", "/notes", "/assistant", "/
 // Auth routes that authenticated users shouldn't access
 const authRoutes = ["/login", "/register"];
 
-export function middleware(request: NextRequest) {
+export default function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
   // We use a cookie "__session" or "auth-token" that client sets on login

@@ -24,6 +24,7 @@ import {
   type FuzzyDetailedResult,
 } from "@/lib/fuzzyLogic";
 import { DashboardShell } from "@/components/layout/DashboardShell";
+import { computePomodoroFocus } from "@/lib/pomodoroFuzzy";
 import { Button } from "@/components/ui/Button";
 import { cn } from "@/lib/utils";
 
@@ -134,6 +135,11 @@ export default function EditTaskPage() {
     [deadlineDays, form.importance, form.difficulty, form.progress, academicRisk]
   );
 
+  const pomodoro = useMemo(
+    () => computePomodoroFocus(preview.priorityScore, form.difficulty, preview.estimatedTotalMinutes),
+    [preview.priorityScore, form.difficulty, preview.estimatedTotalMinutes]
+  );
+
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
     setForm((prev) => ({
@@ -161,7 +167,7 @@ export default function EditTaskPage() {
         priorityScore:          preview.priorityScore,
         priorityLevel:          preview.priorityLevel,
         riskLevel:              preview.riskLevel,
-        estimatedFocusMinutes:  preview.estimatedFocusMinutes,
+        estimatedTotalMinutes:  preview.estimatedTotalMinutes,
         reasoning:              preview.reasoning,
       });
       router.push("/tasks");
@@ -315,7 +321,7 @@ export default function EditTaskPage() {
                   <span className="text-sm font-bold text-gray-800">Smart Priority Result</span>
                 </div>
                 <span className="text-[10px] font-semibold text-primary bg-primary-50 border border-primary/20 px-2 py-0.5 rounded-full flex items-center gap-1">
-                  <GitBranch className="w-2.5 h-2.5" /> Mamdani · 15 rules
+                  <GitBranch className="w-2.5 h-2.5" /> Mamdani · 20 rules
                 </span>
               </div>
               <div className="flex items-center gap-6">
@@ -335,9 +341,18 @@ export default function EditTaskPage() {
                     <span className="text-xs text-gray-500">Risk Level</span>
                     <span className="text-xs font-bold text-gray-700">{preview.riskLevel}</span>
                   </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs text-gray-500">Est. Focus</span>
-                    <span className="text-xs font-bold text-gray-700">{preview.estimatedFocusMinutes} min</span>
+                  <div className="flex justify-between border-t border-border pt-2.5 mt-1">
+                    <span className="text-xs text-gray-500">Estimated Total</span>
+                    <span className="text-xs font-bold text-gray-700 text-right">
+                      {preview.estimatedTotalMinutes} min
+                      <br/>
+                      {pomodoro.label !== "Micro" && (
+                        <span className="font-normal text-[10px] text-gray-500">(~{Math.max(1, Math.round(preview.estimatedTotalMinutes / pomodoro.recommendedMinutes))} {pomodoro.label} Sessions)</span>
+                      )}
+                      {pomodoro.label === "Micro" && (
+                        <span className="font-normal text-[10px] text-blue-600">(Micro-Task)</span>
+                      )}
+                    </span>
                   </div>
                 </div>
               </div>
@@ -359,7 +374,7 @@ export default function EditTaskPage() {
                   <span className="text-sm font-bold text-gray-800">Activated Rules</span>
                 </div>
                 <span className="text-[10px] text-gray-400 bg-gray-50 border border-border px-2 py-0.5 rounded-full">
-                  {preview.activatedRules.length} / 15 fired
+                  {preview.activatedRules.length} / 80 fired
                 </span>
               </div>
               {preview.activatedRules.slice(0, 5).map((rule) => {

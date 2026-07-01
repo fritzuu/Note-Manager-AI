@@ -67,7 +67,7 @@ export function PomodoroProvider({ children }: { children: React.ReactNode }) {
   // Compute fuzzy recommendation
   // Note: we scale difficulty down by dividing by 10 (since tasks store difficulty as 0-100, and pomodoroFuzzy uses 1-10)
   const fuzzyResult = selectedTask
-    ? computePomodoroFocus(selectedTask.priorityScore, selectedTask.difficulty / 10)
+    ? computePomodoroFocus(selectedTask.priorityScore, selectedTask.difficulty / 10, selectedTask.estimatedTotalMinutes)
     : computePomodoroFocus(30, 5);
 
   const refreshData = useCallback(async () => {
@@ -101,10 +101,14 @@ export function PomodoroProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (authLoading) return;
     if (user) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       refreshData();
     } else {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setTasks([]);
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setSessions([]);
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setLoading(false);
     }
   }, [user, authLoading, refreshData]);
@@ -112,7 +116,9 @@ export function PomodoroProvider({ children }: { children: React.ReactNode }) {
   // Reset timer when selected task changes and not currently running
   useEffect(() => {
     if (!isRunning && !sessionCompleted && phase === "focus") {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setTimerSeconds(fuzzyResult.recommendedMinutes * 60);
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setBreakSeconds(fuzzyResult.breakMinutes * 60);
     }
   }, [selectedTaskId, fuzzyResult.recommendedMinutes, fuzzyResult.breakMinutes, isRunning, sessionCompleted, phase]);
