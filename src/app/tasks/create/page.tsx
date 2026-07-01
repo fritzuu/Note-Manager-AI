@@ -1,7 +1,7 @@
 "use client";
 
-import React, { useState, useEffect, useMemo } from "react";
-import { useRouter } from "next/navigation";
+import React, { useState, useEffect, useMemo, Suspense } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Timestamp } from "firebase/firestore";
 import Link from "next/link";
 import {
@@ -21,7 +21,13 @@ import {
   Info,
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
-import { createTask, getAcademicInsight, getAssessment } from "@/lib/firestore";
+import {
+  createTask,
+  getAcademicInsight,
+  getAssessment,
+  getUserWorkspaces,
+  type WorkspaceDocument,
+} from "@/lib/firestore";
 import {
   computePriorityDetailed,
   deadlineToDays,
@@ -153,9 +159,11 @@ function PipelineStep({
 
 // ── Main Page ─────────────────────────────────────────────────────────────────
 
-export default function CreateTaskPage() {
+function CreateTaskForm() {
   const { user, loading: authLoading } = useAuth();
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const queryWorkspaceId = searchParams.get("workspaceId") || "";
 
   // Default deadline: 7 days from now
   const defaultDeadline = useMemo(() => {
@@ -176,6 +184,10 @@ export default function CreateTaskPage() {
   const [saving, setSaving] = useState(false);
   const [error,  setError]  = useState("");
 
+  // Workspaces state
+  const [workspaces, setWorkspaces] = useState<WorkspaceDocument[]>([]);
+  const [selectedWorkspaceId, setSelectedWorkspaceId] = useState<string>("");
+
   // AI context loaded from Firestore
   const [academicRisk,    setAcademicRisk]    = useState(40);
   const [prediction,      setPrediction]      = useState<string>("—");
@@ -185,14 +197,15 @@ export default function CreateTaskPage() {
   const [mentalHealth,    setMentalHealth]    = useState<number | null>(null);
   const [aiContextReady,  setAiContextReady]  = useState(false);
 
-  // Load AI academic context once
+  // Load AI academic context and workspaces once
   useEffect(() => {
     if (!user) return;
     const load = async () => {
       try {
-        const [insight, assessment] = await Promise.all([
+        const [insight, assessment, wsList] = await Promise.all([
           getAcademicInsight(user.uid),
           getAssessment(user.uid),
+          getUserWorkspaces(user.uid),
         ]);
         if (insight) {
           const derived = deriveAcademicRiskFromInsight(insight.academicScore, insight.prediction);
@@ -205,14 +218,21 @@ export default function CreateTaskPage() {
           setStudyHours(assessment.study_hours_per_day);
           setMentalHealth(assessment.mental_health_rating);
         }
+        
+        setWorkspaces(wsList);
+        if (queryWorkspaceId && wsList.some((w) => w.id === queryWorkspaceId)) {
+          setSelectedWorkspaceId(queryWorkspaceId);
+        } else if (wsList.length > 0) {
+          setSelectedWorkspaceId(wsList[0].id);
+        }
+        
         setAiContextReady(true);
       } catch {
         setAiContextReady(true); // proceed with defaults on error
       }
     };
     load();
-  }, [user]);
-
+  }, [user, queryWorkspaceId]);
   // Derived fuzzy values (live, recomputed on every form change)
   const deadlineDays = form.deadline ? deadlineToDays(new Date(form.deadline)) : 7;
 
@@ -252,6 +272,7 @@ export default function CreateTaskPage() {
     setError("");
     try {
       await createTask(user.uid, {
+        workspaceId:            selectedWorkspaceId,
         title:                  form.title.trim(),
         description:            form.description.trim(),
         deadline:               Timestamp.fromDate(new Date(form.deadline)),
@@ -329,6 +350,26 @@ export default function CreateTaskPage() {
                   {error}
                 </div>
               )}
+
+              {/* Workspace Selector */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-gray-600 uppercase tracking-wide" htmlFor="workspaceId">
+                  Workspace
+                </label>
+                <select
+                  id="workspaceId"
+                  name="workspaceId"
+                  value={selectedWorkspaceId}
+                  onChange={(e) => setSelectedWorkspaceId(e.target.value)}
+                  className="w-full h-11 px-4 rounded-xl border border-border bg-white text-sm text-[#1F2937] focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all"
+                >
+                  {workspaces.map((ws) => (
+                    <option key={ws.id} value={ws.id}>
+                      {ws.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
 
               {/* Title */}
               <div className="space-y-1.5">
@@ -942,5 +983,19 @@ function AIFlowSection({ priorityLevel }: { priorityLevel: PriorityLevel }) {
         </p>
       </div>
     </div>
+  );
+}
+
+export default function CreateTaskPage() {
+  return (
+    <Suspense fallback={
+      <DashboardShell fullWidth>
+        <div className="flex items-center justify-center py-24">
+          <Loader2 className="w-8 h-8 animate-spin text-primary" />
+        </div>
+      </DashboardShell>
+    }>
+      <CreateTaskForm />
+    </Suspense>
   );
 }

@@ -16,6 +16,9 @@ import {
   Timer,
   ChevronRight,
   ShieldAlert,
+  Folder,
+  FolderPlus,
+  Edit3,
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import {
@@ -24,7 +27,12 @@ import {
   deleteTask,
   createNotification,
   getAcademicInsight,
+  getUserWorkspaces,
+  createWorkspace,
+  deleteWorkspace,
+  updateWorkspace,
   type TaskDocument,
+  type WorkspaceDocument,
 } from "@/lib/firestore";
 import { deadlineToDays, computePriorityDetailed, deriveAcademicRiskFromInsight } from "@/lib/fuzzyLogic";
 import { DashboardShell } from "@/components/layout/DashboardShell";
@@ -185,6 +193,8 @@ export default function KanbanPage() {
   const router = useRouter();
 
   const [tasks, setTasks] = useState<TaskDocument[]>([]);
+  const [workspaces, setWorkspaces] = useState<WorkspaceDocument[]>([]);
+  const [activeWorkspaceId, setActiveWorkspaceId] = useState<string>("");
   const [loading, setLoading] = useState(true);
   const [draggedTask, setDraggedTask] = useState<TaskDocument | null>(null);
   const [dragOverCol, setDragOverCol] = useState<KanbanColumn | null>(null);
@@ -192,6 +202,18 @@ export default function KanbanPage() {
   const loadTasks = useCallback(async () => {
     if (!user) return;
     try {
+      // Load workspaces
+      let wsList = await getUserWorkspaces(user.uid);
+      if (wsList.length === 0) {
+        const defaultWsId = await createWorkspace(user.uid, "Personal Workspace");
+        wsList = [{ id: defaultWsId, userId: user.uid, name: "Personal Workspace" }];
+      }
+      setWorkspaces(wsList);
+      setActiveWorkspaceId((prev) => {
+        if (prev && wsList.some((w) => w.id === prev)) return prev;
+        return wsList[0]?.id || "";
+      });
+
       const [data, insight] = await Promise.all([
         getUserTasks(user.uid),
         getAcademicInsight(user.uid),
@@ -281,6 +303,65 @@ export default function KanbanPage() {
     }
   }, [user]);
 
+  const handleCreateWorkspace = async () => {
+    if (!user) return;
+    const name = prompt("Enter new workspace name:");
+    if (!name || !name.trim()) return;
+    try {
+      setLoading(true);
+      const wsId = await createWorkspace(user.uid, name.trim());
+      const newWs = { id: wsId, userId: user.uid, name: name.trim() };
+      setWorkspaces((prev) => [...prev, newWs]);
+      setActiveWorkspaceId(wsId);
+    } catch (err) {
+      console.error(err);
+      alert("Failed to create workspace.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleRenameWorkspace = async (wsId: string, currentName: string) => {
+    const name = prompt("Enter new name for workspace:", currentName);
+    if (!name || !name.trim() || name.trim() === currentName) return;
+    try {
+      setLoading(true);
+      await updateWorkspace(wsId, name.trim());
+      setWorkspaces((prev) =>
+        prev.map((w) => (w.id === wsId ? { ...w, name: name.trim() } : w))
+      );
+    } catch (err) {
+      console.error(err);
+      alert("Failed to rename workspace.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDeleteWorkspace = async (wsId: string, name: string) => {
+    if (workspaces.length <= 1) {
+      alert("You must keep at least one workspace.");
+      return;
+    }
+    const confirmText = `Are you sure you want to delete workspace "${name}"?\nThis will permanently delete all tasks associated with this workspace!`;
+    if (!confirm(confirmText)) return;
+    try {
+      setLoading(true);
+      await deleteWorkspace(wsId);
+      const remaining = workspaces.filter((w) => w.id !== wsId);
+      setWorkspaces(remaining);
+      setTasks((prev) => prev.filter((t) => t.workspaceId !== wsId));
+      if (activeWorkspaceId === wsId) {
+        setActiveWorkspaceId(remaining[0]?.id || "");
+      }
+    } catch (err) {
+      console.error(err);
+      alert("Failed to delete workspace.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
     if (authLoading) return;
     if (!user) { router.replace("/login"); return; }
@@ -325,10 +406,25 @@ export default function KanbanPage() {
     }
   };
 
+  const defaultWorkspaceId = workspaces[0]?.id || "";
+
   const columnTasks = (col: KanbanColumn) =>
     tasks
-      .filter((t) => t.status === col)
+      .filter((t) => {
+        if (t.status !== col) return false;
+        if (t.workspaceId) {
+          return t.workspaceId === activeWorkspaceId;
+        }
+        return activeWorkspaceId === defaultWorkspaceId;
+      })
       .sort((a, b) => b.priorityScore - a.priorityScore);
+
+  const activeWorkspaceTasks = tasks.filter((t) => {
+    if (t.workspaceId) {
+      return t.workspaceId === activeWorkspaceId;
+    }
+    return activeWorkspaceId === defaultWorkspaceId;
+  });
 
   if (authLoading || loading) {
     return (
@@ -360,7 +456,7 @@ export default function KanbanPage() {
                 Analytics
               </Button>
             </Link>
-            <Link href="/tasks/create">
+            <Link href={`/tasks/create?workspaceId=${activeWorkspaceId}`}>
               <Button variant="primary" size="md" icon={<Plus className="w-4 h-4" />}>
                 New Task
               </Button>
@@ -368,16 +464,74 @@ export default function KanbanPage() {
           </div>
         </div>
 
+        {/* Workspace Selector */}
+        <div className="bg-white rounded-2xl border border-border p-4 shadow-sm flex flex-col md:flex-row items-start md:items-center justify-between gap-4 animate-scale-in">
+          <div className="flex items-center gap-2">
+            <Folder className="w-5 h-5 text-primary shrink-0" />
+            <span className="text-sm font-bold text-gray-700">Workspace:</span>
+          </div>
+          <div className="flex-1 w-full flex flex-wrap items-center gap-2">
+            {workspaces.map((ws, index) => {
+              const isActive = ws.id === activeWorkspaceId;
+              const isDefault = index === 0; // oldest is default
+              return (
+                <div
+                  key={ws.id}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-semibold transition-all duration-200 group ${
+                    isActive
+                      ? "bg-primary-50 border-primary/30 text-primary"
+                      : "bg-gray-50 border-border text-gray-600 hover:bg-gray-100"
+                  }`}
+                >
+                  <button
+                    onClick={() => setActiveWorkspaceId(ws.id)}
+                    className="focus:outline-none"
+                  >
+                    {ws.name}
+                  </button>
+                  
+                  {/* Actions for custom workspaces */}
+                  {!isDefault && (
+                    <div className="flex items-center gap-1 ml-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <button
+                        onClick={() => handleRenameWorkspace(ws.id, ws.name)}
+                        className="p-0.5 text-gray-400 hover:text-primary transition-colors"
+                        title="Rename Workspace"
+                      >
+                        <Pencil className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        onClick={() => handleDeleteWorkspace(ws.id, ws.name)}
+                        className="p-0.5 text-gray-400 hover:text-red-500 transition-colors"
+                        title="Delete Workspace"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+            <button
+              onClick={handleCreateWorkspace}
+              className="flex items-center gap-1 px-3 py-1.5 rounded-xl border border-dashed border-gray-300 text-xs font-semibold text-gray-500 hover:text-primary hover:border-primary/50 hover:bg-primary-50/30 transition-all duration-200"
+            >
+              <FolderPlus className="w-3.5 h-3.5" />
+              New Workspace
+            </button>
+          </div>
+        </div>
+
         {/* Stats Summary */}
         <div className="grid grid-cols-3 sm:grid-cols-5 gap-3 animate-scale-in">
           {[
-            { label: "Total", value: tasks.length, color: "text-gray-700" },
+            { label: "Total", value: activeWorkspaceTasks.length, color: "text-gray-700" },
             { label: "To Do", value: columnTasks("todo").length, color: "text-gray-600" },
             { label: "In Progress", value: columnTasks("doing").length, color: "text-blue-600" },
             { label: "Done", value: columnTasks("done").length, color: "text-emerald-600" },
             {
               label: "Critical",
-              value: tasks.filter((t) => t.priorityLevel === "Critical" && t.status !== "done").length,
+              value: activeWorkspaceTasks.filter((t) => t.priorityLevel === "Critical" && t.status !== "done").length,
               color: "text-red-600",
             },
           ].map(({ label, value, color }) => (
@@ -409,7 +563,7 @@ export default function KanbanPage() {
                   </span>
                 </div>
                 {col.id === "todo" && (
-                  <Link href="/tasks/create">
+                  <Link href={`/tasks/create?workspaceId=${activeWorkspaceId}`}>
                     <button className="w-6 h-6 flex items-center justify-center rounded-lg bg-white border border-border text-gray-400 hover:text-primary hover:border-primary/40 transition-all">
                       <Plus className="w-3.5 h-3.5" />
                     </button>

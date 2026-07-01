@@ -331,11 +331,59 @@ export async function getUserChatHistory(
   return chatList.slice(0, limitCount);
 }
 
+// ── Workspaces ───────────────────────────────────────────────────────────────
+
+export interface WorkspaceDocument {
+  id: string;
+  userId: string;
+  name: string;
+  createdAt?: unknown;
+}
+
+export async function createWorkspace(userId: string, name: string): Promise<string> {
+  const wsRef = doc(collection(db, "workspaces"));
+  const wsId = wsRef.id;
+  await setDoc(wsRef, {
+    id: wsId,
+    userId,
+    name,
+    createdAt: serverTimestamp(),
+  });
+  return wsId;
+}
+
+export async function getUserWorkspaces(userId: string): Promise<WorkspaceDocument[]> {
+  const q = query(collection(db, "workspaces"), where("userId", "==", userId));
+  const snap = await getDocs(q);
+  const list: WorkspaceDocument[] = [];
+  snap.forEach((d) => list.push(d.data() as WorkspaceDocument));
+  list.sort((a, b) => {
+    const timeA = a.createdAt ? (a.createdAt as { seconds?: number }).seconds || 0 : 0;
+    const timeB = b.createdAt ? (b.createdAt as { seconds?: number }).seconds || 0 : 0;
+    return timeA - timeB;
+  });
+  return list;
+}
+
+export async function deleteWorkspace(workspaceId: string): Promise<void> {
+  await deleteDoc(doc(db, "workspaces", workspaceId));
+  const q = query(collection(db, "tasks"), where("workspaceId", "==", workspaceId));
+  const snap = await getDocs(q);
+  const promises = snap.docs.map((d) => deleteDoc(d.ref));
+  await Promise.all(promises);
+}
+
+export async function updateWorkspace(workspaceId: string, name: string): Promise<void> {
+  const wsRef = doc(db, "workspaces", workspaceId);
+  await updateDoc(wsRef, { name });
+}
+
 // ── Tasks ────────────────────────────────────────────────────────────────────
 
 export interface TaskDocument {
   id: string;
   userId: string;
+  workspaceId?: string;
   title: string;
   description: string;
   deadline: Timestamp;

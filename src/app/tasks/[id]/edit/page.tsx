@@ -16,7 +16,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { useAuth } from "@/contexts/AuthContext";
-import { getTask, updateTask, getAcademicInsight } from "@/lib/firestore";
+import { getTask, updateTask, getAcademicInsight, getUserWorkspaces, type WorkspaceDocument } from "@/lib/firestore";
 import {
   computePriorityDetailed,
   deadlineToDays,
@@ -88,6 +88,8 @@ export default function EditTaskPage() {
   });
   const [academicRisk, setAcademicRisk] = useState(40);
   const [prediction, setPrediction] = useState("—");
+  const [workspaces, setWorkspaces] = useState<WorkspaceDocument[]>([]);
+  const [selectedWorkspaceId, setSelectedWorkspaceId] = useState<string>("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -96,9 +98,10 @@ export default function EditTaskPage() {
     if (authLoading || !user) return;
     const load = async () => {
       try {
-        const [task, insight] = await Promise.all([
+        const [task, insight, wsList] = await Promise.all([
           getTask(taskId),
           getAcademicInsight(user.uid),
+          getUserWorkspaces(user.uid),
         ]);
         if (!task || task.userId !== user.uid) { router.push("/tasks"); return; }
 
@@ -112,6 +115,9 @@ export default function EditTaskPage() {
           progress:    task.progress,
           status:      task.status,
         });
+
+        setWorkspaces(wsList);
+        setSelectedWorkspaceId(task.workspaceId || (wsList[0]?.id || ""));
 
         // Always re-derive from latest AI insight; fall back to stored value
         if (insight) {
@@ -156,6 +162,7 @@ export default function EditTaskPage() {
     setError("");
     try {
       await updateTask(taskId, {
+        workspaceId:            selectedWorkspaceId,
         title:                  form.title.trim(),
         description:            form.description.trim(),
         deadline:               Timestamp.fromDate(new Date(form.deadline)),
@@ -222,6 +229,26 @@ export default function EditTaskPage() {
                   <AlertTriangle className="w-4 h-4 shrink-0" />{error}
                 </div>
               )}
+
+              {/* Workspace Selector */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-gray-600 uppercase tracking-wide" htmlFor="workspaceId">
+                  Workspace
+                </label>
+                <select
+                  id="workspaceId"
+                  name="workspaceId"
+                  value={selectedWorkspaceId}
+                  onChange={(e) => setSelectedWorkspaceId(e.target.value)}
+                  className="w-full h-11 px-4 rounded-xl border border-border bg-white text-sm text-[#1F2937] focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all"
+                >
+                  {workspaces.map((ws) => (
+                    <option key={ws.id} value={ws.id}>
+                      {ws.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
 
               <div className="space-y-1.5">
                 <label className="text-xs font-semibold text-gray-600 uppercase tracking-wide" htmlFor="edit-title">Task Title *</label>
