@@ -1,6 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import { execFile } from "child_process";
-import path from "path";
 
 /**
  * POST /api/academic-insight
