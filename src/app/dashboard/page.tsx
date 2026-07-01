@@ -70,6 +70,12 @@ export default function DashboardPage() {
   const [notifications, setNotifications] = useState<NotificationDocument[]>([]);
   const [showNotifications, setShowNotifications] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [greeting, setGreeting] = useState("Good morning");
+
+  useEffect(() => {
+    const h = new Date().getHours();
+    setGreeting(h < 12 ? "Good morning" : h < 18 ? "Good afternoon" : "Good evening");
+  }, []);
 
   const firstName = userDoc?.name?.split(" ")[0] || user?.displayName?.split(" ")[0] || "Student";
 
@@ -165,7 +171,7 @@ export default function DashboardPage() {
       <div className="relative z-20 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 animate-slide-up">
         <div>
           <h1 className="text-2xl font-bold text-[#1F2937] tracking-tight">
-            Good {new Date().getHours() < 12 ? "morning" : new Date().getHours() < 18 ? "afternoon" : "evening"},{" "}
+            {greeting},{" "}
             {firstName} 👋
           </h1>
           <p className="text-sm text-gray-500 mt-1">
