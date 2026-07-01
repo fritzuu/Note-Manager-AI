@@ -14,11 +14,11 @@ import {
   Trash2,
   GripVertical,
   Timer,
-  ChevronRight,
   ShieldAlert,
   Folder,
   FolderPlus,
-  Edit3,
+  MoreVertical,
+  Sparkles,
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import {
@@ -37,13 +37,14 @@ import {
 import { deadlineToDays, computePriorityDetailed, deriveAcademicRiskFromInsight } from "@/lib/fuzzyLogic";
 import { DashboardShell } from "@/components/layout/DashboardShell";
 import { Button } from "@/components/ui/Button";
+import { Input } from "@/components/ui/Input";
 
 type KanbanColumn = "todo" | "doing" | "done";
 
-const COLUMNS: { id: KanbanColumn; label: string; color: string; bg: string }[] = [
-  { id: "todo", label: "To Do", color: "text-gray-600", bg: "bg-gray-50 border-gray-200" },
-  { id: "doing", label: "In Progress", color: "text-blue-600", bg: "bg-blue-50 border-blue-200" },
-  { id: "done", label: "Done", color: "text-emerald-600", bg: "bg-emerald-50 border-emerald-200" },
+const COLUMNS: { id: KanbanColumn; label: string; bg: string }[] = [
+  { id: "todo", label: "To Do", bg: "bg-gray-50/10" },
+  { id: "doing", label: "In Progress", bg: "bg-blue-50/10" },
+  { id: "done", label: "Done", bg: "bg-emerald-50/10" },
 ];
 
 const PRIORITY_BADGE: Record<string, string> = {
@@ -89,46 +90,48 @@ interface TaskCardProps {
 
 function TaskCard({ task, onDelete, onDragStart }: TaskCardProps) {
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [showMenu, setShowMenu] = useState(false);
 
   return (
     <div
       draggable
       onDragStart={(e) => onDragStart(e, task)}
-      className="bg-white rounded-xl border border-border p-4 shadow-sm hover:shadow-md transition-all duration-200 cursor-grab active:cursor-grabbing group"
+      className="bg-white rounded-xl border border-[#EAEAEA]/80 p-5 shadow-sm hover:shadow-[0_8px_30px_rgb(0,0,0,0.03)] hover:-translate-y-0.5 hover:border-gray-200 transition-all duration-200 ease-out cursor-grab active:cursor-grabbing group"
     >
       {/* Header row */}
       <div className="flex items-start gap-2 mb-3">
         <GripVertical className="w-4 h-4 text-gray-300 mt-0.5 shrink-0 group-hover:text-gray-400 transition-colors" />
         <div className="flex-1 min-w-0">
-          <p className="text-sm font-semibold text-[#1F2937] line-clamp-2 leading-snug">
+          <p className="text-[14.5px] font-bold text-gray-900 tracking-tight line-clamp-2 leading-snug select-none">
             {task.title}
           </p>
         </div>
       </div>
 
-      {/* Priority Badge */}
-      <div className="flex items-center gap-2 mb-3 flex-wrap">
-        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${PRIORITY_BADGE[task.priorityLevel]}`}>
+      {/* Priority / Risk Badges */}
+      <div className="flex items-center gap-1.5 mb-4 flex-wrap">
+        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md ${PRIORITY_BADGE[task.priorityLevel]}`}>
           {task.priorityLevel}
         </span>
         {task.riskLevel !== "Low" && (
-          <span className="flex items-center gap-1 text-[10px] font-semibold text-gray-500">
+          <span className="flex items-center gap-1 text-[10px] font-semibold text-gray-400">
             {RISK_ICON[task.riskLevel]}
             {task.riskLevel} Risk
           </span>
         )}
-        <span className="text-[10px] font-semibold text-primary bg-primary-50 px-2 py-0.5 rounded-full ml-auto">
-          {task.priorityScore}
-        </span>
+        <div className="flex items-center gap-1 text-[10px] font-extrabold text-indigo-600 bg-indigo-50/70 border border-indigo-100/60 px-2 py-0.5 rounded-md ml-auto select-none">
+          <Sparkles className="w-2.5 h-2.5 shrink-0 animate-pulse" />
+          <span>AI Score: {task.priorityScore}</span>
+        </div>
       </div>
 
       {/* Progress Bar */}
-      <div className="mb-3">
-        <div className="flex items-center justify-between mb-1">
-          <span className="text-[10px] text-gray-400 font-medium">Progress</span>
-          <span className="text-[10px] font-semibold text-gray-600">{task.progress}%</span>
+      <div className="space-y-1.5 mb-4">
+        <div className="flex items-center justify-between text-[11px] font-medium text-gray-400">
+          <span>Progress</span>
+          <span className="font-semibold text-gray-600">{task.progress}%</span>
         </div>
-        <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
+        <div className="h-1.5 bg-gray-50 rounded-full overflow-hidden">
           <div
             className="h-full rounded-full transition-all duration-300"
             style={{
@@ -139,50 +142,75 @@ function TaskCard({ task, onDelete, onDragStart }: TaskCardProps) {
         </div>
       </div>
 
-      {/* Footer */}
-      <div className="flex items-center justify-between pt-2 border-t border-border/60">
-        <div className="flex items-center gap-1">
-          <Clock className="w-3 h-3 text-gray-300" />
-          <span className={`text-[10px] font-medium ${deadlineColor(task)}`}>
+      {/* Footer (Deadline & Time) */}
+      <div className="flex items-center justify-between pt-0.5 mb-4.5">
+        <div className="flex items-center gap-1.5">
+          <Clock className="w-3.5 h-3.5 text-gray-300" />
+          <span className={`text-[11px] font-medium ${deadlineColor(task)}`}>
             {formatDeadline(task)}
           </span>
         </div>
-        <div className="flex items-center gap-1">
-          <span className="text-[10px] text-gray-400 flex items-center gap-0.5">
-            <Timer className="w-3 h-3" />
+        <div className="flex items-center gap-1.5">
+          <span className="text-[11px] text-gray-400 flex items-center gap-0.5">
+            <Timer className="w-3.5 h-3.5" />
             {task.estimatedTotalMinutes}m
           </span>
         </div>
       </div>
 
       {/* Action Buttons */}
-      <div className="flex gap-2 mt-3">
+      <div className="flex gap-2 items-center">
         <Link href={`/tasks/${task.id}/edit`} className="flex-1">
-          <button className="w-full h-7 flex items-center justify-center gap-1 text-[10px] font-semibold text-gray-500 hover:text-primary bg-gray-50 hover:bg-primary-50 rounded-lg border border-border hover:border-primary/30 transition-all">
+          <button className="w-full h-8.5 flex items-center justify-center gap-1 text-[11px] font-bold text-gray-500 hover:text-gray-700 bg-white hover:bg-gray-50 rounded-lg border border-[#EAEAEA] transition-all">
             <Pencil className="w-3 h-3" /> Edit
           </button>
         </Link>
-        <Link href={`/pomodoro?taskId=${task.id}`} className="flex-1">
-          <button className="w-full h-7 flex items-center justify-center gap-1 text-[10px] font-semibold text-primary hover:text-white bg-primary-50 hover:bg-primary rounded-lg border border-primary/20 hover:border-primary transition-all">
-            <Flame className="w-3 h-3" /> Focus
+        <Link href={`/pomodoro?taskId=${task.id}`} className="flex-[1.8]">
+          <button className="w-full h-8.5 flex items-center justify-center gap-1.5 text-xs font-extrabold text-white bg-primary hover:bg-primary-600 rounded-lg shadow-sm hover:shadow transition-all">
+            <Flame className="w-3.5 h-3.5" /> Focus
           </button>
         </Link>
-        {confirmDelete ? (
+        
+        {/* Three-dot overflow menu for Delete */}
+        <div className="relative shrink-0">
           <button
-            onClick={() => onDelete(task.id)}
-            className="w-7 h-7 flex items-center justify-center text-red-500 bg-red-50 hover:bg-red-100 rounded-lg border border-red-200 transition-all"
+            onClick={(e) => {
+              e.stopPropagation();
+              setShowMenu(!showMenu);
+            }}
+            onBlur={() => setTimeout(() => setShowMenu(false), 200)}
+            className="w-8.5 h-8.5 flex items-center justify-center text-gray-400 hover:text-gray-600 hover:bg-gray-50 rounded-lg border border-[#EAEAEA] transition-all"
+            title="Options"
           >
-            <CheckSquare className="w-3 h-3" />
+            <MoreVertical className="w-4 h-4" />
           </button>
-        ) : (
-          <button
-            onClick={() => setConfirmDelete(true)}
-            onBlur={() => setTimeout(() => setConfirmDelete(false), 2000)}
-            className="w-7 h-7 flex items-center justify-center text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg border border-border hover:border-red-200 transition-all"
-          >
-            <Trash2 className="w-3 h-3" />
-          </button>
-        )}
+          
+          {showMenu && (
+            <div className="absolute right-0 mt-1 w-24 bg-white border border-[#EAEAEA] rounded-xl shadow-lg z-10 py-1 animate-scale-in">
+              {confirmDelete ? (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onDelete(task.id);
+                  }}
+                  className="w-full px-3 py-1.5 text-left text-xs font-semibold text-red-600 hover:bg-red-50 transition-colors flex items-center gap-1"
+                >
+                  <CheckSquare className="w-3.5 h-3.5" /> Confirm
+                </button>
+              ) : (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setConfirmDelete(true);
+                  }}
+                  className="w-full px-3 py-1.5 text-left text-xs font-semibold text-red-500 hover:bg-red-50 transition-colors flex items-center gap-1"
+                >
+                  <Trash2 className="w-3.5 h-3.5" /> Delete
+                </button>
+              )}
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
@@ -198,6 +226,18 @@ export default function KanbanPage() {
   const [loading, setLoading] = useState(true);
   const [draggedTask, setDraggedTask] = useState<TaskDocument | null>(null);
   const [dragOverCol, setDragOverCol] = useState<KanbanColumn | null>(null);
+  const [workspaceModal, setWorkspaceModal] = useState<{
+    isOpen: boolean;
+    mode: "create" | "rename";
+    wsId?: string;
+    wsName: string;
+    inputValue: string;
+  }>({
+    isOpen: false,
+    mode: "create",
+    wsName: "",
+    inputValue: "",
+  });
 
   const loadTasks = useCallback(async () => {
     if (!user) return;
@@ -303,36 +343,47 @@ export default function KanbanPage() {
     }
   }, [user]);
 
-  const handleCreateWorkspace = async () => {
-    if (!user) return;
-    const name = prompt("Enter new workspace name:");
-    if (!name || !name.trim()) return;
-    try {
-      setLoading(true);
-      const wsId = await createWorkspace(user.uid, name.trim());
-      const newWs = { id: wsId, userId: user.uid, name: name.trim() };
-      setWorkspaces((prev) => [...prev, newWs]);
-      setActiveWorkspaceId(wsId);
-    } catch (err) {
-      console.error(err);
-      alert("Failed to create workspace.");
-    } finally {
-      setLoading(false);
-    }
+  const handleCreateWorkspace = () => {
+    setWorkspaceModal({
+      isOpen: true,
+      mode: "create",
+      wsName: "",
+      inputValue: "",
+    });
   };
 
-  const handleRenameWorkspace = async (wsId: string, currentName: string) => {
-    const name = prompt("Enter new name for workspace:", currentName);
-    if (!name || !name.trim() || name.trim() === currentName) return;
+  const handleRenameWorkspace = (wsId: string, currentName: string) => {
+    setWorkspaceModal({
+      isOpen: true,
+      mode: "rename",
+      wsId,
+      wsName: currentName,
+      inputValue: currentName,
+    });
+  };
+
+  const handleModalSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!user) return;
+    const name = workspaceModal.inputValue.trim();
+    if (!name) return;
     try {
       setLoading(true);
-      await updateWorkspace(wsId, name.trim());
-      setWorkspaces((prev) =>
-        prev.map((w) => (w.id === wsId ? { ...w, name: name.trim() } : w))
-      );
+      if (workspaceModal.mode === "create") {
+        const wsId = await createWorkspace(user.uid, name);
+        const newWs = { id: wsId, userId: user.uid, name };
+        setWorkspaces((prev) => [...prev, newWs]);
+        setActiveWorkspaceId(wsId);
+      } else if (workspaceModal.mode === "rename" && workspaceModal.wsId) {
+        await updateWorkspace(workspaceModal.wsId, name);
+        setWorkspaces((prev) =>
+          prev.map((w) => (w.id === workspaceModal.wsId ? { ...w, name } : w))
+        );
+      }
+      setWorkspaceModal({ isOpen: false, mode: "create", wsName: "", inputValue: "" });
     } catch (err) {
       console.error(err);
-      alert("Failed to rename workspace.");
+      alert(`Failed to ${workspaceModal.mode} workspace.`);
     } finally {
       setLoading(false);
     }
@@ -426,6 +477,10 @@ export default function KanbanPage() {
     return activeWorkspaceId === defaultWorkspaceId;
   });
 
+  const recommendedTask = activeWorkspaceTasks
+    .filter((t) => t.status !== "done")
+    .sort((a, b) => b.priorityScore - a.priorityScore)[0];
+
   if (authLoading || loading) {
     return (
       <DashboardShell fullWidth>
@@ -442,20 +497,15 @@ export default function KanbanPage() {
         {/* Header */}
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 animate-slide-up">
           <div>
-            <h1 className="text-2xl font-bold text-[#1F2937] tracking-tight flex items-center gap-2">
-              <CheckSquare className="w-6 h-6 text-primary" />
+            <h1 className="text-3xl font-extrabold text-[#1F2937] tracking-tight flex items-center gap-2.5">
+              <CheckSquare className="w-7 h-7 text-primary" />
               Task Board
             </h1>
-            <p className="text-sm text-gray-500 mt-1">
-              Drag tasks between columns · Fuzzy Logic auto-ranks by priority
+            <p className="text-sm text-gray-400 mt-1.5 font-medium">
+              Manage and prioritize your tasks using AI-powered fuzzy ranking.
             </p>
           </div>
           <div className="flex items-center gap-3">
-            <Link href="/analytics">
-              <Button variant="outline" size="sm" icon={<ChevronRight className="w-4 h-4" />}>
-                Analytics
-              </Button>
-            </Link>
             <Link href={`/tasks/create?workspaceId=${activeWorkspaceId}`}>
               <Button variant="primary" size="md" icon={<Plus className="w-4 h-4" />}>
                 New Task
@@ -465,7 +515,7 @@ export default function KanbanPage() {
         </div>
 
         {/* Workspace Selector */}
-        <div className="bg-white rounded-2xl border border-border p-4 shadow-sm flex flex-col md:flex-row items-start md:items-center justify-between gap-4 animate-scale-in">
+        <div className="bg-white rounded-2xl border border-[#EAEAEA] p-4 shadow-sm flex flex-col md:flex-row items-start md:items-center justify-between gap-4 animate-scale-in">
           <div className="flex items-center gap-2">
             <Folder className="w-5 h-5 text-primary shrink-0" />
             <span className="text-sm font-bold text-gray-700">Workspace:</span>
@@ -477,10 +527,10 @@ export default function KanbanPage() {
               return (
                 <div
                   key={ws.id}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-semibold transition-all duration-200 group ${
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-semibold transition-all duration-200 active:scale-95 hover:scale-[1.02] transform group ${
                     isActive
-                      ? "bg-primary-50 border-primary/30 text-primary"
-                      : "bg-gray-50 border-border text-gray-600 hover:bg-gray-100"
+                      ? "bg-primary-50 border-primary/30 text-primary shadow-sm ring-1 ring-primary/10"
+                      : "bg-gray-50 border-[#EAEAEA] text-gray-600 hover:bg-gray-100"
                   }`}
                 >
                   <button
@@ -522,8 +572,49 @@ export default function KanbanPage() {
           </div>
         </div>
 
+        {/* AI Recommendation Panel */}
+        {recommendedTask && (
+          <div className="bg-white rounded-2xl border-l-4 border-l-primary border border-y-[#EAEAEA] border-r-[#EAEAEA] p-4 shadow-sm animate-scale-in flex flex-col md:flex-row items-start md:items-center gap-4 justify-between">
+            <div className="flex items-start gap-3">
+              <div className="w-8 h-8 rounded-xl bg-primary-50 flex items-center justify-center shrink-0 mt-0.5">
+                <Sparkles className="w-4 h-4 text-primary" />
+              </div>
+              <div className="space-y-1">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[10px] font-bold text-primary uppercase tracking-wider">AI Recommendation</span>
+                  <span className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
+                </div>
+                <h2 className="text-sm font-bold text-gray-955 leading-tight">
+                  Focus: <span className="text-primary">{recommendedTask.title}</span>
+                </h2>
+                <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-500 pt-0.5 font-medium">
+                  <span className="flex items-center gap-1">
+                    <span className="w-1 h-1 rounded-full bg-gray-400" />
+                    Highest fuzzy priority (Score: {recommendedTask.priorityScore})
+                  </span>
+                  {recommendedTask.riskLevel !== "Low" && (
+                    <span className="flex items-center gap-1">
+                      <span className="w-1 h-1 rounded-full bg-gray-400" />
+                      {recommendedTask.riskLevel} Risk
+                    </span>
+                  )}
+                  <span className="flex items-center gap-1">
+                    <span className="w-1 h-1 rounded-full bg-gray-400" />
+                    Estimated focus time: {recommendedTask.estimatedTotalMinutes} mins
+                  </span>
+                </div>
+              </div>
+            </div>
+            <Link href={`/pomodoro?taskId=${recommendedTask.id}`} className="w-full md:w-auto shrink-0">
+              <Button variant="primary" size="sm" icon={<Flame className="w-3.5 h-3.5" />}>
+                Start Focus Session
+              </Button>
+            </Link>
+          </div>
+        )}
+
         {/* Stats Summary */}
-        <div className="grid grid-cols-3 sm:grid-cols-5 gap-3 animate-scale-in">
+        <div key={`stats-${activeWorkspaceId}`} className="grid grid-cols-3 sm:grid-cols-5 gap-3 animate-scale-in">
           {[
             { label: "Total", value: activeWorkspaceTasks.length, color: "text-gray-700" },
             { label: "To Do", value: columnTasks("todo").length, color: "text-gray-600" },
@@ -535,7 +626,7 @@ export default function KanbanPage() {
               color: "text-red-600",
             },
           ].map(({ label, value, color }) => (
-            <div key={label} className="bg-white rounded-xl border border-border px-4 py-3 text-center shadow-sm">
+            <div key={label} className="bg-white rounded-xl border border-[#EAEAEA] px-4 py-2 text-center shadow-sm">
               <p className={`text-xl font-extrabold ${color}`}>{value}</p>
               <p className="text-[10px] text-gray-400 font-medium mt-0.5">{label}</p>
             </div>
@@ -543,40 +634,71 @@ export default function KanbanPage() {
         </div>
 
         {/* Kanban Columns */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+        <div key={`columns-${activeWorkspaceId}`} className="grid grid-cols-1 md:grid-cols-3 gap-5 animate-scale-in">
           {COLUMNS.map((col) => (
             <div
               key={col.id}
               onDragOver={(e) => { e.preventDefault(); setDragOverCol(col.id); }}
               onDragLeave={() => setDragOverCol(null)}
               onDrop={(e) => handleDrop(e, col.id)}
-              className={`rounded-2xl border p-4 min-h-[500px] flex flex-col gap-3 transition-all duration-200 ${col.bg} ${
-                dragOverCol === col.id ? "ring-2 ring-primary/40 scale-[1.01]" : ""
+              className={`rounded-2xl p-4 min-h-[530px] flex flex-col gap-4 transition-all duration-200 ${col.bg} ${
+                dragOverCol === col.id ? "ring-2 ring-primary/20 scale-[1.01]" : ""
               }`}
             >
               {/* Column Header */}
-              <div className="flex items-center justify-between pb-2 border-b border-border/60">
+              <div className="flex items-center justify-between pb-2">
                 <div className="flex items-center gap-2">
-                  <span className={`text-sm font-bold ${col.color}`}>{col.label}</span>
-                  <span className="text-xs font-semibold bg-white border border-border text-gray-500 px-2 py-0.5 rounded-full">
+                  <span className={`w-2 h-2 rounded-full ${
+                    col.id === "todo" ? "bg-gray-400" : col.id === "doing" ? "bg-blue-500" : "bg-emerald-500"
+                  }`} />
+                  <span className="text-[12px] font-bold uppercase tracking-wider text-gray-500">{col.label}</span>
+                  <span className="text-[10px] font-bold bg-white text-gray-400 border border-[#EAEAEA]/80 px-1.5 py-0.5 rounded-md">
                     {columnTasks(col.id).length}
                   </span>
                 </div>
                 {col.id === "todo" && (
                   <Link href={`/tasks/create?workspaceId=${activeWorkspaceId}`}>
-                    <button className="w-6 h-6 flex items-center justify-center rounded-lg bg-white border border-border text-gray-400 hover:text-primary hover:border-primary/40 transition-all">
-                      <Plus className="w-3.5 h-3.5" />
+                    <button className="w-5.5 h-5.5 flex items-center justify-center rounded-md bg-white border border-[#EAEAEA]/80 text-gray-400 hover:text-primary hover:border-primary/40 transition-all">
+                      <Plus className="w-3 h-3" />
                     </button>
                   </Link>
                 )}
               </div>
-
+ 
               {/* Cards */}
               {columnTasks(col.id).length === 0 ? (
-                <div className="flex-1 flex items-center justify-center">
-                  <p className="text-xs text-gray-400 font-medium text-center">
-                    {col.id === "todo" ? "No tasks yet. Create one!" : `No ${col.label.toLowerCase()} tasks`}
-                  </p>
+                <div className="flex-1 flex flex-col items-center justify-center p-6 text-center animate-fade-in">
+                  {col.id === "todo" ? (
+                    <>
+                      <div className="w-10 h-10 rounded-full bg-gray-100/50 flex items-center justify-center mb-2.5">
+                        <Folder className="w-5 h-5 text-gray-400" />
+                      </div>
+                      <p className="text-xs font-bold text-gray-700">No tasks to do</p>
+                      <p className="text-[10px] text-gray-400 max-w-[180px] mt-1 font-medium leading-relaxed">
+                        Click the <span className="font-semibold text-gray-500">+</span> button above to create a task.
+                      </p>
+                    </>
+                  ) : col.id === "doing" ? (
+                    <>
+                      <div className="w-10 h-10 rounded-full bg-blue-50/50 flex items-center justify-center mb-2.5">
+                        <Timer className="w-5 h-5 text-blue-400" />
+                      </div>
+                      <p className="text-xs font-bold text-gray-750">No tasks in progress</p>
+                      <p className="text-[10px] text-gray-400 max-w-[180px] mt-1 font-medium leading-relaxed">
+                        Drag a task from <span className="font-semibold text-gray-500">To Do</span> here to start working.
+                      </p>
+                    </>
+                  ) : (
+                    <>
+                      <div className="w-10 h-10 rounded-full bg-emerald-50/50 flex items-center justify-center mb-2.5">
+                        <CheckSquare className="w-5 h-5 text-emerald-400" />
+                      </div>
+                      <p className="text-xs font-bold text-gray-750">No completed tasks</p>
+                      <p className="text-[10px] text-gray-400 max-w-[180px] mt-1 font-medium leading-relaxed">
+                        Finish your focus sessions to complete tasks.
+                      </p>
+                    </>
+                  )}
                 </div>
               ) : (
                 <div className="space-y-3 flex-1">
@@ -594,6 +716,44 @@ export default function KanbanPage() {
           ))}
         </div>
       </div>
+
+      {/* Workspace Modal */}
+      {workspaceModal.isOpen && (
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fade-in">
+          <div className="bg-white rounded-2xl border border-[#EAEAEA] p-6 w-full max-w-md shadow-2xl animate-scale-in">
+            <h3 className="text-lg font-bold text-[#1F2937] mb-4">
+              {workspaceModal.mode === "create" ? "Create New Workspace" : `Rename "${workspaceModal.wsName}"`}
+            </h3>
+            <form onSubmit={handleModalSubmit} className="space-y-4">
+              <Input
+                label="Workspace Name"
+                placeholder="e.g. University, Personal, Work"
+                value={workspaceModal.inputValue}
+                onChange={(e) =>
+                  setWorkspaceModal((prev) => ({ ...prev, inputValue: e.target.value }))
+                }
+                autoFocus
+                required
+              />
+              <div className="flex gap-3 justify-end pt-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="md"
+                  onClick={() =>
+                    setWorkspaceModal((prev) => ({ ...prev, isOpen: false }))
+                  }
+                >
+                  Cancel
+                </Button>
+                <Button type="submit" variant="primary" size="md">
+                  {workspaceModal.mode === "create" ? "Create" : "Save"}
+                </Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </DashboardShell>
   );
 }
