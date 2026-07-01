@@ -1,0 +1,91 @@
+
+╔══════════════════════════════════════════════════════════════════════════════╗
+║        FINAL PRESENTATION SUMMARY — STUDENT HABITS vs ACADEMIC PERFORMANCE ║
+║                    AI Course Project  |  2026                               ║
+╠══════════════════════════════════════════════════════════════════════════════╣
+║                                                                              ║
+║  1. DATASET OVERVIEW                                                         ║
+║  ─────────────────────────────────────────────────────────────────────────  ║
+║  • Source      : Kaggle — Student Habits vs Academic Performance Dataset     ║
+║  • Records     : 1,000 students   Columns : 16 (15 features + 1 target)     ║
+║  • Target      : exam_score (continuous, 0–100)                              ║
+║                  Binned → 4 performance tiers for classification tasks       ║
+║  • Feature Mix : 8 numeric + 6 categorical                                   ║
+║                                                                              ║
+║  2. KEY FINDINGS                                                             ║
+║  ─────────────────────────────────────────────────────────────────────────  ║
+║  • Study hours show the STRONGEST positive correlation with exam score       ║
+║    (r = +0.825).  Each additional study hour per day is associated     ║
+║    with a measurable increase in exam performance.                           ║
+║                                                                              ║
+║  • Attendance percentage is a close second (r = +0.090).               ║
+║    Students attending >85% of classes score notably higher on average.      ║
+║                                                                              ║
+║  • Social media consumption exhibits a NEGATIVE relationship (r = -0.167).  ║
+║    Students averaging >3 h/day of social media tend to score lower.         ║
+║                                                                              ║
+║  • Mental health rating shows a POSITIVE correlation (r = +0.322),          ║
+║    underscoring the role of psychological well-being in academic success.   ║
+║                                                                              ║
+║  • Approximately 27.7% of students are classified as Excellent (≥80)   ║
+║    while 13.1% fall into the Low (<50) category.                          ║
+║                                                                              ║
+║  3. IMPORTANT FEATURES (Ranked by RF Importance)                            ║
+║  ─────────────────────────────────────────────────────────────────────────  ║
+║  Top 5 predictors identified by Random Forest proxy ranking:                 ║
+║    1. study_hours_per_day             Importance: 0.3189          ║
+║    2. mental_health_rating            Importance: 0.0944          ║
+║    3. social_media_hours              Importance: 0.0912          ║
+║    4. sleep_hours                     Importance: 0.0881          ║
+║    5. attendance_percentage           Importance: 0.0844          ║
+║                                                                              ║
+║  4. DATA QUALITY ISSUES                                                     ║
+║  ─────────────────────────────────────────────────────────────────────────  ║
+║  • Missing Values  : NONE — dataset is complete (0% missingness).           ║
+║  • Duplicate Rows  : 0 removed.                                               ║
+║  • Outliers        : Minor outliers in exam_score and study_hours detected. ║
+║    Action taken    : Winsorization at 1st–99th percentile for exam_score.   ║
+║                                                                              ║
+║  5. DATA CLEANING PROCESS                                                   ║
+║  ─────────────────────────────────────────────────────────────────────────  ║
+║  Step A  | Dropped student_id (non-informative identifier).                 ║
+║  Step B  | Removed duplicate records.                                        ║
+║  Step C  | Binary encoded: gender, part_time_job, extracurricular.          ║
+║  Step D  | Ordinal encoded: diet_quality, internet_quality, parental_edu.   ║
+║  Step E  | Winsorized exam_score to suppress extreme outliers.               ║
+║  Step F  | Engineered 3 new features:                                        ║
+║            – study_to_social_ratio  (focus intensity metric)                ║
+║            – total_distraction_hours (leisure screen time)                   ║
+║            – wellbeing_index         (composite health indicator)            ║
+║  Output  | cleaned_student_dataset.csv  (1000 rows × 19 columns)           ║
+║                                                                              ║
+║  6. WHY THIS DATASET IS RELEVANT TO MindFlow AI                             ║
+║  ─────────────────────────────────────────────────────────────────────────  ║
+║  MindFlow AI is an adaptive learning intelligence platform designed to       ║
+║  personalise educational experiences. This dataset provides precisely the   ║
+║  behavioural and lifestyle signals that MindFlow AI needs to:                ║
+║                                                                              ║
+║  ✦ PREDICT RISK — Identify at-risk students (Low/Average performers)        ║
+║    before examinations using real-time behavioural indicators.               ║
+║                                                                              ║
+║  ✦ PERSONALISE PLANS — Recommend optimal study schedules by modelling       ║
+║    the relationship between study hours, sleep, and performance.             ║
+║                                                                              ║
+║  ✦ MENTAL HEALTH INTEGRATION — The mental_health_rating feature enables     ║
+║    MindFlow to proactively flag students who may need counselling support.   ║
+║                                                                              ║
+║  ✦ ENGAGEMENT ANALYTICS — social_media_hours and netflix_hours serve as     ║
+║    distraction proxies, allowing the platform to issue focus nudges.         ║
+║                                                                              ║
+║  ✦ HOLISTIC PROFILING — Combining lifestyle habits (diet, exercise, sleep)  ║
+║    with academic metrics enables truly holistic student performance models.  ║
+║                                                                              ║
+╠══════════════════════════════════════════════════════════════════════════════╣
+║  Generated Visualizations (./visualizations/)                                ║
+║  01_data_quality.png         07_behavioral_insights.png                      ║
+║  02_target_analysis.png      08_categorical_vs_performance.png               ║
+║  03_numeric_histograms.png   09_feature_importance.png                       ║
+║  04_boxplots_by_performance.png  10_before_after_cleaning.png                ║
+║  05_categorical_distributions.png                                            ║
+║  06_correlation_analysis.png                                                 ║
+╚══════════════════════════════════════════════════════════════════════════════╝

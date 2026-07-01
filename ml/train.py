@@ -32,7 +32,7 @@ warnings.filterwarnings("ignore")
 # ── Paths ──────────────────────────────────────────────────────────────────────
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 PROJECT_DIR = os.path.dirname(BASE_DIR)  # AI-Project/mindflow-ai
-DATASET_PATH = os.path.join(os.path.dirname(PROJECT_DIR), "cleaned_student_dataset.csv")
+DATASET_PATH = os.path.join(BASE_DIR, "dataset", "cleaned_student_dataset.csv")
 
 MODEL_PATH = os.path.join(BASE_DIR, "model.pkl")
 ENCODER_PATH = os.path.join(BASE_DIR, "encoder.pkl")

@@ -42,35 +42,27 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Run Python prediction
-    const predictScript = path.join(process.cwd(), "ml", "predict.py");
-    const inputJson = JSON.stringify(assessmentData);
+    // Run prediction using FastAPI ML microservice
+    const mlApiUrl = process.env.ML_API_URL || "http://localhost:8000";
 
-    const result = await new Promise<string>((resolve, reject) => {
-      const pythonExecutable = process.platform === "win32" ? "python" : "python3";
-      const child = execFile(
-        pythonExecutable,
-        [predictScript],
-        { timeout: 15000 },
-        (error, stdout, stderr) => {
-          if (error) {
-            console.error(`${pythonExecutable} prediction error:`, error.message);
-            console.error("stderr:", stderr);
-            reject(new Error(`Prediction failed: ${error.message}`));
-            return;
-          }
-          resolve(stdout.trim());
-        }
-      );
-
-      // Send assessment data to stdin
-      if (child.stdin) {
-        child.stdin.write(inputJson);
-        child.stdin.end();
-      }
+    const res = await fetch(`${mlApiUrl}/predict`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(assessmentData),
     });
 
-    const prediction = JSON.parse(result);
+    if (!res.ok) {
+      const errorText = await res.text();
+      console.error("ML microservice error status:", res.status, errorText);
+      return NextResponse.json(
+        { error: `ML microservice prediction failed: ${errorText}` },
+        { status: 500 }
+      );
+    }
+
+    const prediction = await res.json();
 
     if (prediction.error) {
       return NextResponse.json(
