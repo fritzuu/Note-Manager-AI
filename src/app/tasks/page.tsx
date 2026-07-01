@@ -515,7 +515,7 @@ export default function KanbanPage() {
         </div>
 
         {/* Workspace Selector */}
-        <div className="bg-white rounded-2xl border border-[#EAEAEA] p-4 shadow-sm flex flex-col md:flex-row items-start md:items-center justify-between gap-4 animate-scale-in">
+        <div className="bg-white rounded-2xl p-5 shadow-[0_1px_3px_rgba(0,0,0,0.01),0_10px_40px_-10px_rgba(0,0,0,0.03)] flex flex-col md:flex-row items-start md:items-center justify-between gap-4 animate-scale-in">
           <div className="flex items-center gap-2">
             <Folder className="w-5 h-5 text-primary shrink-0" />
             <span className="text-sm font-bold text-gray-700">Workspace:</span>
@@ -527,10 +527,10 @@ export default function KanbanPage() {
               return (
                 <div
                   key={ws.id}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-semibold transition-all duration-200 active:scale-95 hover:scale-[1.02] transform group ${
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-all duration-200 active:scale-95 hover:scale-[1.02] transform group ${
                     isActive
-                      ? "bg-primary-50 border-primary/30 text-primary shadow-sm ring-1 ring-primary/10"
-                      : "bg-gray-50 border-[#EAEAEA] text-gray-600 hover:bg-gray-100"
+                      ? "bg-primary-50 text-primary shadow-[0_2px_8px_rgba(79,138,107,0.08)] ring-1 ring-primary/10"
+                      : "bg-transparent text-gray-500 hover:bg-gray-100/70 hover:text-gray-800"
                   }`}
                 >
                   <button
@@ -564,7 +564,7 @@ export default function KanbanPage() {
             })}
             <button
               onClick={handleCreateWorkspace}
-              className="flex items-center gap-1 px-3 py-1.5 rounded-xl border border-dashed border-gray-300 text-xs font-semibold text-gray-500 hover:text-primary hover:border-primary/50 hover:bg-primary-50/30 transition-all duration-200"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold text-gray-400 hover:text-primary hover:bg-primary-50/30 transition-all duration-200"
             >
               <FolderPlus className="w-3.5 h-3.5" />
               New Workspace
@@ -572,35 +572,35 @@ export default function KanbanPage() {
           </div>
         </div>
 
-        {/* AI Recommendation Panel */}
+        {/* AI Recommendation Widget */}
         {recommendedTask && (
-          <div className="bg-white rounded-2xl border-l-4 border-l-primary border border-y-[#EAEAEA] border-r-[#EAEAEA] p-4 shadow-sm animate-scale-in flex flex-col md:flex-row items-start md:items-center gap-4 justify-between">
-            <div className="flex items-start gap-3">
-              <div className="w-8 h-8 rounded-xl bg-primary-50 flex items-center justify-center shrink-0 mt-0.5">
-                <Sparkles className="w-4 h-4 text-primary" />
+          <div className="bg-white rounded-2xl p-5.5 shadow-[0_1px_3px_rgba(0,0,0,0.01),0_10px_40px_-10px_rgba(0,0,0,0.03)] animate-scale-in flex flex-col md:flex-row items-start md:items-center gap-4 justify-between">
+            <div className="flex items-start gap-4">
+              <div className="w-9 h-9 rounded-xl bg-primary-50 flex items-center justify-center shrink-0 border border-primary-100/10">
+                <Sparkles className="w-4.5 h-4.5 text-primary" />
               </div>
               <div className="space-y-1">
-                <div className="flex items-center gap-1.5">
-                  <span className="text-[10px] font-bold text-primary uppercase tracking-wider">AI Recommendation</span>
-                  <span className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">AI Recommendation</span>
+                  <span className="w-1.5 h-1.5 rounded-full bg-primary" />
                 </div>
-                <h2 className="text-sm font-bold text-gray-955 leading-tight">
-                  Focus: <span className="text-primary">{recommendedTask.title}</span>
+                <h2 className="text-sm font-bold text-gray-900 leading-tight">
+                  Focus: <span className="text-primary font-extrabold">{recommendedTask.title}</span>
                 </h2>
-                <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-500 pt-0.5 font-medium">
-                  <span className="flex items-center gap-1">
-                    <span className="w-1 h-1 rounded-full bg-gray-400" />
-                    Highest fuzzy priority (Score: {recommendedTask.priorityScore})
+                <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-400 pt-0.5 font-medium">
+                  <span className="flex items-center gap-1.5">
+                    <span className="w-1 h-1 rounded-full bg-gray-300" />
+                    Priority Score: <span className="text-gray-600 font-semibold">{recommendedTask.priorityScore}</span>
                   </span>
                   {recommendedTask.riskLevel !== "Low" && (
-                    <span className="flex items-center gap-1">
-                      <span className="w-1 h-1 rounded-full bg-gray-400" />
-                      {recommendedTask.riskLevel} Risk
+                    <span className="flex items-center gap-1.5">
+                      <span className="w-1 h-1 rounded-full bg-gray-300" />
+                      Risk Level: <span className="text-gray-600 font-semibold">{recommendedTask.riskLevel}</span>
                     </span>
                   )}
-                  <span className="flex items-center gap-1">
-                    <span className="w-1 h-1 rounded-full bg-gray-400" />
-                    Estimated focus time: {recommendedTask.estimatedTotalMinutes} mins
+                  <span className="flex items-center gap-1.5">
+                    <span className="w-1 h-1 rounded-full bg-gray-300" />
+                    Est. Session: <span className="text-gray-600 font-semibold">{recommendedTask.estimatedTotalMinutes} mins</span>
                   </span>
                 </div>
               </div>
@@ -614,7 +614,7 @@ export default function KanbanPage() {
         )}
 
         {/* Stats Summary */}
-        <div key={`stats-${activeWorkspaceId}`} className="grid grid-cols-3 sm:grid-cols-5 gap-3 animate-scale-in">
+        <div key={`stats-${activeWorkspaceId}`} className="grid grid-cols-3 sm:grid-cols-5 gap-3.5 animate-scale-in">
           {[
             { label: "Total", value: activeWorkspaceTasks.length, color: "text-gray-700" },
             { label: "To Do", value: columnTasks("todo").length, color: "text-gray-600" },
@@ -626,7 +626,7 @@ export default function KanbanPage() {
               color: "text-red-600",
             },
           ].map(({ label, value, color }) => (
-            <div key={label} className="bg-white rounded-xl border border-[#EAEAEA] px-4 py-2 text-center shadow-sm">
+            <div key={label} className="bg-white rounded-xl px-4 py-3.5 text-center shadow-[0_1px_3px_rgba(0,0,0,0.01),0_10px_40px_-10px_rgba(0,0,0,0.03)]">
               <p className={`text-xl font-extrabold ${color}`}>{value}</p>
               <p className="text-[10px] text-gray-400 font-medium mt-0.5">{label}</p>
             </div>
@@ -641,12 +641,12 @@ export default function KanbanPage() {
               onDragOver={(e) => { e.preventDefault(); setDragOverCol(col.id); }}
               onDragLeave={() => setDragOverCol(null)}
               onDrop={(e) => handleDrop(e, col.id)}
-              className={`rounded-2xl p-4 min-h-[530px] flex flex-col gap-4 transition-all duration-200 ${col.bg} ${
-                dragOverCol === col.id ? "ring-2 ring-primary/20 scale-[1.01]" : ""
+              className={`rounded-2xl p-4.5 min-h-[540px] flex flex-col gap-4.5 transition-all duration-200 ${col.bg} ${
+                dragOverCol === col.id ? "bg-primary-50/5 ring-1 ring-primary/10 scale-[1.005]" : ""
               }`}
             >
               {/* Column Header */}
-              <div className="flex items-center justify-between pb-2">
+              <div className="flex items-center justify-between pb-1 select-none">
                 <div className="flex items-center gap-2">
                   <span className={`w-2 h-2 rounded-full ${
                     col.id === "todo" ? "bg-gray-400" : col.id === "doing" ? "bg-blue-500" : "bg-emerald-500"
