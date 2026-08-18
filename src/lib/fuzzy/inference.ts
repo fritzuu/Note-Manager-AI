@@ -131,7 +131,10 @@ function getMemberships(inputs: FuzzyInputs): FuzzyMemberships {
   };
 }
 
-/** Convert a JS Date deadline to days-until (negative = overdue). */
+/** Convert a JS Date deadline to days-until (negative = overdue). Compare local midnights to prevent time-of-day drift. */
 export function deadlineToDays(deadline: Date): number {
-  return (deadline.getTime() - Date.now()) / (1000 * 60 * 60 * 24);
+  const dDate = new Date(deadline.getFullYear(), deadline.getMonth(), deadline.getDate());
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  return Math.round((dDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
 }
