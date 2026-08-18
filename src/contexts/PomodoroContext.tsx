@@ -150,6 +150,17 @@ export function PomodoroProvider({ children }: { children: React.ReactNode }) {
 
         // Calculate progress increment for the selected task
         if (selectedTask) {
+          const completedCount = updated.filter(
+            (s) => s.taskId === selectedTask.id && s.completed
+          ).length;
+          
+          const estimatedTotalSessions = fuzzyResult.recommendedMinutes > 0
+            ? Math.round(selectedTask.estimatedTotalMinutes / fuzzyResult.recommendedMinutes)
+            : 0;
+          const targetSessions = selectedTask.estimatedTotalMinutes > 0
+            ? Math.max(1, estimatedTotalSessions)
+            : 0;
+
           const currentProgress = selectedTask.progress || 0;
           if (currentProgress < 100) {
             const remaining = selectedTask.estimatedTotalMinutes || fuzzyResult.recommendedMinutes;
@@ -159,9 +170,12 @@ export function PomodoroProvider({ children }: { children: React.ReactNode }) {
             const increment = baseTotalTime > 0
               ? Math.max(1, Math.round((focusMinutes / baseTotalTime) * 100))
               : 10;
-            const nextProgress = Math.min(100, currentProgress + increment);
+            
+            // If sessions target reached or exceeded, set progress to 100%
+            const reachesTarget = targetSessions > 0 && completedCount >= targetSessions;
+            const nextProgress = reachesTarget ? 100 : Math.min(100, currentProgress + increment);
 
-            setProgressIncrement(increment);
+            setProgressIncrement(reachesTarget ? (100 - currentProgress) : increment);
             setSuggestedProgress(nextProgress);
             setAdjustedProgress(nextProgress);
             setShowProgressPrompt(true);
@@ -438,7 +452,11 @@ export function PomodoroProvider({ children }: { children: React.ReactNode }) {
     if (!selectedTask || !user) return;
     setIsUpdatingProgress(true);
     try {
-      await updateTask(selectedTask.id, { progress: adjustedProgress });
+      const isDone = adjustedProgress >= 100;
+      await updateTask(selectedTask.id, {
+        progress: adjustedProgress,
+        status: isDone ? "done" : selectedTask.status,
+      });
       const userTasks = await getUserTasks(user.uid);
       const activeTasks = userTasks.filter((t) => t.status !== "done");
       setTasks(activeTasks);
