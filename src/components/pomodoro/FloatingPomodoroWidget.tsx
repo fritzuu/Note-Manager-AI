@@ -39,17 +39,15 @@ export function FloatingPomodoroWidget({
   const [notificationPermission, setNotificationPermission] = useState<NotificationPermission>("default");
   const prevTimerRef = useRef(timerSeconds);
 
-  // Don't show on /pomodoro page itself
-  if (pathname === "/pomodoro") return null;
-
   // Request notification permission on mount
   useEffect(() => {
-    if ("Notification" in window) {
-      setNotificationPermission(Notification.permission);
+    if (typeof window !== "undefined" && "Notification" in window) {
       if (Notification.permission === "default") {
-        Notification.requestPermission().then(permission => {
+        Notification.requestPermission().then((permission) => {
           setNotificationPermission(permission);
         });
+      } else {
+        setNotificationPermission(Notification.permission);
       }
     }
   }, []);
@@ -57,13 +55,13 @@ export function FloatingPomodoroWidget({
   // Detect timer completion and send notification
   useEffect(() => {
     if (prevTimerRef.current > 0 && timerSeconds === 0 && isRunning) {
-      // Timer just finished
-      if (notificationPermission === "granted") {
+      if (typeof window !== "undefined" && "Notification" in window && notificationPermission === "granted") {
         const title = phase === "focus" ? "🍅 Focus Session Complete!" : "☕ Break Time Over!";
-        const body = phase === "focus" 
-          ? `Great work on "${taskTitle || "your task"}"! Time for a break.`
-          : "Break's over. Ready for another focus session?";
-        
+        const body =
+          phase === "focus"
+            ? `Great work on "${taskTitle || "your task"}"! Time for a break.`
+            : "Break's over. Ready for another focus session?";
+
         new Notification(title, {
           body,
           icon: "/favicon.ico",
@@ -73,6 +71,9 @@ export function FloatingPomodoroWidget({
     }
     prevTimerRef.current = timerSeconds;
   }, [timerSeconds, isRunning, phase, taskTitle, notificationPermission]);
+
+  // Don't show on /pomodoro page itself
+  if (pathname === "/pomodoro") return null;
 
   return (
     <div

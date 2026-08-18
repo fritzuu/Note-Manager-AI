@@ -164,7 +164,7 @@ export default function DashboardPage() {
       {/* Welcome Row */}
       <div className="relative z-20 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 animate-slide-up">
         <div>
-          <h1 className="text-2xl font-bold text-[#1F2937] tracking-tight">
+          <h1 className="text-2xl font-bold text-[#1F2937] tracking-tight" suppressHydrationWarning>
             Good {new Date().getHours() < 12 ? "morning" : new Date().getHours() < 18 ? "afternoon" : "evening"},{" "}
             {firstName} 👋
           </h1>
@@ -460,7 +460,7 @@ export default function DashboardPage() {
                 <Link key={note.id} href={`/notes/${note.id}`} className="block">
                   <div className="bg-white rounded-xl border border-border p-4 hover:border-primary/55 hover:shadow-sm transition-all">
                     <h3 className="font-bold text-gray-800 text-sm line-clamp-1">{note.title || "Untitled"}</h3>
-                    <p className="text-xs text-gray-400 mt-0.5 flex items-center gap-1">
+                    <p className="text-xs text-gray-400 mt-0.5 flex items-center gap-1" suppressHydrationWarning>
                       <Calendar className="w-3 h-3" />
                       {note.updatedAt
                         ? new Date((note.updatedAt as { seconds?: number }).seconds! * 1000).toLocaleDateString()

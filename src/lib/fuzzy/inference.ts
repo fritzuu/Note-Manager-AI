@@ -1,7 +1,7 @@
 import type { FuzzyInputs, FuzzyDetailedResult, FuzzyMemberships, PriorityLevel } from "./types";
 import { CONSTRAINTS } from "./config";
 import { buildRules } from "./rules";
-import { aggregateRules, argmaxLevel } from "./aggregation";
+import { aggregateRules } from "./aggregation";
 import { defuzzify } from "./defuzzification";
 import { buildReasoning, deriveRiskLevel, estimateFocusMinutes } from "./reasoning";
 import {

@@ -512,6 +512,17 @@ export async function completePomodoroSession(sessionId: string): Promise<void> 
   });
 }
 
+export async function updatePomodoroSession(
+  sessionId: string,
+  fields: Partial<Omit<PomodoroSession, "id" | "userId" | "startedAt">>
+): Promise<void> {
+  const sessionRef = doc(db, "pomodoro_sessions", sessionId);
+  await updateDoc(sessionRef, {
+    ...fields,
+    endedAt: serverTimestamp(),
+  });
+}
+
 export async function deletePomodoroSession(sessionId: string): Promise<void> {
   const sessionRef = doc(db, "pomodoro_sessions", sessionId);
   await deleteDoc(sessionRef);
