@@ -44,3 +44,10 @@ next-env.d.ts
 # python
 __pycache__/
 *.py[cod]
+
+# local tools / tests
+.vscode/
+test-*.mjs
+check-rules.mjs
+validate_*.mjs
+
