@@ -14,6 +14,7 @@ import {
   MessageCircle,
 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
+import { LivingFlame } from "./LivingFlame";
 
 interface StreakShareModalProps {
   isOpen: boolean;
@@ -258,39 +259,9 @@ export function StreakShareModal({
             <span>MindFlow AI • {userName}</span>
           </div>
 
-          {/* Animated Flame Icon */}
-          <div className="relative my-2">
-            <div className="w-24 h-24 flex items-center justify-center animate-flame-bounce">
-              <svg
-                viewBox="0 0 24 24"
-                className="w-22 h-22 drop-shadow-[0_0_25px_rgba(255,255,255,0.8)] animate-flame-glow"
-                fill="none"
-              >
-                <path
-                  d="M12 2C12 2 15 5.5 15 8C15 9.1 14.5 10.1 13.8 10.8C15.8 11.2 18 13.3 18 16.5C18 19.5 15.3 22 12 22C8.7 22 6 19.5 6 16.5C6 14.1 7.4 12.2 9.5 11.3C8.6 10.4 8 9.2 8 8C8 5.5 12 2 12 2Z"
-                  fill={`url(#flameGradient-${currentStreak})`}
-                />
-                <path
-                  d="M12 11C12 11 14 13 14 14.5C14 15.6 13.1 16.5 12 16.5C10.9 16.5 10 15.6 10 14.5C10 13 12 11 12 11Z"
-                  fill="#ffffff"
-                  className="animate-pulse"
-                />
-                <defs>
-                  <linearGradient
-                    id={`flameGradient-${currentStreak}`}
-                    x1="12"
-                    y1="2"
-                    x2="12"
-                    y2="22"
-                    gradientUnits="userSpaceOnUse"
-                  >
-                    <stop stopColor={tier.flameGradient[0]} />
-                    <stop offset="0.5" stopColor={tier.flameGradient[1]} />
-                    <stop offset="1" stopColor={tier.flameGradient[2]} />
-                  </linearGradient>
-                </defs>
-              </svg>
-            </div>
+          {/* Animated Living Flame Centerpiece */}
+          <div className="relative my-3">
+            <LivingFlame streakDays={currentStreak} size="xl" className="scale-125" />
           </div>
 
           {/* Massive Number Counter */}

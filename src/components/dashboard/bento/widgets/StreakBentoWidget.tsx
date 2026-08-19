@@ -5,6 +5,7 @@ import { Flame, Share2, Zap } from "lucide-react";
 import { PomodoroSession } from "@/lib/firestore";
 import { useAuth } from "@/contexts/AuthContext";
 import { StreakShareModal } from "@/components/dashboard/streak/StreakShareModal";
+import { LivingFlame } from "@/components/dashboard/streak/LivingFlame";
 
 interface StreakBentoWidgetProps {
   sessions: PomodoroSession[];
@@ -108,13 +109,9 @@ export function StreakBentoWidget({ sessions }: StreakBentoWidgetProps) {
           </button>
         </div>
 
-        {/* Animated Big Center Flame with Dynamic Glow */}
+        {/* Animated Big Center Living Flame with Fluid Swaying */}
         <div className="flex items-center justify-center gap-3 my-auto py-1">
-          <div className="animate-flame-bounce">
-            <Flame
-              className={`w-12 h-12 ${theme.flameFill} ${theme.glow} animate-flame-glow`}
-            />
-          </div>
+          <LivingFlame streakDays={streakDays} size="lg" className="scale-110" />
           <div className="space-y-0.5 text-left">
             <p className="text-4xl font-black font-mono tracking-tight leading-none text-white drop-shadow-md">
               {streakDays}

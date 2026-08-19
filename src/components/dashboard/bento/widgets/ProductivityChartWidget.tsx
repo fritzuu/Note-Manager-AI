@@ -13,6 +13,7 @@ import {
 import { PomodoroSession } from "@/lib/firestore";
 import { useAuth } from "@/contexts/AuthContext";
 import { StreakShareModal } from "@/components/dashboard/streak/StreakShareModal";
+import { LivingFlame } from "@/components/dashboard/streak/LivingFlame";
 
 interface ProductivityChartWidgetProps {
   sessions: PomodoroSession[];
@@ -173,16 +174,14 @@ export function ProductivityChartWidget({ sessions }: ProductivityChartWidgetPro
               <span className="text-xs text-gray-500 font-medium">min today</span>
             </div>
 
-            {/* 🔥 Dynamic Living Streak Pill */}
+            {/* 🔥 Dynamic Living Animated Streak Pill */}
             <button
               type="button"
               onClick={() => setShareModalOpen(true)}
               title="Click to view & share your streak card!"
               className={`flex items-center gap-1.5 text-xs font-black text-white bg-gradient-to-r ${theme.badgeGradient} px-3 py-1 rounded-full shadow-md ${theme.badgeShadow} hover:scale-105 transition-all duration-300 cursor-pointer group/streak`}
             >
-              <Flame
-                className={`w-4 h-4 ${theme.flameFill} ${theme.glowEffect} animate-flame-bounce`}
-              />
+              <LivingFlame streakDays={streakDays} size="sm" />
               <span>{streakDays} Day Streak</span>
               <Sparkles className="w-3 h-3 text-white/80 group-hover/streak:rotate-45 transition-transform" />
             </button>

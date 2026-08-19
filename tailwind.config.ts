@@ -38,6 +38,11 @@ const config: Config = {
         "flame-bounce": "flameBounce 1.2s ease-in-out infinite alternate",
         "flame-glow": "flameGlow 2s ease-in-out infinite alternate",
         "sparkle-float": "sparkleFloat 2.5s ease-in-out infinite",
+        "flame-sway": "flameSway 1.8s ease-in-out infinite alternate",
+        "flame-flicker": "flameFlicker 0.9s ease-in-out infinite alternate",
+        "flame-core": "flameCore 0.6s ease-in-out infinite alternate",
+        "ember-rise-1": "emberRise 2s ease-in-out infinite",
+        "ember-rise-2": "emberRise 2.4s ease-in-out 0.8s infinite",
       },
       keyframes: {
         fadeIn: {
@@ -69,6 +74,25 @@ const config: Config = {
           "0%": { transform: "translateY(0) scale(0.8) opacity(0.3)" },
           "50%": { transform: "translateY(-12px) scale(1.2) opacity(1)" },
           "100%": { transform: "translateY(-24px) scale(0.6) opacity(0)" },
+        },
+        flameSway: {
+          "0%": { transform: "rotate(-3deg) skewX(-2deg) scale(0.98, 1)" },
+          "50%": { transform: "rotate(1deg) skewX(2deg) scale(1.03, 0.97)" },
+          "100%": { transform: "rotate(4deg) skewX(-1deg) scale(0.99, 1.04)" },
+        },
+        flameFlicker: {
+          "0%": { transform: "scale(0.95, 1.03) rotate(-2deg) translateY(1px)" },
+          "50%": { transform: "scale(1.04, 0.96) rotate(3deg) translateY(-2px)" },
+          "100%": { transform: "scale(0.98, 1.02) rotate(-1deg) translateY(0px)" },
+        },
+        flameCore: {
+          "0%": { transform: "scale(0.92) translateY(1px)", opacity: "0.85" },
+          "100%": { transform: "scale(1.08) translateY(-2px)", opacity: "1" },
+        },
+        emberRise: {
+          "0%": { transform: "translateY(0) translateX(0) scale(0.8)", opacity: "0.8" },
+          "50%": { transform: "translateY(-16px) translateX(6px) scale(1.1)", opacity: "1" },
+          "100%": { transform: "translateY(-34px) translateX(-4px) scale(0.3)", opacity: "0" },
         },
       },
       boxShadow: {
