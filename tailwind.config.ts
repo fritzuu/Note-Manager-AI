@@ -34,6 +34,10 @@ const config: Config = {
         "fade-in": "fadeIn 0.4s ease-out forwards",
         "slide-up": "slideUp 0.5s ease-out forwards",
         "scale-in": "scaleIn 0.3s ease-out forwards",
+        wobble: "wobble 0.28s ease-in-out infinite alternate",
+        "flame-bounce": "flameBounce 1.2s ease-in-out infinite alternate",
+        "flame-glow": "flameGlow 2s ease-in-out infinite alternate",
+        "sparkle-float": "sparkleFloat 2.5s ease-in-out infinite",
       },
       keyframes: {
         fadeIn: {
@@ -47,6 +51,24 @@ const config: Config = {
         scaleIn: {
           from: { opacity: "0", transform: "scale(0.95)" },
           to: { opacity: "1", transform: "scale(1)" },
+        },
+        wobble: {
+          "0%": { transform: "rotate(-0.75deg) scale(0.995)" },
+          "100%": { transform: "rotate(0.75deg) scale(1.005)" },
+        },
+        flameBounce: {
+          "0%": { transform: "translateY(0) scale(1) rotate(-1deg)" },
+          "50%": { transform: "translateY(-6px) scale(1.08) rotate(2deg)" },
+          "100%": { transform: "translateY(0) scale(1) rotate(-1deg)" },
+        },
+        flameGlow: {
+          "0%": { filter: "drop-shadow(0 0 10px rgba(249, 115, 22, 0.4))" },
+          "100%": { filter: "drop-shadow(0 0 25px rgba(239, 68, 68, 0.85))" },
+        },
+        sparkleFloat: {
+          "0%": { transform: "translateY(0) scale(0.8) opacity(0.3)" },
+          "50%": { transform: "translateY(-12px) scale(1.2) opacity(1)" },
+          "100%": { transform: "translateY(-24px) scale(0.6) opacity(0)" },
         },
       },
       boxShadow: {
