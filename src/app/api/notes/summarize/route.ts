@@ -8,10 +8,11 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Content is required" }, { status: 400 });
     }
 
-    const apiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
+    const customKey = request.headers.get("x-custom-api-key");
+    const apiKey = customKey || process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
     if (!apiKey) {
       return NextResponse.json(
-        { error: "Gemini API key is not configured in environment variables" },
+        { error: "Gemini API key is not configured. Please add your API key in Settings or AI Setup." },
         { status: 500 }
       );
     }
