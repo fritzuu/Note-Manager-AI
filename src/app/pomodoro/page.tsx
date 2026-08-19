@@ -94,11 +94,9 @@ function PomodoroContentImpl() {
 
   if (!mounted || authLoading || pomodoroLoading) {
     return (
-      <DashboardShell>
-        <div className="flex items-center justify-center py-24" suppressHydrationWarning>
-          <Loader2 className="w-8 h-8 animate-spin text-primary" />
-        </div>
-      </DashboardShell>
+      <div className="flex items-center justify-center py-24" suppressHydrationWarning>
+        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+      </div>
     );
   }
 
@@ -124,7 +122,7 @@ function PomodoroContentImpl() {
   const dashOffset = circumference * (1 - progress);
 
   return (
-    <DashboardShell>
+    <div className="space-y-8 animate-fade-in" suppressHydrationWarning>
       {/* Header */}
       <div className="animate-slide-up">
         <h1 className="text-2xl font-bold text-[#1F2937] tracking-tight flex items-center gap-2">
@@ -587,33 +585,34 @@ function PomodoroContentImpl() {
           </div>
         </div>
       )}
-    </DashboardShell>
+    </div>
   );
 }
 
-const PomodoroContent = dynamic(() => Promise.resolve(PomodoroContentImpl), {
-  ssr: false,
-  loading: () => (
-    <DashboardShell>
-      <div className="flex items-center justify-center py-24" suppressHydrationWarning>
-        <Loader2 className="w-8 h-8 animate-spin text-primary" />
-      </div>
-    </DashboardShell>
-  ),
-});
-
 export default function PomodoroPage() {
+  const [mounted, setMounted] = React.useState(false);
+
+  React.useEffect(() => {
+    setMounted(true);
+  }, []);
+
   return (
-    <Suspense
-      fallback={
-        <DashboardShell>
-          <div className="flex items-center justify-center py-24" suppressHydrationWarning>
-            <Loader2 className="w-8 h-8 animate-spin text-primary" />
-          </div>
-        </DashboardShell>
-      }
-    >
-      <PomodoroContent />
-    </Suspense>
+    <DashboardShell>
+      {!mounted ? (
+        <div className="flex items-center justify-center py-24" suppressHydrationWarning>
+          <Loader2 className="w-8 h-8 animate-spin text-primary" />
+        </div>
+      ) : (
+        <Suspense
+          fallback={
+            <div className="flex items-center justify-center py-24" suppressHydrationWarning>
+              <Loader2 className="w-8 h-8 animate-spin text-primary" />
+            </div>
+          }
+        >
+          <PomodoroContentImpl />
+        </Suspense>
+      )}
+    </DashboardShell>
   );
 }

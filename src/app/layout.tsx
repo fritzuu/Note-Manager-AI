@@ -28,7 +28,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className={inter.variable} suppressHydrationWarning>
-      <head>
+      <body className="font-sans antialiased bg-background text-[#1F2937]" suppressHydrationWarning>
         <script
           dangerouslySetInnerHTML={{
             __html: `
@@ -63,8 +63,6 @@ export default function RootLayout({
             `,
           }}
         />
-      </head>
-      <body className="font-sans antialiased bg-background text-[#1F2937]" suppressHydrationWarning>
         <AuthProvider>
           <PomodoroProvider>
             {children}

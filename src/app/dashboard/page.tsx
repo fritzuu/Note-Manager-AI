@@ -109,12 +109,10 @@ function DashboardContentImpl() {
 
   if (authLoading || loading) {
     return (
-      <DashboardShell>
-        <div className="flex flex-col items-center justify-center py-24 gap-4">
-          <div className="w-10 h-10 rounded-full border-4 border-primary-200 border-t-primary animate-spin" />
-          <p className="text-sm text-gray-500 font-medium">Loading Dashboard...</p>
-        </div>
-      </DashboardShell>
+      <div className="flex flex-col items-center justify-center py-24 gap-4" suppressHydrationWarning>
+        <div className="w-10 h-10 rounded-full border-4 border-primary-200 border-t-primary animate-spin" />
+        <p className="text-sm text-gray-500 font-medium">Loading Dashboard...</p>
+      </div>
     );
   }
 
@@ -161,7 +159,7 @@ function DashboardContentImpl() {
   };
 
   return (
-    <DashboardShell>
+    <div className="space-y-8 animate-fade-in" suppressHydrationWarning>
       {/* Welcome Row */}
       <div className="relative z-20 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 animate-slide-up">
         <div>
@@ -477,35 +475,36 @@ function DashboardContentImpl() {
           )}
         </div>
       </div>
-    </DashboardShell>
+    </div>
   );
 }
 
-const DashboardContent = dynamic(() => Promise.resolve(DashboardContentImpl), {
-  ssr: false,
-  loading: () => (
-    <DashboardShell>
-      <div className="flex flex-col items-center justify-center py-24 gap-4" suppressHydrationWarning>
-        <div className="w-10 h-10 rounded-full border-4 border-primary-200 border-t-primary animate-spin" />
-        <p className="text-sm text-gray-500 font-medium">Loading Dashboard...</p>
-      </div>
-    </DashboardShell>
-  ),
-});
-
 export default function DashboardPage() {
+  const [mounted, setMounted] = React.useState(false);
+
+  React.useEffect(() => {
+    setMounted(true);
+  }, []);
+
   return (
-    <Suspense
-      fallback={
-        <DashboardShell>
-          <div className="flex flex-col items-center justify-center py-24 gap-4" suppressHydrationWarning>
-            <div className="w-10 h-10 rounded-full border-4 border-primary-200 border-t-primary animate-spin" />
-            <p className="text-sm text-gray-500 font-medium">Loading Dashboard...</p>
-          </div>
-        </DashboardShell>
-      }
-    >
-      <DashboardContent />
-    </Suspense>
+    <DashboardShell>
+      {!mounted ? (
+        <div className="flex flex-col items-center justify-center py-24 gap-4" suppressHydrationWarning>
+          <div className="w-10 h-10 rounded-full border-4 border-primary-200 border-t-primary animate-spin" />
+          <p className="text-sm text-gray-500 font-medium">Loading Dashboard...</p>
+        </div>
+      ) : (
+        <Suspense
+          fallback={
+            <div className="flex flex-col items-center justify-center py-24 gap-4" suppressHydrationWarning>
+              <div className="w-10 h-10 rounded-full border-4 border-primary-200 border-t-primary animate-spin" />
+              <p className="text-sm text-gray-500 font-medium">Loading Dashboard...</p>
+            </div>
+          }
+        >
+          <DashboardContentImpl />
+        </Suspense>
+      )}
+    </DashboardShell>
   );
 }
