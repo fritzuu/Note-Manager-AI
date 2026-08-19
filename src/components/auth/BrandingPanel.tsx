@@ -1,95 +1,91 @@
 "use client";
 
-import React from "react";
+import React, { useState, useEffect } from "react";
 
-interface Feature {
-  icon: string;
-  title: string;
-  description: string;
-}
-
-const features: Feature[] = [
-  {
-    icon: "🧠",
-    title: "AI-Powered Insights",
-    description: "Our ML model predicts your academic performance and suggests personalized improvement strategies.",
-  },
-  {
-    icon: "📊",
-    title: "Academic Analytics",
-    description: "Visualize your study patterns, sleep quality, and lifestyle habits in one unified dashboard.",
-  },
-  {
-    icon: "🎯",
-    title: "Personalized Goals",
-    description: "Set and track academic goals tailored to your unique learning profile.",
-  },
-];
+const BRAND_CHARS = Array.from("MindFlow AI");
 
 export function BrandingPanel() {
-  return (
-    <div className="relative flex flex-col justify-between h-full p-10 overflow-hidden">
-      {/* Background gradient */}
-      <div className="absolute inset-0 bg-gradient-to-br from-primary-600 via-primary to-secondary" />
-      
-      {/* Decorative blobs */}
-      <div className="absolute -top-24 -right-24 w-72 h-72 rounded-full bg-white/10 blur-3xl" />
-      <div className="absolute bottom-0 -left-20 w-64 h-64 rounded-full bg-white/5 blur-2xl" />
-      <div className="absolute top-1/2 right-8 w-32 h-32 rounded-full bg-accent/30 blur-xl" />
+  const [animKey, setAnimKey] = useState(0);
 
-      {/* Grid pattern */}
+  useEffect(() => {
+    // Continuous loop interval matching keyframe duration (6.8s)
+    const timer = setInterval(() => {
+      setAnimKey((prev) => prev + 1);
+    }, 6800);
+    return () => clearInterval(timer);
+  }, []);
+
+  return (
+    <div className="relative flex flex-col h-full w-full overflow-hidden">
+      {/* ── Background gradient (deep, saturated green) ── */}
+      <div className="absolute inset-0 bg-gradient-to-br from-[#1B4D3E] via-[#2D6A4F] to-[#357A5B]" />
+
+      {/* ── Grid pattern (tegas, visible) ── */}
       <div
-        className="absolute inset-0 opacity-[0.04]"
+        className="absolute inset-0 opacity-[0.09]"
         style={{
-          backgroundImage: `linear-gradient(rgba(255,255,255,0.8) 1px, transparent 1px),
-            linear-gradient(90deg, rgba(255,255,255,0.8) 1px, transparent 1px)`,
+          backgroundImage: `linear-gradient(rgba(255,255,255,0.7) 1px, transparent 1px),
+            linear-gradient(90deg, rgba(255,255,255,0.7) 1px, transparent 1px)`,
           backgroundSize: "32px 32px",
         }}
       />
 
-      {/* Content */}
-      <div className="relative z-10">
-        {/* Logo */}
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-white/20 backdrop-blur-sm flex items-center justify-center text-2xl">
+      {/* ── Shimmer / light streak sweep (Menyapu dari Kiri Atas → Kanan Bawah) ── */}
+      <div
+        className="absolute animate-shimmer pointer-events-none"
+        style={{
+          width: "250%",
+          height: "250%",
+          top: "-75%",
+          left: "-75%",
+          background:
+            "linear-gradient(135deg, transparent 35%, rgba(255, 255, 255, 0.12) 44%, rgba(255, 255, 255, 0.6) 50%, rgba(255, 255, 255, 0.12) 56%, transparent 65%)",
+          filter: "blur(28px)",
+        }}
+      />
+
+      {/* ── Content container ── */}
+      <div className="relative z-10 flex flex-col h-full p-10 lg:p-12">
+        {/* ── Logo (top-left, enlarged, no text) ── */}
+        <div className="shrink-0">
+          <div className="w-16 h-16 lg:w-20 lg:h-20 rounded-2xl bg-white/15 backdrop-blur-sm flex items-center justify-center text-4xl lg:text-5xl shadow-lg shadow-black/10">
             🌱
           </div>
-          <span className="text-white font-bold text-xl tracking-tight">MindFlow AI</span>
         </div>
-      </div>
 
-      <div className="relative z-10 space-y-8">
-        <div>
-          <h1 className="text-4xl font-bold text-white leading-tight">
-            Unlock your<br />
-            <span className="text-accent">academic potential</span>
+        {/* ── Brand name (centered in panel with staggered character reveal + loop) ── */}
+        <div className="flex-1 flex items-center justify-center">
+          <h2
+            key={animKey}
+            aria-label="MindFlow AI"
+            className="text-white text-5xl lg:text-6xl xl:text-7xl font-bold italic tracking-tight select-none flex items-center justify-center"
+          >
+            {BRAND_CHARS.map((char, i) => (
+              <span
+                key={i}
+                className="inline-block animate-char-reveal"
+                style={{
+                  animationDelay: `${i * 75}ms`,
+                }}
+              >
+                {char === " " ? "\u00A0" : char}
+              </span>
+            ))}
+          </h2>
+        </div>
+
+        {/* ── Headline & description (bottom-right) ── */}
+        <div className="shrink-0 self-end text-right max-w-lg">
+          <h1 className="text-4xl xl:text-5xl font-bold leading-tight">
+            <span className="text-white">Unlock your</span>
+            <br />
+            <span className="text-[#8BBF9F]">academic potential</span>
           </h1>
-          <p className="text-white/70 mt-3 text-base leading-relaxed max-w-xs">
-            An intelligent platform that learns your habits and helps you excel in your academic journey.
+          <p className="text-white/60 mt-4 text-sm leading-relaxed max-w-sm ml-auto">
+            An intelligent platform that learns your habits and helps you excel
+            in your academic journey.
           </p>
         </div>
-
-        <div className="space-y-4">
-          {features.map((feature, i) => (
-            <div
-              key={i}
-              className="flex gap-3 p-4 rounded-xl bg-white/10 backdrop-blur-sm border border-white/10 animate-fade-in"
-              style={{ animationDelay: `${i * 100}ms` }}
-            >
-              <span className="text-2xl shrink-0">{feature.icon}</span>
-              <div>
-                <p className="text-white font-semibold text-sm">{feature.title}</p>
-                <p className="text-white/65 text-xs mt-0.5 leading-relaxed">{feature.description}</p>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      <div className="relative z-10">
-        <p className="text-white/40 text-xs">
-          © 2025 MindFlow AI · Built for students, by innovators
-        </p>
       </div>
     </div>
   );

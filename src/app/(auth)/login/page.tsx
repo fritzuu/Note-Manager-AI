@@ -92,7 +92,7 @@ export default function LoginPage() {
   return (
     <div className="min-h-screen flex">
       {/* Left: Branding */}
-      <div className="hidden lg:flex lg:w-[45%] xl:w-[42%] shrink-0">
+      <div className="hidden lg:flex lg:w-[60%] shrink-0">
         <BrandingPanel />
       </div>
 
