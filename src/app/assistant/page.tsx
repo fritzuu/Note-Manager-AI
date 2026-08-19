@@ -17,6 +17,7 @@ import {
   type NoteDocument,
   type ChatHistory,
 } from "@/lib/firestore";
+import { getCustomApiKey } from "@/lib/aiConfig";
 import { DashboardShell } from "@/components/layout/DashboardShell";
 import { Button } from "@/components/ui/Button";
 
@@ -118,9 +119,15 @@ function AssistantChatContent() {
     setSending(true);
 
     try {
+      const customKey = getCustomApiKey();
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      if (customKey) {
+        headers["x-custom-api-key"] = customKey;
+      }
+
       const res = await fetch("/api/assistant/chat", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers,
         body: JSON.stringify({
           question: activeQuestion,
           context: compileContextText,

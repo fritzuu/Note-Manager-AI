@@ -43,6 +43,7 @@ import {
   type NoteDocument,
   type NoteAttachment,
 } from "@/lib/firestore";
+import { getCustomApiKey } from "@/lib/aiConfig";
 import { DashboardShell } from "@/components/layout/DashboardShell";
 import { Button } from "@/components/ui/Button";
 import { TiptapEditor } from "@/components/notes/TiptapEditor";
@@ -435,9 +436,15 @@ export default function NoteDetailPage({
 
     setSummarizing(true);
     try {
+      const customKey = getCustomApiKey();
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      if (customKey) {
+        headers["x-custom-api-key"] = customKey;
+      }
+
       const res = await fetch("/api/notes/summarize", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers,
         body: JSON.stringify({ content }),
       });
 

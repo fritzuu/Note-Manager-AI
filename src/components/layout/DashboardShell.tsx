@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
@@ -16,9 +16,15 @@ import {
   X,
   CheckSquare,
   Timer,
+  ChevronUp,
+  Key,
+  ShieldCheck,
+  Cpu,
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { signOut } from "@/lib/auth";
+import { getCustomApiKey } from "@/lib/aiConfig";
+import { AiApiKeyModal } from "@/components/modals/AiApiKeyModal";
 
 interface DashboardShellProps {
   children: React.ReactNode;
@@ -30,7 +36,36 @@ export function DashboardShell({ children, fullWidth = false }: DashboardShellPr
   const pathname = usePathname();
   const router = useRouter();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [userMenuOpen, setUserMenuOpen] = useState(false);
+  const [apiKeyModalOpen, setApiKeyModalOpen] = useState(false);
+  const [hasCustomApiKey, setHasCustomApiKey] = useState(false);
+  const [mounted, setMounted] = useState(false);
+  const userMenuRef = useRef<HTMLDivElement>(null);
 
+  useEffect(() => {
+    setMounted(true);
+    setHasCustomApiKey(!!getCustomApiKey());
+
+    const handleKeyUpdate = () => {
+      setHasCustomApiKey(!!getCustomApiKey());
+    };
+
+    window.addEventListener("mindflow-api-key-updated", handleKeyUpdate);
+    return () => window.removeEventListener("mindflow-api-key-updated", handleKeyUpdate);
+  }, []);
+
+  // Close user menu on outside click
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (userMenuRef.current && !userMenuRef.current.contains(event.target as Node)) {
+        setUserMenuOpen(false);
+      }
+    };
+    if (userMenuOpen) {
+      document.addEventListener("mousedown", handleClickOutside);
+    }
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [userMenuOpen]);
 
   const handleSignOut = async () => {
     await signOut();
@@ -38,6 +73,7 @@ export function DashboardShell({ children, fullWidth = false }: DashboardShellPr
     router.push("/login");
   };
 
+  // Main navigation items (Settings is now in User Profile Menu)
   const navItems = [
     { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
     { name: "Notes", href: "/notes", icon: FileText },
@@ -46,14 +82,7 @@ export function DashboardShell({ children, fullWidth = false }: DashboardShellPr
     { name: "Pomodoro", href: "/pomodoro", icon: Timer },
     { name: "Academic Insight", href: "/insight", icon: Brain },
     { name: "Analytics", href: "/analytics", icon: TrendingUp },
-    { name: "Settings", href: "/settings", icon: Settings },
   ];
-
-  const [mounted, setMounted] = useState(false);
-
-  React.useEffect(() => {
-    setMounted(true);
-  }, []);
 
   const firstName = mounted
     ? userDoc?.name?.split(" ")[0] || user?.displayName?.split(" ")[0] || "Student"
@@ -63,8 +92,105 @@ export function DashboardShell({ children, fullWidth = false }: DashboardShellPr
     : "Student";
   const email = mounted ? user?.email || "" : "";
 
+  const userDropdownMenu = (
+    <div
+      ref={userMenuRef}
+      className="absolute bottom-full left-4 right-4 mb-2 bg-white rounded-2xl border border-border shadow-xl p-2 z-50 animate-scale-in"
+    >
+      {/* User Header */}
+      <div className="p-3 border-b border-border/60 flex items-center gap-3">
+        <div className="w-10 h-10 rounded-full bg-gradient-to-br from-primary to-primary-600 flex items-center justify-center text-white font-bold text-sm shrink-0 shadow-sm">
+          {firstName[0]}
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-1.5">
+            <p className="text-xs font-bold text-gray-900 truncate">{displayName}</p>
+            <span className="text-[10px] bg-primary/10 text-primary font-semibold px-1.5 py-0.2 rounded-full">
+              Student
+            </span>
+          </div>
+          <p className="text-[11px] text-gray-400 truncate">{email}</p>
+        </div>
+      </div>
+
+      {/* Menu Options */}
+      <div className="py-1 space-y-0.5">
+        {/* Custom AI API Key Option */}
+        <button
+          onClick={() => {
+            setUserMenuOpen(false);
+            setApiKeyModalOpen(true);
+          }}
+          className="w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-medium text-gray-700 hover:bg-primary-50 hover:text-primary transition-colors cursor-pointer group"
+        >
+          <div className="flex items-center gap-2.5">
+            <div className="w-6 h-6 rounded-lg bg-primary-50 text-primary flex items-center justify-center group-hover:bg-primary group-hover:text-white transition-colors">
+              <Key className="w-3.5 h-3.5" />
+            </div>
+            <span>AI API Key Setup</span>
+          </div>
+          <span
+            className={`text-[10px] px-2 py-0.5 rounded-full font-semibold flex items-center gap-1 ${
+              hasCustomApiKey
+                ? "bg-emerald-100 text-emerald-700"
+                : "bg-gray-100 text-gray-500"
+            }`}
+          >
+            {hasCustomApiKey ? (
+              <>
+                <ShieldCheck className="w-3 h-3" /> Custom
+              </>
+            ) : (
+              <>
+                <Cpu className="w-3 h-3" /> System
+              </>
+            )}
+          </span>
+        </button>
+
+        {/* Settings Option */}
+        <Link
+          href="/settings"
+          onClick={() => {
+            setUserMenuOpen(false);
+            setMobileMenuOpen(false);
+          }}
+          className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-xs font-medium transition-colors cursor-pointer group ${
+            pathname === "/settings"
+              ? "bg-primary text-white"
+              : "text-gray-700 hover:bg-primary-50 hover:text-primary"
+          }`}
+        >
+          <div
+            className={`w-6 h-6 rounded-lg flex items-center justify-center transition-colors ${
+              pathname === "/settings"
+                ? "bg-white/20 text-white"
+                : "bg-gray-100 text-gray-500 group-hover:bg-primary group-hover:text-white"
+            }`}
+          >
+            <Settings className="w-3.5 h-3.5" />
+          </div>
+          <span>Account Settings</span>
+        </Link>
+      </div>
+
+      {/* Logout Divider & Action */}
+      <div className="pt-1 mt-1 border-t border-border/60">
+        <button
+          onClick={handleSignOut}
+          className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-xs font-medium text-red-600 hover:bg-red-50 transition-colors cursor-pointer"
+        >
+          <div className="w-6 h-6 rounded-lg bg-red-100/60 text-red-600 flex items-center justify-center">
+            <LogOut className="w-3.5 h-3.5" />
+          </div>
+          <span>Sign Out</span>
+        </button>
+      </div>
+    </div>
+  );
+
   const sidebarContent = (
-    <div className="flex flex-col h-full bg-white border-r border-border">
+    <div className="flex flex-col h-full bg-white border-r border-border relative">
       {/* Brand Logo */}
       <div className="p-6 border-b border-border flex items-center gap-2.5">
         <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-primary to-primary-600 flex items-center justify-center shadow-md">
@@ -96,12 +222,31 @@ export function DashboardShell({ children, fullWidth = false }: DashboardShellPr
         })}
       </nav>
 
-      {/* User Info & Logout */}
-      <div className="p-4 border-t border-border bg-gray-50/50" suppressHydrationWarning>
-        <div className="flex items-center justify-between gap-3 p-2 bg-white rounded-2xl border border-border shadow-sm" suppressHydrationWarning>
+      {/* User Profile Avatar / Menu Trigger at Bottom */}
+      <div className="p-4 border-t border-border bg-gray-50/50 relative" suppressHydrationWarning>
+        {userMenuOpen && userDropdownMenu}
+
+        <button
+          onClick={() => setUserMenuOpen((prev) => !prev)}
+          className={`w-full flex items-center justify-between gap-3 p-2 rounded-2xl border transition-all duration-200 cursor-pointer text-left ${
+            userMenuOpen
+              ? "bg-white border-primary shadow-md ring-2 ring-primary/10"
+              : "bg-white border-border shadow-sm hover:border-primary/50 hover:bg-primary-50/20"
+          }`}
+          suppressHydrationWarning
+        >
           <div className="flex items-center gap-2.5 min-w-0" suppressHydrationWarning>
-            <div className="w-9 h-9 rounded-full bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center text-primary font-bold text-sm shrink-0 ring-2 ring-primary/10" suppressHydrationWarning>
+            <div
+              className="w-9 h-9 rounded-full bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center text-primary font-bold text-sm shrink-0 ring-2 ring-primary/10 relative"
+              suppressHydrationWarning
+            >
               {firstName[0]}
+              {hasCustomApiKey && (
+                <span
+                  title="Custom AI Key Active"
+                  className="absolute -top-0.5 -right-0.5 w-3 h-3 bg-emerald-500 rounded-full ring-2 ring-white"
+                />
+              )}
             </div>
             <div className="min-w-0" suppressHydrationWarning>
               <p className="text-xs font-semibold text-gray-800 truncate" suppressHydrationWarning>
@@ -112,20 +257,26 @@ export function DashboardShell({ children, fullWidth = false }: DashboardShellPr
               </p>
             </div>
           </div>
-          <button
-            onClick={handleSignOut}
-            title="Sign Out"
-            className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors cursor-pointer shrink-0"
-          >
-            <LogOut className="w-4 h-4" />
-          </button>
-        </div>
+          <div className="p-1 text-gray-400 shrink-0">
+            <ChevronUp
+              className={`w-4 h-4 transition-transform duration-200 ${
+                userMenuOpen ? "rotate-180 text-primary" : ""
+              }`}
+            />
+          </div>
+        </button>
       </div>
     </div>
   );
 
   return (
     <div className="min-h-screen flex bg-background" suppressHydrationWarning>
+      {/* Custom AI API Key Modal */}
+      <AiApiKeyModal
+        isOpen={apiKeyModalOpen}
+        onClose={() => setApiKeyModalOpen(false)}
+      />
+
       {/* Desktop Sidebar (hidden on mobile) */}
       <aside className="hidden md:block w-64 shrink-0 h-screen sticky top-0" suppressHydrationWarning>
         {sidebarContent}
@@ -167,9 +318,13 @@ export function DashboardShell({ children, fullWidth = false }: DashboardShellPr
             </button>
             <span className="font-bold text-primary tracking-tight">MindFlow AI</span>
           </div>
-          <div className="w-8 h-8 rounded-full bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center text-primary font-semibold text-sm" suppressHydrationWarning>
+          <button
+            onClick={() => setApiKeyModalOpen(true)}
+            className="w-8 h-8 rounded-full bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center text-primary font-semibold text-sm ring-2 ring-primary/10 cursor-pointer"
+            suppressHydrationWarning
+          >
             {firstName[0]}
-          </div>
+          </button>
         </header>
 
         {/* Inner Content page */}
