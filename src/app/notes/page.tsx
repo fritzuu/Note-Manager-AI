@@ -294,7 +294,7 @@ export default function NotesPage() {
                   <h3 className="font-bold text-[#1F2937] text-base group-hover:text-primary transition-colors line-clamp-1 pr-6">
                     <Highlight text={note.title || "Untitled Note"} query={searchQuery} />
                   </h3>
-                  <p className="text-[11px] text-gray-400 mt-1.5 flex items-center gap-1.5">
+                  <p className="text-[11px] text-gray-400 mt-1.5 flex items-center gap-1.5" suppressHydrationWarning>
                     <Calendar className="w-3.5 h-3.5" />
                     Updated{" "}
                     {note.updatedAt

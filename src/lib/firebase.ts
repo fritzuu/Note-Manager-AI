@@ -5,6 +5,7 @@ import {
   getFirestore,
   persistentLocalCache,
   persistentMultipleTabManager,
+  type Firestore,
 } from "firebase/firestore";
 import { getStorage } from "firebase/storage";
 
@@ -22,15 +23,21 @@ const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
 
 export const auth = getAuth(app);
 
-// Use persistent local cache on the browser/client side, and standard initialization on the server.
-export const db = typeof window !== "undefined"
-  ? initializeFirestore(app, {
+let dbInstance: Firestore;
+if (typeof window !== "undefined") {
+  try {
+    dbInstance = initializeFirestore(app, {
       localCache: persistentLocalCache({
         tabManager: persistentMultipleTabManager(),
       }),
-    })
-  : getFirestore(app);
+    });
+  } catch {
+    dbInstance = getFirestore(app);
+  }
+} else {
+  dbInstance = getFirestore(app);
+}
 
+export const db = dbInstance;
 export const storage = getStorage(app);
-
 export default app;

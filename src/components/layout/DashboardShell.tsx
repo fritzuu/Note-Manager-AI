@@ -49,8 +49,19 @@ export function DashboardShell({ children, fullWidth = false }: DashboardShellPr
     { name: "Settings", href: "/settings", icon: Settings },
   ];
 
-  const firstName =
-    userDoc?.name?.split(" ")[0] || user?.displayName?.split(" ")[0] || "Student";
+  const [mounted, setMounted] = useState(false);
+
+  React.useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  const firstName = mounted
+    ? userDoc?.name?.split(" ")[0] || user?.displayName?.split(" ")[0] || "Student"
+    : "Student";
+  const displayName = mounted
+    ? userDoc?.name || user?.displayName || "Student"
+    : "Student";
+  const email = mounted ? user?.email || "" : "";
 
   const sidebarContent = (
     <div className="flex flex-col h-full bg-white border-r border-border">
@@ -86,18 +97,18 @@ export function DashboardShell({ children, fullWidth = false }: DashboardShellPr
       </nav>
 
       {/* User Info & Logout */}
-      <div className="p-4 border-t border-border bg-gray-50/50">
-        <div className="flex items-center justify-between gap-3 p-2 bg-white rounded-2xl border border-border shadow-sm">
-          <div className="flex items-center gap-2.5 min-w-0">
-            <div className="w-9 h-9 rounded-full bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center text-primary font-bold text-sm shrink-0 ring-2 ring-primary/10">
+      <div className="p-4 border-t border-border bg-gray-50/50" suppressHydrationWarning>
+        <div className="flex items-center justify-between gap-3 p-2 bg-white rounded-2xl border border-border shadow-sm" suppressHydrationWarning>
+          <div className="flex items-center gap-2.5 min-w-0" suppressHydrationWarning>
+            <div className="w-9 h-9 rounded-full bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center text-primary font-bold text-sm shrink-0 ring-2 ring-primary/10" suppressHydrationWarning>
               {firstName[0]}
             </div>
-            <div className="min-w-0">
-              <p className="text-xs font-semibold text-gray-800 truncate">
-                {userDoc?.name || user?.displayName || "Student"}
+            <div className="min-w-0" suppressHydrationWarning>
+              <p className="text-xs font-semibold text-gray-800 truncate" suppressHydrationWarning>
+                {displayName}
               </p>
-              <p className="text-[10px] text-gray-400 truncate">
-                {user?.email}
+              <p className="text-[10px] text-gray-400 truncate" suppressHydrationWarning>
+                {email}
               </p>
             </div>
           </div>
@@ -114,9 +125,9 @@ export function DashboardShell({ children, fullWidth = false }: DashboardShellPr
   );
 
   return (
-    <div className="min-h-screen flex bg-background">
+    <div className="min-h-screen flex bg-background" suppressHydrationWarning>
       {/* Desktop Sidebar (hidden on mobile) */}
-      <aside className="hidden md:block w-64 shrink-0 h-screen sticky top-0">
+      <aside className="hidden md:block w-64 shrink-0 h-screen sticky top-0" suppressHydrationWarning>
         {sidebarContent}
       </aside>
 
@@ -144,9 +155,9 @@ export function DashboardShell({ children, fullWidth = false }: DashboardShellPr
       )}
 
       {/* Main Content Area */}
-      <div className="flex-1 flex flex-col min-w-0 min-h-screen">
+      <div className="flex-1 flex flex-col min-w-0 min-h-screen" suppressHydrationWarning>
         {/* Mobile Sticky Navbar */}
-        <header className="md:hidden bg-white/80 backdrop-blur-md border-b border-border sticky top-0 z-30 px-6 py-4 flex items-center justify-between">
+        <header className="md:hidden bg-white/80 backdrop-blur-md border-b border-border sticky top-0 z-30 px-6 py-4 flex items-center justify-between" suppressHydrationWarning>
           <div className="flex items-center gap-2.5">
             <button
               onClick={() => setMobileMenuOpen(true)}
@@ -156,7 +167,7 @@ export function DashboardShell({ children, fullWidth = false }: DashboardShellPr
             </button>
             <span className="font-bold text-primary tracking-tight">MindFlow AI</span>
           </div>
-          <div className="w-8 h-8 rounded-full bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center text-primary font-semibold text-sm">
+          <div className="w-8 h-8 rounded-full bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center text-primary font-semibold text-sm" suppressHydrationWarning>
             {firstName[0]}
           </div>
         </header>

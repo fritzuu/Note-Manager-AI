@@ -41,10 +41,13 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
-# Python
+# python
 __pycache__/
 *.py[cod]
-*$py.class
-.venv/
-venv/
-ENV/
+
+# local tools / tests
+.vscode/
+test-*.mjs
+check-rules.mjs
+validate_*.mjs
+

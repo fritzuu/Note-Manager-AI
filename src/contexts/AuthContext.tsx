@@ -45,6 +45,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setUser(firebaseUser);
       if (firebaseUser) {
         try {
+          const token = await firebaseUser.getIdToken();
+          document.cookie = `auth-token=${token}; path=/; max-age=${60 * 60 * 24 * 7}; SameSite=Lax`;
+          document.cookie = `__session=${token}; path=/; max-age=${60 * 60 * 24 * 7}; SameSite=Lax`;
+
           let doc = await getUserDocument(firebaseUser.uid);
           if (!doc) {
             // Auto-create the user profile in Firestore if it's missing (e.g. from failed earlier registrations)
@@ -62,6 +66,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           setUserDoc(null);
         }
       } else {
+        document.cookie = "auth-token=; path=/; max-age=0";
+        document.cookie = "__session=; path=/; max-age=0";
         setUserDoc(null);
       }
       setLoading(false);

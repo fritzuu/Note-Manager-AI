@@ -1,6 +1,7 @@
 "use client";
 
-import React, { useEffect, useState, useRef, useCallback, Suspense } from "react";
+import React, { useEffect, Suspense } from "react";
+import dynamic from "next/dynamic";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   Timer,
@@ -14,22 +15,13 @@ import {
   BarChart2,
   TrendingUp,
   Loader2,
+  X,
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
-import {
-  getUserTasks,
-  createPomodoroSession,
-  completePomodoroSession,
-  getUserPomodoroSessions,
-  updateTask,
-  type TaskDocument,
-  type PomodoroSession,
-} from "@/lib/firestore";
-import { computePomodoroFocus } from "@/lib/pomodoroFuzzy";
+import { usePomodoro } from "@/contexts/PomodoroContext";
 import { DashboardShell } from "@/components/layout/DashboardShell";
 import { Button } from "@/components/ui/Button";
 import { cn } from "@/lib/utils";
-import { Sliders, X } from "lucide-react";
 
 const PRIORITY_BADGE: Record<string, string> = {
   Critical: "bg-red-100 text-red-700",
@@ -44,253 +36,93 @@ function formatTime(seconds: number): string {
   return `${m}:${s}`;
 }
 
-function PomodoroContent() {
+function PomodoroContentImpl() {
   const { user, loading: authLoading } = useAuth();
   const router = useRouter();
   const searchParams = useSearchParams();
   const initialTaskId = searchParams.get("taskId");
+  const [mounted, setMounted] = React.useState(false);
 
-  const [tasks, setTasks] = useState<TaskDocument[]>([]);
-  const [sessions, setSessions] = useState<PomodoroSession[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [selectedTaskId, setSelectedTaskId] = useState<string>("");
-  
-  // Timer state
-  const [timerSeconds, setTimerSeconds] = useState(25 * 60);
-  const [isRunning, setIsRunning] = useState(false);
-  const [phase, setPhase] = useState<"focus" | "break">("focus");
-  const [sessionId, setSessionId] = useState<string | null>(null);
-  const [sessionCompleted, setSessionCompleted] = useState(false);
-  const [breakSeconds, setBreakSeconds] = useState(5 * 60);
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
-  // Progress check-in states (Alternatif B)
-  const [showProgressPrompt, setShowProgressPrompt] = useState(false);
-  const [progressIncrement, setProgressIncrement] = useState(0);
-  const [suggestedProgress, setSuggestedProgress] = useState(0);
-  const [adjustedProgress, setAdjustedProgress] = useState(0);
-  const [isUpdatingProgress, setIsUpdatingProgress] = useState(false);
+  const {
+    tasks,
+    sessions,
+    loading: pomodoroLoading,
+    selectedTaskId,
+    selectedTask,
+    timerSeconds,
+    isRunning,
+    phase,
+    sessionCompleted,
+    fuzzyResult,
+    todaySessions,
+    streakDays,
+    totalFocusToday,
+    totalSessions,
+    showProgressPrompt,
+    setShowProgressPrompt,
+    progressIncrement,
+    suggestedProgress,
+    adjustedProgress,
+    setAdjustedProgress,
+    isUpdatingProgress,
+    saveTaskProgress,
+    startTimer,
+    pauseTimer,
+    resetTimer,
+    setSelectedTaskId,
+  } = usePomodoro();
 
-  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const sessionIdRef = useRef<string | null>(null);
+  // Handle URL param taskId if present
+  useEffect(() => {
+    if (initialTaskId && initialTaskId !== selectedTaskId && !isRunning) {
+      if (tasks.some((t) => t.id === initialTaskId)) {
+        setSelectedTaskId(initialTaskId);
+      }
+    }
+  }, [initialTaskId, selectedTaskId, tasks, isRunning, setSelectedTaskId]);
 
-  const selectedTask = tasks.find((t) => t.id === selectedTaskId) || null;
-  const fuzzyResult = selectedTask
-    ? computePomodoroFocus(selectedTask.priorityScore, selectedTask.difficulty / 10, selectedTask.estimatedTotalMinutes)
-    : computePomodoroFocus(30, 5);
-
-  const completedTaskSessions = sessions.filter(s => s.taskId === selectedTaskId && s.completed).length;
-  const estimatedTotalSessions = selectedTask && fuzzyResult.recommendedMinutes > 0
-    ? Math.round(selectedTask.estimatedTotalMinutes / fuzzyResult.recommendedMinutes)
-    : 0;
-  const targetSessions = selectedTask && selectedTask.estimatedTotalMinutes > 0 
-    ? Math.max(1, estimatedTotalSessions) 
-    : 0;
-
-  // Load data
   useEffect(() => {
     if (authLoading) return;
-    if (!user) { router.replace("/login"); return; }
-    const load = async () => {
-      try {
-        const [userTasks, userSessions] = await Promise.all([
-          getUserTasks(user.uid),
-          getUserPomodoroSessions(user.uid),
-        ]);
-        const activeTasks = userTasks.filter((t) => t.status !== "done");
-        setTasks(activeTasks);
-        setSessions(userSessions);
-        if (initialTaskId && activeTasks.some((t) => t.id === initialTaskId)) {
-          setSelectedTaskId(initialTaskId);
-        } else if (activeTasks.length > 0) {
-          setSelectedTaskId(activeTasks[0].id);
-        }
-      } catch (e) {
-        console.error(e);
-      } finally {
-        setLoading(false);
-      }
-    };
-    load();
-  }, [user, authLoading, router, initialTaskId]);
-
-  // Update timer when task changes and not running
-  useEffect(() => {
-    if (!isRunning && !sessionCompleted && phase === "focus") {
-      const timerVal = fuzzyResult.recommendedMinutes * 60;
-      const breakVal = fuzzyResult.breakMinutes * 60;
-      const t = setTimeout(() => {
-        setTimerSeconds(timerVal);
-        setBreakSeconds(breakVal);
-      }, 0);
-      return () => clearTimeout(t);
+    if (!user) {
+      router.replace("/login");
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedTaskId, fuzzyResult.recommendedMinutes, fuzzyResult.breakMinutes]);
+  }, [user, authLoading, router]);
 
-  const handleComplete = useCallback(async () => {
-    if (sessionIdRef.current && user) {
-      try {
-        await completePomodoroSession(sessionIdRef.current);
-        const updated = await getUserPomodoroSessions(user.uid);
-        setSessions(updated);
-
-        // Alternatif B: Calculate progress increment
-        if (selectedTask) {
-          const currentProgress = selectedTask.progress;
-          if (currentProgress < 100) {
-            const remaining = selectedTask.estimatedTotalMinutes;
-            const factor = (100 - currentProgress) / 100;
-            const baseTotalTime = factor > 0 ? remaining / factor : remaining;
-            
-            const focusMinutes = fuzzyResult.recommendedMinutes;
-            if (baseTotalTime > 0) {
-              const increment = Math.round((focusMinutes / baseTotalTime) * 100);
-              const nextProgress = Math.min(100, currentProgress + increment);
-              setProgressIncrement(increment);
-              setSuggestedProgress(nextProgress);
-              setAdjustedProgress(nextProgress);
-              setShowProgressPrompt(true);
-            }
-          }
-        }
-      } catch (e) {
-        console.error(e);
-      }
-    }
-    setSessionCompleted(true);
-    setIsRunning(false);
-  }, [user, selectedTask, fuzzyResult.recommendedMinutes]);
-
-  // Timer tick
-  useEffect(() => {
-    if (isRunning) {
-      intervalRef.current = setInterval(() => {
-        setTimerSeconds((prev) => {
-          if (prev <= 1) {
-            // Timer finished
-            clearInterval(intervalRef.current!);
-            if (phase === "focus") {
-              handleComplete();
-              // Switch to break
-              setTimeout(() => {
-                setPhase("break");
-                setTimerSeconds(breakSeconds);
-                setIsRunning(false);
-              }, 500);
-            } else {
-              setPhase("focus");
-              setIsRunning(false);
-              setTimerSeconds(fuzzyResult.recommendedMinutes * 60);
-            }
-            return 0;
-          }
-          return prev - 1;
-        });
-      }, 1000);
-    } else {
-      if (intervalRef.current) clearInterval(intervalRef.current);
-    }
-    return () => {
-      if (intervalRef.current) clearInterval(intervalRef.current);
-    };
-  }, [isRunning, phase, breakSeconds, fuzzyResult.recommendedMinutes, handleComplete]);
-
-  const handleStart = async () => {
-    if (!selectedTask || !user) return;
-    if (!sessionId) {
-      try {
-        const sId = await createPomodoroSession(
-          user.uid,
-          selectedTask.id,
-          selectedTask.title,
-          fuzzyResult.recommendedMinutes
-        );
-        setSessionId(sId);
-        sessionIdRef.current = sId;
-      } catch (e) {
-        console.error(e);
-      }
-    }
-    setIsRunning(true);
-    setSessionCompleted(false);
-  };
-
-  const handlePause = () => setIsRunning(false);
-
-  const handleReset = () => {
-    setIsRunning(false);
-    setPhase("focus");
-    setTimerSeconds(fuzzyResult.recommendedMinutes * 60);
-    setSessionId(null);
-    sessionIdRef.current = null;
-    setSessionCompleted(false);
-  };
-
-  const handleSaveProgress = async () => {
-    if (!selectedTask) return;
-    setIsUpdatingProgress(true);
-    try {
-      await updateTask(selectedTask.id, { progress: adjustedProgress });
-      // Refresh tasks list so state updates
-      if (user) {
-        const userTasks = await getUserTasks(user.uid);
-        const activeTasks = userTasks.filter((t) => t.status !== "done");
-        setTasks(activeTasks);
-      }
-      setShowProgressPrompt(false);
-    } catch (e) {
-      console.error("Failed to update task progress:", e);
-    } finally {
-      setIsUpdatingProgress(false);
-    }
-  };
-
-  // Analytics
-  const todaySessions = sessions.filter((s) => {
-    const d = s.startedAt?.toDate ? s.startedAt.toDate() : null;
-    if (!d) return false;
-    const today = new Date();
-    return d.toDateString() === today.toDateString();
-  });
-  const totalFocusToday = todaySessions.filter((s) => s.completed).reduce((acc, s) => acc + s.duration, 0);
-  const totalSessions = sessions.filter((s) => s.completed).length;
-
-  // Streak (consecutive days with at least 1 session)
-  const streakDays = (() => {
-    let streak = 0;
-    const now = new Date();
-    for (let i = 0; i < 30; i++) {
-      const d = new Date(now);
-      d.setDate(d.getDate() - i);
-      const dayStr = d.toDateString();
-      const hasSession = sessions.some((s) => {
-        const sd = s.startedAt?.toDate ? s.startedAt.toDate() : null;
-        return sd && sd.toDateString() === dayStr && s.completed;
-      });
-      if (hasSession) streak++;
-      else if (i > 0) break;
-    }
-    return streak;
-  })();
-
-  // Progress circle
-  const totalSecs = phase === "focus" ? fuzzyResult.recommendedMinutes * 60 : fuzzyResult.breakMinutes * 60;
-  const progress = timerSeconds / totalSecs;
-  const circumference = 2 * Math.PI * 120;
-  const dashOffset = circumference * (1 - progress);
-
-  if (authLoading || loading) {
+  if (!mounted || authLoading || pomodoroLoading) {
     return (
-      <DashboardShell>
-        <div className="flex items-center justify-center py-24">
-          <Loader2 className="w-8 h-8 animate-spin text-primary" />
-        </div>
-      </DashboardShell>
+      <div className="flex items-center justify-center py-24" suppressHydrationWarning>
+        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+      </div>
     );
   }
 
+  const completedTaskSessions = sessions.filter(
+    (s) => s.taskId === selectedTaskId && s.completed
+  ).length;
+  const estimatedTotalSessions =
+    selectedTask && fuzzyResult.recommendedMinutes > 0
+      ? Math.round(selectedTask.estimatedTotalMinutes / fuzzyResult.recommendedMinutes)
+      : 0;
+  const targetSessions =
+    selectedTask && selectedTask.estimatedTotalMinutes > 0
+      ? Math.max(1, estimatedTotalSessions)
+      : 0;
+
+  // Progress circle
+  const totalSecs =
+    phase === "focus"
+      ? fuzzyResult.recommendedMinutes * 60
+      : fuzzyResult.breakMinutes * 60;
+  const progress = totalSecs > 0 ? timerSeconds / totalSecs : 0;
+  const circumference = 2 * Math.PI * 120;
+  const dashOffset = circumference * (1 - progress);
+
   return (
-    <DashboardShell>
+    <div className="space-y-8 animate-fade-in" suppressHydrationWarning>
       {/* Header */}
       <div className="animate-slide-up">
         <h1 className="text-2xl font-bold text-[#1F2937] tracking-tight flex items-center gap-2">
@@ -305,7 +137,6 @@ function PomodoroContent() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 animate-scale-in">
         {/* Main Timer Panel */}
         <div className="lg:col-span-2 space-y-6">
-
           {/* Task Selector */}
           <div className="bg-white rounded-2xl border border-border shadow-card p-5 space-y-3">
             <label className="text-sm font-semibold text-gray-700">
@@ -314,12 +145,14 @@ function PomodoroContent() {
             {tasks.length === 0 ? (
               <p className="text-sm text-amber-600 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3">
                 No active tasks found.{" "}
-                <a href="/tasks/create" className="font-bold underline">Create one →</a>
+                <a href="/tasks/create" className="font-bold underline">
+                  Create one →
+                </a>
               </p>
             ) : (
               <select
                 value={selectedTaskId}
-                onChange={(e) => { setSelectedTaskId(e.target.value); handleReset(); }}
+                onChange={(e) => setSelectedTaskId(e.target.value)}
                 disabled={isRunning}
                 className="w-full h-11 px-4 rounded-xl border border-border bg-white text-sm text-[#1F2937] focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary disabled:opacity-60"
               >
@@ -335,17 +168,26 @@ function PomodoroContent() {
             {selectedTask && (
               <div className="space-y-3 pt-1">
                 <div className="flex items-center gap-3 flex-wrap">
-                  <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${PRIORITY_BADGE[selectedTask.priorityLevel]}`}>
+                  <span
+                    className={`text-xs font-bold px-2.5 py-1 rounded-full ${
+                      PRIORITY_BADGE[selectedTask.priorityLevel] || "bg-gray-100 text-gray-700"
+                    }`}
+                  >
                     {selectedTask.priorityLevel}
                   </span>
                   <span className="text-xs text-gray-500">
-                    Priority Score: <span className="font-bold text-primary">{selectedTask.priorityScore}</span>
+                    Priority Score:{" "}
+                    <span className="font-bold text-primary">
+                      {selectedTask.priorityScore}
+                    </span>
                   </span>
                   <span className="text-xs text-gray-500">
-                    Difficulty: <span className="font-bold">{selectedTask.difficulty}/10</span>
+                    Difficulty:{" "}
+                    <span className="font-bold">{selectedTask.difficulty}/10</span>
                   </span>
                   <span className="text-xs text-gray-500">
-                    Progress: <span className="font-bold">{selectedTask.progress}%</span>
+                    Progress:{" "}
+                    <span className="font-bold">{selectedTask.progress}%</span>
                   </span>
                 </div>
 
@@ -355,7 +197,9 @@ function PomodoroContent() {
                       🍅 Target Sessions:
                     </span>
                     <div className="flex gap-1">
-                      {Array.from({ length: Math.max(targetSessions, completedTaskSessions) }).map((_, i) => (
+                      {Array.from({
+                        length: Math.max(targetSessions, completedTaskSessions),
+                      }).map((_, i) => (
                         <div
                           key={i}
                           className={cn(
@@ -363,8 +207,8 @@ function PomodoroContent() {
                             i < completedTaskSessions
                               ? "bg-primary shadow-sm scale-110"
                               : i < targetSessions
-                                ? "bg-gray-200 border border-gray-300"
-                                : "bg-orange-200 border border-orange-300"
+                              ? "bg-gray-200 border border-gray-300"
+                              : "bg-orange-200 border border-orange-300"
                           )}
                           title={
                             i < completedTaskSessions
@@ -384,44 +228,81 @@ function PomodoroContent() {
           </div>
 
           {/* Fuzzy Recommendation */}
-          <div className="bg-gradient-to-r from-primary/5 to-primary/10 rounded-2xl border border-primary/20 p-5">
+          <div className="bg-gradient-to-r from-primary/5 to-primary/10 rounded-2xl border border-primary/20 p-5" suppressHydrationWarning>
             <div className="flex items-center gap-2 mb-3">
               <Zap className="w-5 h-5 text-primary" />
-              <span className="text-sm font-bold text-primary">Fuzzy Recommendation</span>
+              <span className="text-sm font-bold text-primary">
+                Fuzzy Recommendation
+              </span>
             </div>
-            <div className="grid grid-cols-3 gap-4">
-              <div className="text-center">
-                <p className="text-2xl font-extrabold text-[#1F2937]">{fuzzyResult.recommendedMinutes}m</p>
-                <p className="text-[10px] text-gray-500 font-medium mt-0.5">Focus Duration</p>
+            <div className="grid grid-cols-3 gap-4" suppressHydrationWarning>
+              <div className="text-center" suppressHydrationWarning>
+                <p className="text-2xl font-extrabold text-[#1F2937]" suppressHydrationWarning>
+                  {fuzzyResult.recommendedMinutes}m
+                </p>
+                <p className="text-[10px] text-gray-500 font-medium mt-0.5">
+                  Focus Duration
+                </p>
               </div>
-              <div className="text-center">
-                <p className="text-2xl font-extrabold text-[#1F2937]">{fuzzyResult.breakMinutes}m</p>
-                <p className="text-[10px] text-gray-500 font-medium mt-0.5">Break Duration</p>
+              <div className="text-center" suppressHydrationWarning>
+                <p className="text-2xl font-extrabold text-[#1F2937]" suppressHydrationWarning>
+                  {fuzzyResult.breakMinutes}m
+                </p>
+                <p className="text-[10px] text-gray-500 font-medium mt-0.5">
+                  Break Duration
+                </p>
               </div>
-              <div className="text-center">
-                <p className={`text-xl font-extrabold ${fuzzyResult.label === "Long" ? "text-red-600" : fuzzyResult.label === "Medium" ? "text-amber-600" : "text-emerald-600"}`}>
+              <div className="text-center" suppressHydrationWarning>
+                <p
+                  className={`text-xl font-extrabold ${
+                    fuzzyResult.label === "Long"
+                      ? "text-red-600"
+                      : fuzzyResult.label === "Medium"
+                      ? "text-amber-600"
+                      : "text-emerald-600"
+                  }`}
+                  suppressHydrationWarning
+                >
                   {fuzzyResult.label}
                 </p>
-                <p className="text-[10px] text-gray-500 font-medium mt-0.5">Intensity</p>
+                <p className="text-[10px] text-gray-500 font-medium mt-0.5">
+                  Intensity
+                </p>
               </div>
             </div>
           </div>
 
           {/* Timer Circle */}
-          <div className="bg-white rounded-2xl border border-border shadow-card p-8 flex flex-col items-center gap-6">
+          <div className="bg-white rounded-2xl border border-border shadow-card p-8 flex flex-col items-center gap-6" suppressHydrationWarning>
             {/* Phase Badge */}
-            <div className={`flex items-center gap-2 px-4 py-1.5 rounded-full text-sm font-bold ${
-              phase === "focus" ? "bg-primary text-white" : "bg-blue-100 text-blue-700"
-            }`}>
-              {phase === "focus" ? <Flame className="w-4 h-4" /> : <Coffee className="w-4 h-4" />}
+            <div
+              className={`flex items-center gap-2 px-4 py-1.5 rounded-full text-sm font-bold ${
+                phase === "focus"
+                  ? "bg-primary text-white"
+                  : "bg-blue-100 text-blue-700"
+              }`}
+              suppressHydrationWarning
+            >
+              {phase === "focus" ? (
+                <Flame className="w-4 h-4" />
+              ) : (
+                <Coffee className="w-4 h-4" />
+              )}
               {phase === "focus" ? "Focus Session" : "Break Time"}
             </div>
 
             {/* SVG Circle Timer */}
-            <div className="relative">
-              <svg width="280" height="280" viewBox="0 0 280 280">
+            <div className="relative" suppressHydrationWarning>
+              <svg width="280" height="280" viewBox="0 0 280 280" suppressHydrationWarning>
                 {/* Background circle */}
-                <circle cx="140" cy="140" r="120" fill="none" stroke="#e5e7eb" strokeWidth="12" />
+                <circle
+                  cx="140"
+                  cy="140"
+                  r="120"
+                  fill="none"
+                  stroke="#e5e7eb"
+                  strokeWidth="12"
+                />
                 {/* Progress circle */}
                 <circle
                   cx="140"
@@ -435,12 +316,30 @@ function PomodoroContent() {
                   strokeDashoffset={dashOffset}
                   transform="rotate(-90 140 140)"
                   style={{ transition: "stroke-dashoffset 1s linear" }}
+                  suppressHydrationWarning
                 />
                 {/* Time text */}
-                <text x="140" y="130" textAnchor="middle" className="font-mono" fontSize="48" fontWeight="900" fill="#1F2937">
+                <text
+                  x="140"
+                  y="130"
+                  textAnchor="middle"
+                  className="font-mono"
+                  fontSize="48"
+                  fontWeight="900"
+                  fill="#1F2937"
+                  suppressHydrationWarning
+                >
                   {formatTime(timerSeconds)}
                 </text>
-                <text x="140" y="165" textAnchor="middle" fontSize="13" fill="#9ca3af" fontWeight="600">
+                <text
+                  x="140"
+                  y="165"
+                  textAnchor="middle"
+                  fontSize="13"
+                  fill="#9ca3af"
+                  fontWeight="600"
+                  suppressHydrationWarning
+                >
                   {phase === "focus" ? "minutes to focus" : "break remaining"}
                 </text>
               </svg>
@@ -456,19 +355,29 @@ function PomodoroContent() {
 
             {/* Controls */}
             <div className="flex items-center gap-4">
-              <Button variant="outline" size="md" onClick={handleReset} icon={<RotateCcw className="w-4 h-4" />}>
+              <Button
+                variant="outline"
+                size="md"
+                onClick={resetTimer}
+                icon={<RotateCcw className="w-4 h-4" />}
+              >
                 Reset
               </Button>
               {isRunning ? (
-                <Button variant="primary" size="lg" onClick={handlePause} icon={<Pause className="w-5 h-5" />} className="px-8">
+                <Button
+                  variant="primary"
+                  size="lg"
+                  onClick={pauseTimer}
+                  icon={<Pause className="w-5 h-5" />}
+                  className="px-8"
+                >
                   Pause
                 </Button>
               ) : (
                 <Button
                   variant="primary"
                   size="lg"
-                  onClick={handleStart}
-                  disabled={!selectedTask}
+                  onClick={startTimer}
                   icon={<Play className="w-5 h-5" />}
                   className="px-8"
                 >
@@ -489,12 +398,20 @@ function PomodoroContent() {
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div className="bg-primary-50 rounded-xl p-3 text-center">
-                <p className="text-2xl font-extrabold text-primary">{totalFocusToday}</p>
-                <p className="text-[10px] text-gray-500 font-medium">minutes today</p>
+                <p className="text-2xl font-extrabold text-primary">
+                  {totalFocusToday}
+                </p>
+                <p className="text-[10px] text-gray-500 font-medium">
+                  minutes today
+                </p>
               </div>
               <div className="bg-amber-50 rounded-xl p-3 text-center">
-                <p className="text-2xl font-extrabold text-amber-600">{todaySessions.length}</p>
-                <p className="text-[10px] text-gray-500 font-medium">sessions today</p>
+                <p className="text-2xl font-extrabold text-amber-600">
+                  {todaySessions.length}
+                </p>
+                <p className="text-[10px] text-gray-500 font-medium">
+                  sessions today
+                </p>
               </div>
             </div>
           </div>
@@ -507,19 +424,30 @@ function PomodoroContent() {
             </div>
             <div className="space-y-3">
               <div className="flex items-center justify-between">
-                <span className="text-xs text-gray-500 font-medium">Total Sessions</span>
-                <span className="text-sm font-bold text-[#1F2937]">{totalSessions}</span>
+                <span className="text-xs text-gray-500 font-medium">
+                  Total Sessions
+                </span>
+                <span className="text-sm font-bold text-[#1F2937]">
+                  {totalSessions}
+                </span>
               </div>
               <div className="flex items-center justify-between">
-                <span className="text-xs text-gray-500 font-medium">Focus Streak</span>
+                <span className="text-xs text-gray-500 font-medium">
+                  Focus Streak
+                </span>
                 <span className="text-sm font-bold text-orange-500 flex items-center gap-1">
                   <Flame className="w-4 h-4" /> {streakDays} days
                 </span>
               </div>
               <div className="flex items-center justify-between">
-                <span className="text-xs text-gray-500 font-medium">Total Focus Time</span>
+                <span className="text-xs text-gray-500 font-medium">
+                  Total Focus Time
+                </span>
                 <span className="text-sm font-bold text-[#1F2937]">
-                  {sessions.filter((s) => s.completed).reduce((acc, s) => acc + s.duration, 0)} min
+                  {sessions
+                    .filter((s) => s.completed)
+                    .reduce((acc, s) => acc + s.duration, 0)}{" "}
+                  min
                 </span>
               </div>
             </div>
@@ -532,25 +460,38 @@ function PomodoroContent() {
               Recent Sessions
             </h3>
             {sessions.filter((s) => s.completed).slice(0, 5).length === 0 ? (
-              <p className="text-xs text-gray-400 text-center py-4">No completed sessions yet</p>
+              <p className="text-xs text-gray-400 text-center py-4">
+                No completed sessions yet
+              </p>
             ) : (
               <div className="space-y-2">
-                {sessions.filter((s) => s.completed).slice(0, 5).map((session) => (
-                  <div key={session.id} className="flex items-center gap-3 bg-gray-50 rounded-xl p-3">
-                    <div className="w-7 h-7 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
-                      <CheckCircle2 className="w-4 h-4 text-primary" />
+                {sessions
+                  .filter((s) => s.completed)
+                  .slice(0, 5)
+                  .map((session) => (
+                    <div
+                      key={session.id}
+                      className="flex items-center gap-3 bg-gray-50 rounded-xl p-3"
+                    >
+                      <div className="w-7 h-7 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+                        <CheckCircle2 className="w-4 h-4 text-primary" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-semibold text-gray-700 truncate">
+                          {session.taskTitle}
+                        </p>
+                        <p className="text-[10px] text-gray-400">
+                          {session.duration} min session
+                        </p>
+                      </div>
                     </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-xs font-semibold text-gray-700 truncate">{session.taskTitle}</p>
-                      <p className="text-[10px] text-gray-400">{session.duration} min session</p>
-                    </div>
-                  </div>
-                ))}
+                  ))}
               </div>
             )}
           </div>
         </div>
       </div>
+
       {/* Progress Check-in Prompt (Alternatif B) */}
       {showProgressPrompt && selectedTask && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#1F2937]/50 backdrop-blur-sm p-4">
@@ -567,29 +508,46 @@ function PomodoroContent() {
                 <Timer className="w-5 h-5 text-primary animate-pulse" />
               </div>
               <div>
-                <h3 className="font-bold text-gray-800 text-lg">Focus Session Finished! 🍅</h3>
-                <p className="text-xs text-gray-500">How much progress did you make?</p>
+                <h3 className="font-bold text-gray-800 text-lg">
+                  Focus Session Finished! 🍅
+                </h3>
+                <p className="text-xs text-gray-500">
+                  How much progress did you make?
+                </p>
               </div>
             </div>
 
             <div className="bg-gray-50 border border-border rounded-xl p-4 space-y-3">
-              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Session Summary</p>
+              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider">
+                Session Summary
+              </p>
               <div className="space-y-1">
-                <p className="text-sm font-bold text-gray-700">{selectedTask.title}</p>
+                <p className="text-sm font-bold text-gray-700">
+                  {selectedTask.title}
+                </p>
                 <p className="text-xs text-gray-500">
-                  Focused for <span className="font-semibold text-primary">{fuzzyResult.recommendedMinutes} minutes</span>
+                  Focused for{" "}
+                  <span className="font-semibold text-primary">
+                    {fuzzyResult.recommendedMinutes} minutes
+                  </span>
                 </p>
               </div>
               <div className="border-t border-border/60 pt-2 flex items-center justify-between text-xs">
                 <span className="text-gray-500">AI Estimated Progress:</span>
-                <span className="font-bold text-primary">+{progressIncrement}%</span>
+                <span className="font-bold text-primary">
+                  +{progressIncrement}%
+                </span>
               </div>
             </div>
 
             <div className="space-y-3">
               <div className="flex justify-between items-center">
-                <span className="text-sm font-semibold text-gray-700">Update Progress</span>
-                <span className="text-sm font-bold text-primary">{adjustedProgress}%</span>
+                <span className="text-sm font-semibold text-gray-700">
+                  Update Progress
+                </span>
+                <span className="text-sm font-bold text-primary">
+                  {adjustedProgress}%
+                </span>
               </div>
               <input
                 type="range"
@@ -618,7 +576,7 @@ function PomodoroContent() {
               <Button
                 variant="primary"
                 className="flex-1"
-                onClick={handleSaveProgress}
+                onClick={saveTaskProgress}
                 loading={isUpdatingProgress}
               >
                 Update Progress
@@ -627,20 +585,34 @@ function PomodoroContent() {
           </div>
         </div>
       )}
-    </DashboardShell>
+    </div>
   );
 }
 
 export default function PomodoroPage() {
+  const [mounted, setMounted] = React.useState(false);
+
+  React.useEffect(() => {
+    setMounted(true);
+  }, []);
+
   return (
-    <Suspense fallback={
-      <DashboardShell>
-        <div className="flex items-center justify-center py-24">
+    <DashboardShell>
+      {!mounted ? (
+        <div className="flex items-center justify-center py-24" suppressHydrationWarning>
           <Loader2 className="w-8 h-8 animate-spin text-primary" />
         </div>
-      </DashboardShell>
-    }>
-      <PomodoroContent />
-    </Suspense>
+      ) : (
+        <Suspense
+          fallback={
+            <div className="flex items-center justify-center py-24" suppressHydrationWarning>
+              <Loader2 className="w-8 h-8 animate-spin text-primary" />
+            </div>
+          }
+        >
+          <PomodoroContentImpl />
+        </Suspense>
+      )}
+    </DashboardShell>
   );
 }

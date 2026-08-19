@@ -1,6 +1,7 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, Suspense } from "react";
+import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
@@ -57,7 +58,7 @@ function formatDeadlineDays(task: TaskDocument): string {
   return `${days}d left`;
 }
 
-export default function DashboardPage() {
+function DashboardContentImpl() {
   const { user, userDoc, loading: authLoading } = useAuth();
   const router = useRouter();
 
@@ -108,12 +109,10 @@ export default function DashboardPage() {
 
   if (authLoading || loading) {
     return (
-      <DashboardShell>
-        <div className="flex flex-col items-center justify-center py-24 gap-4">
-          <div className="w-10 h-10 rounded-full border-4 border-primary-200 border-t-primary animate-spin" />
-          <p className="text-sm text-gray-500 font-medium">Loading Dashboard...</p>
-        </div>
-      </DashboardShell>
+      <div className="flex flex-col items-center justify-center py-24 gap-4" suppressHydrationWarning>
+        <div className="w-10 h-10 rounded-full border-4 border-primary-200 border-t-primary animate-spin" />
+        <p className="text-sm text-gray-500 font-medium">Loading Dashboard...</p>
+      </div>
     );
   }
 
@@ -160,11 +159,11 @@ export default function DashboardPage() {
   };
 
   return (
-    <DashboardShell>
+    <div className="space-y-8 animate-fade-in" suppressHydrationWarning>
       {/* Welcome Row */}
       <div className="relative z-20 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 animate-slide-up">
         <div>
-          <h1 className="text-2xl font-bold text-[#1F2937] tracking-tight">
+          <h1 className="text-2xl font-bold text-[#1F2937] tracking-tight" suppressHydrationWarning>
             Good {new Date().getHours() < 12 ? "morning" : new Date().getHours() < 18 ? "afternoon" : "evening"},{" "}
             {firstName} 👋
           </h1>
@@ -460,7 +459,7 @@ export default function DashboardPage() {
                 <Link key={note.id} href={`/notes/${note.id}`} className="block">
                   <div className="bg-white rounded-xl border border-border p-4 hover:border-primary/55 hover:shadow-sm transition-all">
                     <h3 className="font-bold text-gray-800 text-sm line-clamp-1">{note.title || "Untitled"}</h3>
-                    <p className="text-xs text-gray-400 mt-0.5 flex items-center gap-1">
+                    <p className="text-xs text-gray-400 mt-0.5 flex items-center gap-1" suppressHydrationWarning>
                       <Calendar className="w-3 h-3" />
                       {note.updatedAt
                         ? new Date((note.updatedAt as { seconds?: number }).seconds! * 1000).toLocaleDateString()
@@ -476,6 +475,36 @@ export default function DashboardPage() {
           )}
         </div>
       </div>
+    </div>
+  );
+}
+
+export default function DashboardPage() {
+  const [mounted, setMounted] = React.useState(false);
+
+  React.useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  return (
+    <DashboardShell>
+      {!mounted ? (
+        <div className="flex flex-col items-center justify-center py-24 gap-4" suppressHydrationWarning>
+          <div className="w-10 h-10 rounded-full border-4 border-primary-200 border-t-primary animate-spin" />
+          <p className="text-sm text-gray-500 font-medium">Loading Dashboard...</p>
+        </div>
+      ) : (
+        <Suspense
+          fallback={
+            <div className="flex flex-col items-center justify-center py-24 gap-4" suppressHydrationWarning>
+              <div className="w-10 h-10 rounded-full border-4 border-primary-200 border-t-primary animate-spin" />
+              <p className="text-sm text-gray-500 font-medium">Loading Dashboard...</p>
+            </div>
+          }
+        >
+          <DashboardContentImpl />
+        </Suspense>
+      )}
     </DashboardShell>
   );
 }
