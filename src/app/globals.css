@@ -29,6 +29,9 @@
   --animate-flame-glow: flameGlow 2s ease-in-out infinite alternate;
   --animate-sparkle-float: sparkleFloat 2s ease-in-out infinite;
 
+  --animate-char-reveal: charReveal 6.8s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  --animate-shimmer: shimmerSweep 7s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+
   --shadow-card: 0 1px 3px 0 rgb(0 0 0 / 0.08), 0 1px 2px -1px rgb(0 0 0 / 0.06);
   --shadow-card-hover: 0 4px 12px 0 rgb(0 0 0 / 0.1), 0 2px 6px -2px rgb(0 0 0 / 0.08);
   --shadow-float: 0 20px 60px -10px rgb(79 138 107 / 0.15);
@@ -67,6 +70,47 @@
     50% { transform: translateY(-14px) scale(1.2); opacity: 1; }
     100% { transform: translateY(-28px) scale(0.4); opacity: 0; }
   }
+  @keyframes charReveal {
+    0% {
+      opacity: 0;
+      transform: translateX(30px);
+    }
+    8% {
+      opacity: 1;
+      transform: translateX(0);
+    }
+    68% {
+      opacity: 1;
+      transform: translateX(0);
+    }
+    78% {
+      opacity: 0;
+      transform: translateX(-10px);
+    }
+    100% {
+      opacity: 0;
+      transform: translateX(-10px);
+    }
+  }
+  @keyframes shimmerSweep {
+    0% {
+      transform: translate(-70%, -70%);
+      opacity: 0;
+    }
+    15% {
+      opacity: 0.3;
+    }
+    50% {
+      opacity: 0.95;
+    }
+    85% {
+      opacity: 0.3;
+    }
+    100% {
+      transform: translate(70%, 70%);
+      opacity: 0;
+    }
+  }
 }
 
 /* Explicit SVG Living Flame Animations (Guaranteed cross-browser movement) */
@@ -104,6 +148,19 @@
   transform-box: fill-box !important;
   transform-origin: 50% 90% !important;
   animation: flameCorePulse 0.45s ease-in-out infinite alternate !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-char-reveal {
+    animation: none !important;
+    opacity: 1 !important;
+    transform: none !important;
+  }
+  .animate-shimmer {
+    animation: none !important;
+    opacity: 0.2 !important;
+    transform: none !important;
+  }
 }
 
 @layer base {
