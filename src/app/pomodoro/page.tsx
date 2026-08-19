@@ -56,6 +56,7 @@ function PomodoroContentImpl() {
     timerSeconds,
     isRunning,
     phase,
+    sessionId,
     sessionCompleted,
     fuzzyResult,
     todaySessions,
@@ -73,6 +74,7 @@ function PomodoroContentImpl() {
     startTimer,
     pauseTimer,
     resetTimer,
+    endSession,
     setSelectedTaskId,
   } = usePomodoro();
 
@@ -354,7 +356,7 @@ function PomodoroContentImpl() {
             )}
 
             {/* Controls */}
-            <div className="flex items-center gap-4">
+            <div className="flex items-center gap-3 flex-wrap justify-center">
               <Button
                 variant="outline"
                 size="md"
@@ -382,6 +384,17 @@ function PomodoroContentImpl() {
                   className="px-8"
                 >
                   {sessionCompleted ? "New Session" : "Start Focus"}
+                </Button>
+              )}
+              {(isRunning || sessionId || timerSeconds < (phase === "focus" ? fuzzyResult.recommendedMinutes * 60 : fuzzyResult.breakMinutes * 60)) && !sessionCompleted && (
+                <Button
+                  variant="outline"
+                  size="md"
+                  onClick={endSession}
+                  icon={<CheckCircle2 className="w-4 h-4 text-emerald-600" />}
+                  className="border-emerald-200 text-emerald-700 hover:bg-emerald-50 hover:border-emerald-300"
+                >
+                  End Session
                 </Button>
               )}
             </div>

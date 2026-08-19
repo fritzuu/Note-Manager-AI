@@ -52,6 +52,7 @@ interface PomodoroContextValue {
   startTimer: () => Promise<void>;
   pauseTimer: () => void;
   resetTimer: () => Promise<void>;
+  endSession: () => Promise<void>;
   setSelectedTaskId: (id: string) => void;
   refreshData: () => Promise<void>;
 }
@@ -436,6 +437,79 @@ export function PomodoroProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  const endSession = async () => {
+    const curSessionId = sessionIdRef.current;
+    const initialSecs =
+      (typeof window !== "undefined"
+        ? parseInt(localStorage.getItem("pomodoro_initial_seconds") || "0", 10)
+        : 0) || (fuzzyResult.recommendedMinutes * 60);
+
+    const elapsedSeconds = Math.max(0, initialSecs - timerSeconds);
+    const elapsedMinutes = Math.max(1, Math.round(elapsedSeconds / 60));
+
+    if (curSessionId && user && phase === "focus") {
+      try {
+        await updatePomodoroSession(curSessionId, {
+          duration: elapsedMinutes,
+          completed: true,
+        });
+        const updated = await getUserPomodoroSessions(user.uid);
+        setSessions(updated);
+
+        // Calculate progress increment for the selected task
+        if (selectedTask) {
+          const completedCount = updated.filter(
+            (s) => s.taskId === selectedTask.id && s.completed
+          ).length;
+
+          const estimatedTotalSessions = fuzzyResult.recommendedMinutes > 0
+            ? Math.round(selectedTask.estimatedTotalMinutes / fuzzyResult.recommendedMinutes)
+            : 0;
+          const targetSessions = selectedTask.estimatedTotalMinutes > 0
+            ? Math.max(1, estimatedTotalSessions)
+            : 0;
+
+          const currentProgress = selectedTask.progress || 0;
+          if (currentProgress < 100) {
+            const remaining = selectedTask.estimatedTotalMinutes || fuzzyResult.recommendedMinutes;
+            const factor = (100 - currentProgress) / 100;
+            const baseTotalTime = factor > 0 ? remaining / factor : remaining;
+            const focusMinutes = elapsedMinutes;
+            const increment = baseTotalTime > 0
+              ? Math.max(1, Math.round((focusMinutes / baseTotalTime) * 100))
+              : 10;
+
+            const reachesTarget = targetSessions > 0 && completedCount >= targetSessions;
+            const nextProgress = reachesTarget ? 100 : Math.min(100, currentProgress + increment);
+
+            setProgressIncrement(reachesTarget ? (100 - currentProgress) : increment);
+            setSuggestedProgress(nextProgress);
+            setAdjustedProgress(nextProgress);
+            setShowProgressPrompt(true);
+          }
+        }
+      } catch (e) {
+        console.error("Failed to end Pomodoro session:", e);
+      }
+    }
+
+    setIsRunning(false);
+    targetEndTimeRef.current = null;
+    setSessionCompleted(true);
+    setPhase("focus");
+    setSessionId(null);
+    sessionIdRef.current = null;
+    setShowFloatingWidget(false);
+
+    if (typeof window !== "undefined") {
+      localStorage.setItem("pomodoro_is_running", "false");
+      localStorage.removeItem("pomodoro_target_end_time");
+      localStorage.removeItem("pomodoro_session_id");
+      localStorage.removeItem("pomodoro_initial_seconds");
+      localStorage.setItem("pomodoro_show_widget", "false");
+    }
+  };
+
   const setSelectedTaskId = (id: string) => {
     if (isRunning) return; // Prevent changing task while timer is running
     setSelectedTaskIdState(id);
@@ -530,6 +604,7 @@ export function PomodoroProvider({ children }: { children: React.ReactNode }) {
         startTimer,
         pauseTimer,
         resetTimer,
+        endSession,
         setSelectedTaskId,
         refreshData,
       }}
