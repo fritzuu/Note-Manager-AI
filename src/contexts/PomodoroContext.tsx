@@ -324,19 +324,31 @@ export function PomodoroProvider({ children }: { children: React.ReactNode }) {
 
   // Adjust default timer when selected task changes and not currently running
   useEffect(() => {
-    if (!isRunning && !sessionCompleted && phase === "focus") {
-      // Only set if not currently tracking an active paused session
-      if (!sessionId) {
-        const recSeconds = fuzzyResult.recommendedMinutes * 60;
-        setTimerSeconds(recSeconds);
-        setBreakSeconds(fuzzyResult.breakMinutes * 60);
+    if (!isRunning && !sessionId) {
+      if (phase === "focus") {
+        setTimerSeconds(fuzzyResult.recommendedMinutes * 60);
+      } else {
+        setTimerSeconds(fuzzyResult.breakMinutes * 60);
       }
+      setBreakSeconds(fuzzyResult.breakMinutes * 60);
     }
-  }, [selectedTaskId, fuzzyResult.recommendedMinutes, fuzzyResult.breakMinutes, isRunning, sessionCompleted, phase, sessionId]);
+  }, [selectedTaskId, fuzzyResult.recommendedMinutes, fuzzyResult.breakMinutes, isRunning, phase, sessionId]);
 
   const startTimer = async () => {
     if (!user) return;
     let curSessionId = sessionId;
+
+    const expectedDuration =
+      phase === "focus"
+        ? fuzzyResult.recommendedMinutes * 60
+        : fuzzyResult.breakMinutes * 60;
+
+    let currentSecs = timerSeconds;
+    // If timer reached zero or previous session was completed, restart from clean full duration
+    if (currentSecs <= 0 || sessionCompleted) {
+      currentSecs = expectedDuration;
+      setTimerSeconds(expectedDuration);
+    }
 
     if (!curSessionId && phase === "focus") {
       try {
@@ -362,10 +374,11 @@ export function PomodoroProvider({ children }: { children: React.ReactNode }) {
       }
     }
 
-    const targetEnd = Date.now() + timerSeconds * 1000;
+    const targetEnd = Date.now() + currentSecs * 1000;
     targetEndTimeRef.current = targetEnd;
     if (typeof window !== "undefined") {
       localStorage.setItem("pomodoro_target_end_time", targetEnd.toString());
+      localStorage.setItem("pomodoro_timer_seconds", currentSecs.toString());
       localStorage.setItem("pomodoro_is_running", "true");
       localStorage.setItem("pomodoro_show_widget", "true");
     }
@@ -414,10 +427,12 @@ export function PomodoroProvider({ children }: { children: React.ReactNode }) {
       }
     }
 
+    const defaultSeconds = fuzzyResult.recommendedMinutes * 60;
     setIsRunning(false);
     targetEndTimeRef.current = null;
     setPhase("focus");
-    setTimerSeconds(fuzzyResult.recommendedMinutes * 60);
+    setTimerSeconds(defaultSeconds);
+    setBreakSeconds(fuzzyResult.breakMinutes * 60);
     setSessionId(null);
     sessionIdRef.current = null;
     setSessionCompleted(false);
@@ -430,10 +445,7 @@ export function PomodoroProvider({ children }: { children: React.ReactNode }) {
       localStorage.setItem("pomodoro_is_running", "false");
       localStorage.setItem("pomodoro_phase", "focus");
       localStorage.setItem("pomodoro_show_widget", "false");
-      localStorage.setItem(
-        "pomodoro_timer_seconds",
-        (fuzzyResult.recommendedMinutes * 60).toString()
-      );
+      localStorage.setItem("pomodoro_timer_seconds", defaultSeconds.toString());
     }
   };
 
@@ -493,16 +505,21 @@ export function PomodoroProvider({ children }: { children: React.ReactNode }) {
       }
     }
 
+    const resetSecs = fuzzyResult.recommendedMinutes * 60;
     setIsRunning(false);
     targetEndTimeRef.current = null;
     setSessionCompleted(true);
     setPhase("focus");
+    setTimerSeconds(resetSecs);
+    setBreakSeconds(fuzzyResult.breakMinutes * 60);
     setSessionId(null);
     sessionIdRef.current = null;
     setShowFloatingWidget(false);
 
     if (typeof window !== "undefined") {
       localStorage.setItem("pomodoro_is_running", "false");
+      localStorage.setItem("pomodoro_phase", "focus");
+      localStorage.setItem("pomodoro_timer_seconds", resetSecs.toString());
       localStorage.removeItem("pomodoro_target_end_time");
       localStorage.removeItem("pomodoro_session_id");
       localStorage.removeItem("pomodoro_initial_seconds");
@@ -518,8 +535,24 @@ export function PomodoroProvider({ children }: { children: React.ReactNode }) {
     setSessionCompleted(false);
     setPhase("focus");
 
+    const newTask = tasks.find((t) => t.id === id) || null;
+    const newFuzzy = newTask
+      ? computePomodoroFocus(
+          newTask.priorityScore,
+          newTask.difficulty / 10,
+          newTask.estimatedTotalMinutes
+        )
+      : computePomodoroFocus(30, 5);
+
+    const newSecs = newFuzzy.recommendedMinutes * 60;
+    setTimerSeconds(newSecs);
+    setBreakSeconds(newFuzzy.breakMinutes * 60);
+
     if (typeof window !== "undefined") {
       localStorage.setItem("pomodoro_selected_task_id", id);
+      localStorage.setItem("pomodoro_timer_seconds", newSecs.toString());
+      localStorage.setItem("pomodoro_phase", "focus");
+      localStorage.setItem("pomodoro_is_running", "false");
       localStorage.removeItem("pomodoro_session_id");
       localStorage.removeItem("pomodoro_target_end_time");
       localStorage.removeItem("pomodoro_initial_seconds");
