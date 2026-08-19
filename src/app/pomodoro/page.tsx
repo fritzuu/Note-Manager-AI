@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, Suspense } from "react";
+import dynamic from "next/dynamic";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   Timer,
@@ -35,7 +36,7 @@ function formatTime(seconds: number): string {
   return `${m}:${s}`;
 }
 
-function PomodoroContent() {
+function PomodoroContentImpl() {
   const { user, loading: authLoading } = useAuth();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -590,12 +591,23 @@ function PomodoroContent() {
   );
 }
 
+const PomodoroContent = dynamic(() => Promise.resolve(PomodoroContentImpl), {
+  ssr: false,
+  loading: () => (
+    <DashboardShell>
+      <div className="flex items-center justify-center py-24" suppressHydrationWarning>
+        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+      </div>
+    </DashboardShell>
+  ),
+});
+
 export default function PomodoroPage() {
   return (
     <Suspense
       fallback={
         <DashboardShell>
-          <div className="flex items-center justify-center py-24">
+          <div className="flex items-center justify-center py-24" suppressHydrationWarning>
             <Loader2 className="w-8 h-8 animate-spin text-primary" />
           </div>
         </DashboardShell>

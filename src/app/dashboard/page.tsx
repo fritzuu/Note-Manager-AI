@@ -1,6 +1,7 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, Suspense } from "react";
+import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
@@ -57,7 +58,7 @@ function formatDeadlineDays(task: TaskDocument): string {
   return `${days}d left`;
 }
 
-export default function DashboardPage() {
+function DashboardContentImpl() {
   const { user, userDoc, loading: authLoading } = useAuth();
   const router = useRouter();
 
@@ -477,5 +478,34 @@ export default function DashboardPage() {
         </div>
       </div>
     </DashboardShell>
+  );
+}
+
+const DashboardContent = dynamic(() => Promise.resolve(DashboardContentImpl), {
+  ssr: false,
+  loading: () => (
+    <DashboardShell>
+      <div className="flex flex-col items-center justify-center py-24 gap-4" suppressHydrationWarning>
+        <div className="w-10 h-10 rounded-full border-4 border-primary-200 border-t-primary animate-spin" />
+        <p className="text-sm text-gray-500 font-medium">Loading Dashboard...</p>
+      </div>
+    </DashboardShell>
+  ),
+});
+
+export default function DashboardPage() {
+  return (
+    <Suspense
+      fallback={
+        <DashboardShell>
+          <div className="flex flex-col items-center justify-center py-24 gap-4" suppressHydrationWarning>
+            <div className="w-10 h-10 rounded-full border-4 border-primary-200 border-t-primary animate-spin" />
+            <p className="text-sm text-gray-500 font-medium">Loading Dashboard...</p>
+          </div>
+        </DashboardShell>
+      }
+    >
+      <DashboardContent />
+    </Suspense>
   );
 }
