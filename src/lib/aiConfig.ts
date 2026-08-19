@@ -36,31 +36,34 @@ export function removeCustomApiKey(): void {
   }
 }
 
-export async function testGeminiApiKey(apiKey: string): Promise<{ success: boolean; message: string }> {
+export async function testGeminiApiKey(apiKey: string): Promise<{ success: boolean; message: string; latencyMs?: number }> {
   if (!apiKey.trim()) {
     return { success: false, message: "Please enter an API key first." };
   }
 
   try {
-    const res = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey.trim()}`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: "ping" }] }],
-        }),
-      }
-    );
+    const res = await fetch("/api/ai/test-key", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ apiKey: apiKey.trim() }),
+    });
 
-    if (res.ok) {
-      return { success: true, message: "API key is valid and connected to Gemini!" };
+    const data = await res.json().catch(() => null);
+
+    if (res.ok && data?.valid) {
+      return {
+        success: true,
+        message: data.message || "API key is valid and connected to Google Gemini!",
+        latencyMs: data.latencyMs,
+      };
     }
 
-    const errorData = await res.json().catch(() => null);
-    const errMsg = errorData?.error?.message || `Error ${res.status}: Failed to authenticate key`;
-    return { success: false, message: errMsg };
+    return {
+      success: false,
+      message: data?.error || `Error ${res.status}: Failed to authenticate key`,
+      latencyMs: data?.latencyMs,
+    };
   } catch (err: any) {
-    return { success: false, message: err.message || "Network error while connecting to Gemini API" };
+    return { success: false, message: err.message || "Network error while connecting to backend" };
   }
 }
