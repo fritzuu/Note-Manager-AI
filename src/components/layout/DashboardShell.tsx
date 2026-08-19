@@ -49,8 +49,19 @@ export function DashboardShell({ children, fullWidth = false }: DashboardShellPr
     { name: "Settings", href: "/settings", icon: Settings },
   ];
 
-  const firstName =
-    userDoc?.name?.split(" ")[0] || user?.displayName?.split(" ")[0] || "Student";
+  const [mounted, setMounted] = useState(false);
+
+  React.useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  const firstName = mounted
+    ? userDoc?.name?.split(" ")[0] || user?.displayName?.split(" ")[0] || "Student"
+    : "Student";
+  const displayName = mounted
+    ? userDoc?.name || user?.displayName || "Student"
+    : "Student";
+  const email = mounted ? user?.email || "" : "";
 
   const sidebarContent = (
     <div className="flex flex-col h-full bg-white border-r border-border">
@@ -94,10 +105,10 @@ export function DashboardShell({ children, fullWidth = false }: DashboardShellPr
             </div>
             <div className="min-w-0" suppressHydrationWarning>
               <p className="text-xs font-semibold text-gray-800 truncate" suppressHydrationWarning>
-                {userDoc?.name || user?.displayName || "Student"}
+                {displayName}
               </p>
               <p className="text-[10px] text-gray-400 truncate" suppressHydrationWarning>
-                {user?.email || ""}
+                {email}
               </p>
             </div>
           </div>
