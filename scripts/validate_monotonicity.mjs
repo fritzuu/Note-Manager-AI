@@ -11,7 +11,7 @@
  *  7. EDGE CASES — boundary conditions and extreme values
  */
 
-import { computePriority, computePriorityDetailed } from "./src/lib/fuzzyLogic.ts";
+import { computePriority, computePriorityDetailed } from "../web/src/lib/fuzzyLogic.ts";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 

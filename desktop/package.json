@@ -1,0 +1,18 @@
+{
+  "name": "mindflow-desktop",
+  "version": "0.1.0",
+  "description": "MindFlow AI Desktop Application",
+  "main": "main.js",
+  "scripts": {
+    "dev": "electron .",
+    "build": "electron-builder",
+    "pack": "electron-builder --dir"
+  },
+  "keywords": ["mindflow", "desktop", "electron", "ai-notes"],
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "electron": "^34.0.0",
+    "electron-builder": "^25.1.8"
+  }
+}

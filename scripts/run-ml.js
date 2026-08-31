@@ -23,7 +23,7 @@ const pythonCmd = getPythonCommand();
 console.log(`Using Python command: ${pythonCmd}`);
 
 // Use absolute path to the ml directory
-const appDir = path.join(__dirname, "ml");
+const appDir = path.join(__dirname, "..", "ml");
 
 console.log(`Launching FastAPI from directory: ${appDir}`);
 

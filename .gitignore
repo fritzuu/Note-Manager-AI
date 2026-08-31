@@ -45,9 +45,15 @@ next-env.d.ts
 __pycache__/
 *.py[cod]
 
-# local tools / tests
-.vscode/
-test-*.mjs
-check-rules.mjs
-validate_*.mjs
+# monorepo & desktop
+web/.next/
+web/node_modules/
+desktop/node_modules/
+desktop/dist/
+
+# graphify
+graphify-out
+graphify/cache/
+graphify/.graphify_*
+.graphify_*
 

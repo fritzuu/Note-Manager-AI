@@ -67,36 +67,45 @@ python3 ml/train.py
 
 ---
 
-### 3. Frontend & Next.js Setup
-1. Install Node.js package dependencies:
-   ```bash
-   npm install
-   ```
+### 3. Modular Monorepo Architecture
 
-2. Copy the environment variables template:
-   ```bash
-   cp .env.example .env.local
-   ```
-
-3. Open `.env.local` and populate it with your Firebase configuration credentials and your Gemini API key:
-   - Create a Firebase project at the [Firebase Console](https://console.firebase.google.com/).
-   - Obtain web app credentials from Project Settings.
-   - Obtain a Gemini API Key from [Google AI Studio](https://aistudio.google.com/).
+The repository is structured cleanly into dedicated modules:
+- **`web/`** — Next.js 16 (App Router) full-stack web application.
+- **`desktop/`** — Electron desktop application wrapper.
+- **`ml/`** — FastAPI service, dataset, EDA, and model training/inference scripts.
+- **`graphify/`** — Knowledge graph intelligence, architecture audit reports, and interactive HTML graph.
+- **`docs/`** — Comprehensive scientific reports (`LAPORAN_ILMIAH.md`, `COMPLETE_FUZZY_RULES.md`).
+- **`scripts/`** — Mathematical verification and test suites.
 
 ---
 
 ### 4. Running Locally
-Start the development server:
+
+You can launch any component directly from the root workspace:
+
 ```bash
-npm run dev
+# Run Next.js Web App (http://localhost:3000)
+npm run dev:web
+
+# Run FastAPI Machine Learning Service (http://localhost:8000)
+npm run dev:ml
+
+# Run Electron Desktop App
+npm run dev:desktop
+
+# Run Fuzzy Engine Validation Tests
+npm run validate:fuzzy
 ```
-Open [http://localhost:3000](http://localhost:3000) in your browser to view the application.
 
 ---
 
 ### 5. Production Build
 To create an optimized production build:
 ```bash
-npm run build
-npm start
+# Build Web Application
+npm run build:web
+
+# Package Desktop Application
+npm run build:desktop
 ```
+
