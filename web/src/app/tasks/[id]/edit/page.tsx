@@ -3,18 +3,23 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { useRouter, useParams } from "next/navigation";
 import { Timestamp } from "firebase/firestore";
+import Link from "next/link";
 import {
   ChevronLeft,
   AlertTriangle,
-  Zap,
   CalendarDays,
+  Sparkles,
+  Timer,
+  Zap,
   Loader2,
-  Brain,
-  Lock,
-  GitBranch,
-  Info,
+  Clock,
+  Target,
+  BarChart2,
+  BookOpen,
+  ChevronDown,
+  ChevronUp,
+  CheckCircle2,
 } from "lucide-react";
-import Link from "next/link";
 import { useAuth } from "@/contexts/AuthContext";
 import { getTask, updateTask, getAcademicInsight } from "@/lib/firestore";
 import {
@@ -22,58 +27,32 @@ import {
   deadlineToDays,
   deriveAcademicRiskFromInsight,
   type FuzzyDetailedResult,
+  type PriorityLevel,
 } from "@/lib/fuzzyLogic";
 import { DashboardShell } from "@/components/layout/DashboardShell";
 import { computePomodoroFocus } from "@/lib/pomodoroFuzzy";
 import { Button } from "@/components/ui/Button";
 import { cn } from "@/lib/utils";
 
-const PRIORITY_BG: Record<string, string> = {
-  Critical: "bg-red-50 border-red-200 text-red-700",
-  High:     "bg-orange-50 border-orange-200 text-orange-700",
-  Medium:   "bg-amber-50 border-amber-200 text-amber-700",
-  Low:      "bg-emerald-50 border-emerald-200 text-emerald-700",
+const PRIORITY_BADGE_STYLE: Record<PriorityLevel, { bg: string; text: string; border: string; label: string }> = {
+  Critical: { bg: "bg-red-500/10", text: "text-red-600 dark:text-red-400", border: "border-red-500/20", label: "Urgent Priority" },
+  High:     { bg: "bg-amber-500/10", text: "text-amber-600 dark:text-amber-400", border: "border-amber-500/20", label: "High Priority" },
+  Medium:   { bg: "bg-blue-500/10", text: "text-blue-600 dark:text-blue-400", border: "border-blue-500/20", label: "Medium Priority" },
+  Low:      { bg: "bg-emerald-500/10", text: "text-emerald-600 dark:text-emerald-400", border: "border-emerald-500/20", label: "Flexible Priority" },
 };
 
-const PRIORITY_RING: Record<string, string> = {
-  Critical: "#ef4444",
-  High:     "#f97316",
-  Medium:   "#f59e0b",
-  Low:      "#10b981",
-};
+const IMPORTANCE_PRESETS = [
+  { value: 2, label: "Low", desc: "Can be done anytime" },
+  { value: 5, label: "Normal", desc: "Standard coursework" },
+  { value: 8, label: "Important", desc: "Major assignment / Exam" },
+  { value: 10, label: "Critical", desc: "Final project / Mandatory" },
+];
 
-function riskLabel(score: number): string {
-  if (score >= 80) return "Critical";
-  if (score >= 55) return "High";
-  if (score >= 35) return "Medium";
-  return "Low";
-}
-
-function riskColor(score: number): string {
-  if (score >= 80) return "text-red-600";
-  if (score >= 55) return "text-orange-600";
-  if (score >= 35) return "text-amber-600";
-  return "text-emerald-600";
-}
-
-function riskBg(score: number): string {
-  if (score >= 80) return "bg-red-50 border-red-200";
-  if (score >= 55) return "bg-orange-50 border-orange-200";
-  if (score >= 35) return "bg-amber-50 border-amber-200";
-  return "bg-emerald-50 border-emerald-200";
-}
-
-function MembershipRow({ label, value, color }: { label: string; value: number; color: string }) {
-  return (
-    <div className="flex items-center gap-2">
-      <span className="text-[10px] font-semibold text-gray-500 w-16 shrink-0">{label}</span>
-      <div className="flex-1 h-1.5 bg-gray-100 rounded-full overflow-hidden">
-        <div className={`h-full rounded-full transition-all duration-500 ${color}`} style={{ width: `${Math.round(value * 100)}%` }} />
-      </div>
-      <span className="text-[10px] font-mono text-gray-500 w-9 text-right shrink-0">{value.toFixed(2)}</span>
-    </div>
-  );
-}
+const DIFFICULTY_PRESETS = [
+  { value: 2, label: "Easy", desc: "Quick reading / Quiz" },
+  { value: 5, label: "Medium", desc: "Standard essay / Lab" },
+  { value: 8, label: "Hard", desc: "Complex coding / Thesis" },
+];
 
 export default function EditTaskPage() {
   const { user, loading: authLoading } = useAuth();
@@ -82,8 +61,12 @@ export default function EditTaskPage() {
   const taskId = params.id as string;
 
   const [form, setForm] = useState({
-    title: "", description: "", deadline: "",
-    importance: 5, difficulty: 5, progress: 0,
+    title: "",
+    description: "",
+    deadline: "",
+    importance: 5,
+    difficulty: 5,
+    progress: 0,
     status: "todo" as "todo" | "doing" | "done",
   });
   const [academicRisk, setAcademicRisk] = useState(40);
@@ -91,6 +74,7 @@ export default function EditTaskPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const [showAdvanced, setShowAdvanced] = useState(false);
 
   useEffect(() => {
     if (authLoading || !user) return;
@@ -113,7 +97,6 @@ export default function EditTaskPage() {
           status:      task.status,
         });
 
-        // Always re-derive from latest AI insight; fall back to stored value
         if (insight) {
           setAcademicRisk(deriveAcademicRiskFromInsight(insight.academicScore, insight.prediction));
           setPrediction(insight.prediction);
@@ -151,7 +134,8 @@ export default function EditTaskPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user) return;
-    if (!form.title.trim()) { setError("Task title is required."); return; }
+    if (!form.title.trim()) { setError("Judul tugas wajib diisi."); return; }
+    if (!form.deadline)      { setError("Deadline wajib diisi."); return; }
     setSaving(true);
     setError("");
     try {
@@ -173,7 +157,7 @@ export default function EditTaskPage() {
       router.push("/tasks");
     } catch (err) {
       console.error(err);
-      setError("Failed to update task.");
+      setError("Gagal memperbarui tugas.");
     } finally {
       setSaving(false);
     }
@@ -189,237 +173,370 @@ export default function EditTaskPage() {
     );
   }
 
-  const accent = PRIORITY_RING[preview.priorityLevel] ?? "#6b7280";
-  const { memberships: m } = preview;
+  const badgeStyle = PRIORITY_BADGE_STYLE[preview.priorityLevel] || PRIORITY_BADGE_STYLE.Medium;
+  const isMicro = pomodoro.label === "Micro";
+  const totalSessions = !isMicro ? Math.max(1, Math.round(preview.estimatedTotalMinutes / pomodoro.recommendedMinutes)) : 1;
 
   return (
     <DashboardShell fullWidth>
-      <div className="max-w-7xl mx-auto px-4 md:px-8 py-6 space-y-6">
-        <div className="flex items-center gap-3 animate-slide-up">
-          <Link href="/tasks" className="p-2 rounded-xl border border-border hover:bg-primary-50 hover:border-primary/40 text-gray-400 hover:text-primary transition-all">
-            <ChevronLeft className="w-5 h-5" />
-          </Link>
-          <div>
-            <h1 className="text-2xl font-bold text-[#1F2937] tracking-tight">Edit Task</h1>
-            <p className="text-sm text-gray-500 mt-0.5">Academic Risk is AI-derived · Priority recalculates in real-time</p>
+      <div className="max-w-6xl mx-auto px-4 md:px-8 py-6 space-y-6">
+
+        {/* ── Header ── */}
+        <div className="flex items-center justify-between animate-slide-up">
+          <div className="flex items-center gap-3">
+            <Link
+              href="/tasks"
+              className="p-2 rounded-xl border border-border hover:bg-primary-50 hover:border-primary/40 text-gray-400 hover:text-primary transition-all shadow-sm"
+            >
+              <ChevronLeft className="w-5 h-5" />
+            </Link>
+            <div>
+              <h1 className="text-2xl font-bold text-gray-900 tracking-tight flex items-center gap-2">
+                Edit Tugas
+                <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/20">
+                  AI-Powered
+                </span>
+              </h1>
+              <p className="text-sm text-gray-500 mt-0.5">
+                Perbarui detail tugas dan lihat rekomendasi jadwal fokus terbaru.
+              </p>
+            </div>
           </div>
         </div>
 
-        <div className="grid grid-cols-1 xl:grid-cols-5 gap-6 animate-scale-in">
+        {/* ── Main Grid ── */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 animate-scale-in">
 
-          {/* ── LEFT: Form ── */}
-          <div className="xl:col-span-2">
-            <form onSubmit={handleSubmit} className="bg-white rounded-2xl border border-border shadow-card p-6 space-y-5 sticky top-6">
-              <div className="flex items-center gap-2 pb-1 border-b border-border">
-                <div className="w-7 h-7 rounded-lg bg-primary/10 flex items-center justify-center">
-                  <Zap className="w-3.5 h-3.5 text-primary" />
-                </div>
-                <span className="text-sm font-bold text-gray-800">Task Details</span>
-              </div>
-
+          {/* ════════════════════════════════════════════
+              LEFT PANEL: Form (7 Cols)
+          ════════════════════════════════════════════ */}
+          <div className="lg:col-span-7 space-y-5">
+            <form
+              onSubmit={handleSubmit}
+              className="bg-white rounded-2xl border border-border shadow-card p-6 space-y-6"
+            >
               {error && (
                 <div className="flex items-center gap-2.5 bg-red-50 border border-red-200 text-red-700 text-sm rounded-xl px-4 py-3">
-                  <AlertTriangle className="w-4 h-4 shrink-0" />{error}
+                  <AlertTriangle className="w-4 h-4 shrink-0" />
+                  {error}
                 </div>
               )}
 
+              {/* Status Selector */}
               <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-gray-600 uppercase tracking-wide" htmlFor="edit-title">Task Title *</label>
-                <input id="edit-title" name="title" type="text" value={form.title} onChange={handleChange}
-                  className="w-full h-11 px-4 rounded-xl border border-border bg-white text-sm text-[#1F2937] focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary" />
-              </div>
-
-              <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-gray-600 uppercase tracking-wide" htmlFor="edit-description">Description</label>
-                <textarea id="edit-description" name="description" rows={2} value={form.description} onChange={handleChange}
-                  className="w-full px-4 py-3 rounded-xl border border-border bg-white text-sm text-[#1F2937] focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary resize-none" />
-              </div>
-
-              <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-gray-600 uppercase tracking-wide flex items-center gap-1" htmlFor="edit-deadline">
-                  <CalendarDays className="w-3.5 h-3.5" /> Deadline *
+                <label className="text-xs font-semibold text-gray-700 uppercase tracking-wide">
+                  Status Pengerjaan
                 </label>
-                <input id="edit-deadline" name="deadline" type="date" value={form.deadline} onChange={handleChange}
-                  className="w-full h-11 px-4 rounded-xl border border-border bg-white text-sm text-[#1F2937] focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary" />
+                <div className="grid grid-cols-3 gap-2">
+                  {[
+                    { id: "todo", label: "To Do" },
+                    { id: "doing", label: "In Progress" },
+                    { id: "done", label: "Completed" },
+                  ].map((s) => (
+                    <button
+                      key={s.id}
+                      type="button"
+                      onClick={() => setForm((prev) => ({ ...prev, status: s.id as any }))}
+                      className={cn(
+                        "py-2.5 rounded-xl border text-xs font-bold transition-all",
+                        form.status === s.id
+                          ? "border-primary bg-primary text-white shadow-sm"
+                          : "border-border hover:bg-gray-50 text-gray-700"
+                      )}
+                    >
+                      {s.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Title */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-gray-700 uppercase tracking-wide" htmlFor="edit-title">
+                  Nama Tugas *
+                </label>
+                <input
+                  id="edit-title"
+                  name="title"
+                  type="text"
+                  value={form.title}
+                  onChange={handleChange}
+                  className="w-full h-11 px-4 rounded-xl border border-border bg-white text-sm text-gray-900 font-medium focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                />
+              </div>
+
+              {/* Description */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-gray-700 uppercase tracking-wide" htmlFor="edit-description">
+                  Catatan Tambahan
+                </label>
+                <textarea
+                  id="edit-description"
+                  name="description"
+                  rows={2}
+                  value={form.description}
+                  onChange={handleChange}
+                  className="w-full px-4 py-3 rounded-xl border border-border bg-white text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary resize-none"
+                />
+              </div>
+
+              {/* Deadline */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-gray-700 uppercase tracking-wide flex items-center gap-1.5" htmlFor="edit-deadline">
+                  <CalendarDays className="w-4 h-4 text-primary" />
+                  Deadline *
+                </label>
+                <input
+                  id="edit-deadline"
+                  name="deadline"
+                  type="date"
+                  value={form.deadline}
+                  onChange={handleChange}
+                  className="w-full h-11 px-4 rounded-xl border border-border bg-white text-sm text-gray-900 font-medium focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                />
                 {form.deadline && (
-                  <p className={cn("text-[11px] font-medium", deadlineDays < 0 ? "text-red-600" : deadlineDays < 3 ? "text-orange-600" : deadlineDays < 8 ? "text-amber-600" : "text-emerald-600")}>
-                    {deadlineDays < 0 ? `Overdue by ${Math.abs(Math.round(deadlineDays))}d` : deadlineDays < 1 ? "Due today" : `${Math.round(deadlineDays)} days remaining`}
-                  </p>
+                  <div className="flex items-center gap-1.5 pt-1">
+                    <Clock className="w-3.5 h-3.5 text-gray-400" />
+                    <span className={cn(
+                      "text-xs font-semibold",
+                      deadlineDays < 0 ? "text-red-600" : deadlineDays < 2 ? "text-red-500" : deadlineDays < 5 ? "text-amber-600" : "text-emerald-600"
+                    )}>
+                      {deadlineDays < 0 ? `Terlambat ${Math.abs(Math.round(deadlineDays))} hari` : deadlineDays < 1 ? "Jatuh tempo HARI INI!" : `Sisa waktu: ${Math.round(deadlineDays)} hari lagi`}
+                    </span>
+                  </div>
                 )}
               </div>
 
-              <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-gray-600 uppercase tracking-wide" htmlFor="edit-status">Status</label>
-                <select id="edit-status" name="status" value={form.status} onChange={handleChange}
-                  className="w-full h-11 px-4 rounded-xl border border-border bg-white text-sm text-[#1F2937] focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary">
-                  <option value="todo">To Do</option>
-                  <option value="doing">In Progress</option>
-                  <option value="done">Done</option>
-                </select>
-              </div>
-
-              {/* Importance */}
-              {[
-                { id: "importance", name: "importance", label: "Importance",        value: form.importance, min: 1,  max: 10,  step: 1, left: "1 — Low",  right: "High — 10", display: `${form.importance} / 10` },
-                { id: "difficulty", name: "difficulty", label: "Difficulty",        value: form.difficulty, min: 1,  max: 10,  step: 1, left: "1 — Easy", right: "Hard — 10", display: `${form.difficulty} / 10` },
-                { id: "progress",   name: "progress",   label: "Current Progress",  value: form.progress,   min: 0,  max: 100, step: 5, left: "0%",        right: "100%",     display: `${form.progress}%` },
-              ].map(({ id, name, label, value, min, max, step, left, right, display }) => (
-                <div key={name} className="space-y-1.5">
-                  <div className="flex items-center justify-between">
-                    <label className="text-xs font-semibold text-gray-600 uppercase tracking-wide" htmlFor={id}>{label}</label>
-                    <span className="text-xs font-bold text-primary bg-primary-50 px-2.5 py-0.5 rounded-full">{display}</span>
-                  </div>
-                  <input id={id} name={name} type="range" min={min} max={max} step={step} value={value} onChange={handleChange}
-                    className="w-full h-2 rounded-full appearance-none bg-primary-100 accent-primary cursor-pointer" />
-                  <div className="flex justify-between text-[10px] text-gray-400 font-medium">
-                    <span>{left}</span><span>{right}</span>
-                  </div>
-                </div>
-              ))}
-
-              {/* Academic Risk — read-only */}
-              <div className="space-y-1.5">
+              {/* Importance Preset Buttons */}
+              <div className="space-y-2">
                 <div className="flex items-center justify-between">
-                  <span className="text-xs font-semibold text-gray-600 uppercase tracking-wide flex items-center gap-1.5">
-                    <Lock className="w-3 h-3 text-gray-400" /> Academic Risk
-                  </span>
-                  <span className={cn("text-xs font-bold px-2 py-0.5 rounded-full border", riskBg(academicRisk), riskColor(academicRisk))}>
-                    {riskLabel(academicRisk)} · {academicRisk}
+                  <label className="text-xs font-semibold text-gray-700 uppercase tracking-wide flex items-center gap-1.5">
+                    <Target className="w-4 h-4 text-primary" />
+                    Tingkat Kepentingan
+                  </label>
+                  <span className="text-xs font-bold text-primary bg-primary/10 px-2 py-0.5 rounded-md">
+                    Skala: {form.importance} / 10
                   </span>
                 </div>
-                <div className="flex items-start gap-2.5 p-3 rounded-xl bg-gray-50 border border-border">
-                  <div className="w-6 h-6 rounded-md bg-primary/10 flex items-center justify-center shrink-0 mt-0.5">
-                    <Brain className="w-3.5 h-3.5 text-primary" />
-                  </div>
-                  <p className="text-[11px] text-gray-500 leading-relaxed">
-                    AI-derived from <strong>Random Forest</strong> prediction: <span className="font-semibold text-indigo-600">{prediction}</span>. Cannot be edited manually.
-                  </p>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                  {IMPORTANCE_PRESETS.map((p) => {
+                    const isSelected = Math.abs(form.importance - p.value) <= 1.5;
+                    return (
+                      <button
+                        key={p.label}
+                        type="button"
+                        onClick={() => setForm((prev) => ({ ...prev, importance: p.value }))}
+                        className={cn(
+                          "flex flex-col items-start p-2.5 rounded-xl border text-left transition-all",
+                          isSelected
+                            ? "border-primary bg-primary/5 text-primary ring-2 ring-primary/20"
+                            : "border-border hover:border-gray-300 text-gray-600 bg-gray-50/50"
+                        )}
+                      >
+                        <span className="text-xs font-bold">{p.label}</span>
+                        <span className="text-[10px] text-gray-400 leading-tight mt-0.5">{p.desc}</span>
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
 
-              <div className="flex gap-3 pt-2">
-                <Button type="submit" variant="primary" size="lg" loading={saving} className="flex-1">
-                  {saving ? "Saving..." : "Save Changes"}
+              {/* Difficulty Preset Buttons */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-semibold text-gray-700 uppercase tracking-wide flex items-center gap-1.5">
+                    <BarChart2 className="w-4 h-4 text-primary" />
+                    Tingkat Kesulitan
+                  </label>
+                  <span className="text-xs font-bold text-primary bg-primary/10 px-2 py-0.5 rounded-md">
+                    Skala: {form.difficulty} / 10
+                  </span>
+                </div>
+                <div className="grid grid-cols-3 gap-2">
+                  {DIFFICULTY_PRESETS.map((p) => {
+                    const isSelected = Math.abs(form.difficulty - p.value) <= 1.5;
+                    return (
+                      <button
+                        key={p.label}
+                        type="button"
+                        onClick={() => setForm((prev) => ({ ...prev, difficulty: p.value }))}
+                        className={cn(
+                          "flex flex-col items-start p-2.5 rounded-xl border text-left transition-all",
+                          isSelected
+                            ? "border-primary bg-primary/5 text-primary ring-2 ring-primary/20"
+                            : "border-border hover:border-gray-300 text-gray-600 bg-gray-50/50"
+                        )}
+                      >
+                        <span className="text-xs font-bold">{p.label}</span>
+                        <span className="text-[10px] text-gray-400 leading-tight mt-0.5">{p.desc}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Progress Slider */}
+              <div className="space-y-1.5 pt-1">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-semibold text-gray-700 uppercase tracking-wide" htmlFor="edit-progress">
+                    Progres Pengerjaan
+                  </label>
+                  <span className="text-xs font-bold text-gray-700">{form.progress}%</span>
+                </div>
+                <input
+                  id="edit-progress"
+                  name="progress"
+                  type="range"
+                  min={0}
+                  max={100}
+                  step={5}
+                  value={form.progress}
+                  onChange={handleChange}
+                  className="w-full h-2 rounded-full appearance-none bg-gray-200 accent-primary cursor-pointer"
+                />
+              </div>
+
+              {/* Submit Buttons */}
+              <div className="flex gap-3 pt-3 border-t border-border">
+                <Button type="submit" variant="primary" size="lg" loading={saving} className="flex-1 shadow-md">
+                  {saving ? "Menyimpan Perubahan..." : "Simpan Perubahan"}
                 </Button>
                 <Link href="/tasks">
-                  <Button type="button" variant="outline" size="lg">Cancel</Button>
+                  <Button type="button" variant="outline" size="lg">Batal</Button>
                 </Link>
               </div>
             </form>
           </div>
 
-          {/* ── RIGHT: AI Decision Panel ── */}
-          <div className="xl:col-span-3 space-y-4">
+          {/* ════════════════════════════════════════════
+              RIGHT PANEL: AI Smart Summary (5 Cols)
+          ════════════════════════════════════════════ */}
+          <div className="lg:col-span-5 space-y-4">
 
-            {/* Priority Result */}
-            <div className="bg-white rounded-2xl border border-border shadow-card p-5 space-y-4">
+            {/* Smart AI Recommendation Card */}
+            <div className="bg-gradient-to-br from-white to-gray-50/80 rounded-2xl border border-border shadow-card p-5 space-y-4 relative overflow-hidden">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <div className="w-7 h-7 rounded-lg bg-primary/10 flex items-center justify-center">
-                    <Zap className="w-3.5 h-3.5 text-primary" />
+                  <div className="w-8 h-8 rounded-xl bg-primary/10 flex items-center justify-center text-primary">
+                    <Sparkles className="w-4 h-4" />
                   </div>
-                  <span className="text-sm font-bold text-gray-800">Smart Priority Result</span>
-                </div>
-                <span className="text-[10px] font-semibold text-primary bg-primary-50 border border-primary/20 px-2 py-0.5 rounded-full flex items-center gap-1">
-                  <GitBranch className="w-2.5 h-2.5" /> Mamdani · 20 rules
-                </span>
-              </div>
-              <div className="flex items-center gap-6">
-                <div className="shrink-0 relative w-24 h-24 rounded-full flex items-center justify-center"
-                  style={{ background: `conic-gradient(${accent} ${(preview.priorityScore / 100) * 360}deg, #e5e7eb 0deg)` }}>
-                  <div className="w-[72px] h-[72px] rounded-full bg-white flex flex-col items-center justify-center">
-                    <span className="text-2xl font-extrabold text-[#1F2937] leading-none">{preview.priorityScore}</span>
-                    <span className="text-[8px] text-gray-400 font-semibold tracking-wider">SCORE</span>
-                  </div>
-                </div>
-                <div className="flex-1 space-y-2.5">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs text-gray-500">Priority Level</span>
-                    <span className={cn("text-xs font-bold px-3 py-1 rounded-full border", PRIORITY_BG[preview.priorityLevel])}>{preview.priorityLevel}</span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs text-gray-500">Risk Level</span>
-                    <span className="text-xs font-bold text-gray-700">{preview.riskLevel}</span>
-                  </div>
-                  <div className="flex justify-between border-t border-border pt-2.5 mt-1">
-                    <span className="text-xs text-gray-500">Estimated Total</span>
-                    <span className="text-xs font-bold text-gray-700 text-right">
-                      {preview.estimatedTotalMinutes} min
-                      <br/>
-                      {pomodoro.label !== "Micro" && (
-                        <span className="font-normal text-[10px] text-gray-500">(~{Math.max(1, Math.round(preview.estimatedTotalMinutes / pomodoro.recommendedMinutes))} {pomodoro.label} Sessions)</span>
-                      )}
-                      {pomodoro.label === "Micro" && (
-                        <span className="font-normal text-[10px] text-blue-600">(Micro-Task)</span>
-                      )}
-                    </span>
+                  <div>
+                    <h3 className="text-sm font-bold text-gray-900">Rekomendasi Pintar AI</h3>
+                    <p className="text-[11px] text-gray-500">Otomatis dihitung ulang saat ada perubahan detail</p>
                   </div>
                 </div>
               </div>
-              <div className="p-3 rounded-xl bg-gray-50 border border-border">
-                <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1 flex items-center gap-1">
-                  <Info className="w-3 h-3" /> Fuzzy Reasoning
-                </p>
-                <p className="text-xs text-gray-600 leading-relaxed">{preview.reasoning}</p>
-              </div>
-            </div>
 
-            {/* Activated Rules */}
-            <div className="bg-white rounded-2xl border border-border shadow-card p-5 space-y-3">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <div className="w-7 h-7 rounded-lg bg-amber-50 flex items-center justify-center">
-                    <GitBranch className="w-3.5 h-3.5 text-amber-600" />
-                  </div>
-                  <span className="text-sm font-bold text-gray-800">Activated Rules</span>
+              {/* Priority Status Hero */}
+              <div className={cn("p-4 rounded-xl border flex items-center justify-between", badgeStyle.bg, badgeStyle.border)}>
+                <div className="space-y-0.5">
+                  <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Status Prioritas</p>
+                  <p className={cn("text-lg font-extrabold", badgeStyle.text)}>
+                    {badgeStyle.label}
+                  </p>
                 </div>
-                <span className="text-[10px] text-gray-400 bg-gray-50 border border-border px-2 py-0.5 rounded-full">
-                  {preview.activatedRules.length} / 80 fired
-                </span>
+                <div className="text-right">
+                  <div className="text-2xl font-black text-gray-900 leading-none">
+                    {preview.priorityScore}
+                    <span className="text-xs text-gray-400 font-normal">/100</span>
+                  </div>
+                  <span className="text-[10px] text-gray-500 font-medium">Skor Urgensi</span>
+                </div>
               </div>
-              {preview.activatedRules.slice(0, 5).map((rule) => {
-                const colors: Record<string, string> = { Critical: "border-red-200 bg-red-50/60", High: "border-orange-200 bg-orange-50/60", Medium: "border-amber-200 bg-amber-50/60", Low: "border-emerald-200 bg-emerald-50/60" };
-                const badges: Record<string, string> = { Critical: "bg-red-100 text-red-700", High: "bg-orange-100 text-orange-700", Medium: "bg-amber-100 text-amber-700", Low: "bg-emerald-100 text-emerald-700" };
-                return (
-                  <div key={rule.id} className={cn("rounded-xl border p-3 space-y-1.5", colors[rule.outputLevel])}>
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Rule #{rule.id}</span>
-                      <div className="flex items-center gap-1.5">
-                        <span className={cn("text-[10px] font-bold px-2 py-0.5 rounded-full", badges[rule.outputLevel])}>{rule.conclusion}</span>
-                        <span className="text-[10px] font-mono text-gray-400">α={rule.strength.toFixed(2)}</span>
-                      </div>
+
+              {/* Focus & Pomodoro Recommendation */}
+              <div className="p-4 rounded-xl bg-white border border-border space-y-3 shadow-sm">
+                <div className="flex items-center gap-2 text-xs font-bold text-gray-800">
+                  <Timer className="w-4 h-4 text-orange-500" />
+                  Rekomendasi Sesi Pomodoro
+                </div>
+
+                <div className="flex items-center justify-between bg-orange-50/60 border border-orange-100 rounded-xl p-3">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-orange-500 text-white flex items-center justify-center font-bold text-sm shadow-sm">
+                      {pomodoro.recommendedMinutes}m
                     </div>
-                    {rule.conditions.map((cond, i) => (
-                      <p key={i} className="text-[11px] text-gray-600">
-                        <span className="font-semibold text-gray-400">{i === 0 ? "IF" : "AND"}</span> {cond}
+                    <div>
+                      <p className="text-xs font-bold text-gray-900">
+                        Mode {pomodoro.label} Focus
                       </p>
-                    ))}
-                    <p className="text-[11px] font-semibold text-gray-700"><span className="text-gray-400">THEN</span> {rule.conclusion}</p>
+                      <p className="text-[11px] text-gray-500">
+                        Istirahat +{pomodoro.breakMinutes} menit tiap sesi
+                      </p>
+                    </div>
                   </div>
-                );
-              })}
+                  <span className="text-xs font-bold text-orange-700 bg-orange-100 px-2.5 py-1 rounded-full">
+                    {isMicro ? "1 Sesi Singkat" : `${totalSessions} Sesi`}
+                  </span>
+                </div>
+
+                <div className="flex items-center justify-between text-xs text-gray-500 pt-1">
+                  <span>Estimasi Total Waktu:</span>
+                  <span className="font-bold text-gray-800">{preview.estimatedTotalMinutes} Menit</span>
+                </div>
+              </div>
+
+              {/* AI Insight Reason */}
+              <div className="p-3.5 rounded-xl bg-blue-50/60 border border-blue-100 space-y-1">
+                <p className="text-[11px] font-bold text-blue-700 flex items-center gap-1.5">
+                  <Zap className="w-3.5 h-3.5 text-blue-600" /> Analisis AI
+                </p>
+                <p className="text-xs text-blue-900/80 leading-relaxed">
+                  {preview.reasoning}
+                </p>
+              </div>
             </div>
 
-            {/* Membership Values */}
-            <div className="bg-white rounded-2xl border border-border shadow-card p-5 space-y-3">
-              <span className="text-sm font-bold text-gray-800">Membership Values</span>
-              <div className="grid grid-cols-2 gap-3">
-                {[
-                  { label: "Deadline",      icon: "📅", rows: [{ label: "Near", value: m.deadline.near, color: "bg-red-400" }, { label: "Medium", value: m.deadline.medium, color: "bg-amber-400" }, { label: "Far", value: m.deadline.far, color: "bg-emerald-400" }] },
-                  { label: "Importance",    icon: "⚡", rows: [{ label: "High", value: m.importance.high, color: "bg-red-400" }, { label: "Medium", value: m.importance.medium, color: "bg-amber-400" }, { label: "Low", value: m.importance.low, color: "bg-emerald-400" }] },
-                  { label: "Difficulty",    icon: "🔧", rows: [{ label: "Hard", value: m.difficulty.hard, color: "bg-red-400" }, { label: "Medium", value: m.difficulty.medium, color: "bg-amber-400" }, { label: "Easy", value: m.difficulty.easy, color: "bg-emerald-400" }] },
-                  { label: "Progress",      icon: "📊", rows: [{ label: "High", value: m.progress.high, color: "bg-emerald-400" }, { label: "Medium", value: m.progress.medium, color: "bg-amber-400" }, { label: "Low", value: m.progress.low, color: "bg-red-400" }] },
-                  { label: "Academic Risk", icon: "🛡️", rows: [{ label: "Critical", value: m.academicRisk.critical, color: "bg-red-500" }, { label: "High", value: m.academicRisk.high, color: "bg-orange-400" }, { label: "Med", value: m.academicRisk.medium, color: "bg-amber-400" }, { label: "Low", value: m.academicRisk.low, color: "bg-emerald-400" }] },
-                ].map((g) => (
-                  <div key={g.label} className="p-3 rounded-xl bg-gray-50 border border-border space-y-2">
-                    <p className="text-[10px] font-bold text-gray-600 uppercase tracking-wider">{g.icon} {g.label}</p>
-                    {g.rows.map((row) => <MembershipRow key={row.label} label={row.label} value={row.value} color={row.color} />)}
+            {/* Expandable Advanced Math & Engine Details */}
+            <div className="bg-white rounded-2xl border border-border overflow-hidden shadow-sm">
+              <button
+                type="button"
+                onClick={() => setShowAdvanced(!showAdvanced)}
+                className="w-full flex items-center justify-between p-4 text-left hover:bg-gray-50 transition-colors"
+              >
+                <div className="flex items-center gap-2">
+                  <BookOpen className="w-4 h-4 text-gray-400" />
+                  <span className="text-xs font-bold text-gray-700">Detail Teknis AI & Logika Fuzzy</span>
+                </div>
+                <div className="flex items-center gap-1.5 text-xs text-primary font-semibold">
+                  <span>{showAdvanced ? "Sembunyikan" : "Tampilkan"}</span>
+                  {showAdvanced ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                </div>
+              </button>
+
+              {showAdvanced && (
+                <div className="p-4 pt-0 border-t border-border space-y-3 bg-gray-50/50 text-xs">
+                  <div className="p-3 rounded-xl bg-white border border-border space-y-1.5">
+                    <p className="font-bold text-gray-800">Profil Akademik Mahasiswa</p>
+                    <div className="grid grid-cols-2 gap-2 text-[11px] text-gray-600">
+                      <div>Prediksi ML: <strong className="text-gray-900">{prediction}</strong></div>
+                      <div>Academic Risk: <strong className="text-gray-900">{academicRisk}/100</strong></div>
+                    </div>
                   </div>
-                ))}
-              </div>
+
+                  <div className="p-3 rounded-xl bg-white border border-border space-y-1.5">
+                    <p className="font-bold text-gray-800">Inferensi Mamdani Fuzzy (80 Aturan)</p>
+                    <p className="text-[11px] text-gray-500">
+                      Aturan aktif teratas: {preview.activatedRules.length} aturan terpicu dengan metode defuzzifikasi Centroid.
+                    </p>
+                    <div className="space-y-1 max-h-36 overflow-y-auto pr-1">
+                      {preview.activatedRules.slice(0, 4).map((rule) => (
+                        <div key={rule.id} className="p-2 rounded-lg bg-gray-50 border border-gray-100 text-[10px] space-y-0.5">
+                          <div className="flex justify-between font-bold text-gray-700">
+                            <span>Rule #{rule.id}</span>
+                            <span className="text-primary">{rule.conclusion} (α={rule.strength.toFixed(2)})</span>
+                          </div>
+                          <p className="text-gray-500 text-[9px]">{rule.conditions.join(" AND ")}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
 
           </div>
+
         </div>
       </div>
     </DashboardShell>
