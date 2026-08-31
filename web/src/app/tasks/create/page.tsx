@@ -11,11 +11,9 @@ import {
   Sparkles,
   Timer,
   Zap,
-  CheckCircle2,
   Loader2,
   ChevronDown,
   ChevronUp,
-  Flame,
   Clock,
   Target,
   BarChart2,
@@ -45,16 +43,16 @@ const PRIORITY_BADGE_STYLE: Record<PriorityLevel, { bg: string; text: string; bo
 };
 
 const IMPORTANCE_PRESETS = [
-  { value: 2, label: "Low", desc: "Can be done anytime" },
-  { value: 5, label: "Normal", desc: "Standard coursework" },
-  { value: 8, label: "Important", desc: "Major assignment / Exam" },
-  { value: 10, label: "Critical", desc: "Final project / Mandatory" },
+  { value: 2, label: "Low", desc: "Bisa santai / fleksibel" },
+  { value: 5, label: "Normal", desc: "Tugas mingguan standar" },
+  { value: 8, label: "Important", desc: "Tugas besar / Ujian" },
+  { value: 10, label: "Critical", desc: "Skripsi / Wajib selesai" },
 ];
 
 const DIFFICULTY_PRESETS = [
-  { value: 2, label: "Easy", desc: "Quick reading / Quiz" },
-  { value: 5, label: "Medium", desc: "Standard essay / Lab" },
-  { value: 8, label: "Hard", desc: "Complex coding / Thesis" },
+  { value: 2, label: "Mudah", desc: "Baca materi / Kuis kilat" },
+  { value: 5, label: "Sedang", desc: "Paper / Laporan praktikum" },
+  { value: 8, label: "Sulit", desc: "Coding rumit / Riset mendalam" },
 ];
 
 export default function CreateTaskPage() {
@@ -194,18 +192,18 @@ export default function CreateTaskPage() {
           <div className="flex items-center gap-3">
             <Link
               href="/tasks"
-              className="p-2 rounded-xl border border-border hover:bg-primary-50 hover:border-primary/40 text-gray-400 hover:text-primary transition-all shadow-sm"
+              className="p-2.5 rounded-xl border border-border hover:bg-primary-50 hover:border-primary/40 text-gray-500 hover:text-primary transition-all shadow-sm"
             >
-              <ChevronLeft className="w-5 h-5" />
+              <ChevronLeft className="w-6 h-6" />
             </Link>
             <div>
-              <h1 className="text-2xl font-bold text-gray-900 tracking-tight flex items-center gap-2">
+              <h1 className="text-2xl md:text-3xl font-extrabold text-gray-900 tracking-tight flex items-center gap-2.5">
                 Tambah Tugas Baru
-                <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/20">
+                <span className="text-xs md:text-sm font-bold px-3 py-1 rounded-full bg-primary/10 text-primary border border-primary/20">
                   AI-Powered
                 </span>
               </h1>
-              <p className="text-sm text-gray-500 mt-0.5">
+              <p className="text-sm md:text-base text-gray-500 mt-1">
                 Atur tugas belajarmu, AI akan otomatis menghitung prioritas dan jadwal fokus terbaik.
               </p>
             </div>
@@ -221,18 +219,18 @@ export default function CreateTaskPage() {
           <div className="lg:col-span-7 space-y-5">
             <form
               onSubmit={handleSubmit}
-              className="bg-white rounded-2xl border border-border shadow-card p-6 space-y-6"
+              className="bg-white rounded-2xl border border-border shadow-card p-6 md:p-8 space-y-6"
             >
               {error && (
-                <div className="flex items-center gap-2.5 bg-red-50 border border-red-200 text-red-700 text-sm rounded-xl px-4 py-3">
-                  <AlertTriangle className="w-4 h-4 shrink-0" />
+                <div className="flex items-center gap-3 bg-red-50 border border-red-200 text-red-700 text-sm md:text-base rounded-xl px-4 py-3.5">
+                  <AlertTriangle className="w-5 h-5 shrink-0" />
                   {error}
                 </div>
               )}
 
               {/* Title */}
-              <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-gray-700 uppercase tracking-wide flex items-center justify-between" htmlFor="title">
+              <div className="space-y-2">
+                <label className="text-sm md:text-base font-bold text-gray-800 flex items-center justify-between" htmlFor="title">
                   <span>Nama Tugas / Mata Kuliah <span className="text-red-500">*</span></span>
                 </label>
                 <input
@@ -242,30 +240,30 @@ export default function CreateTaskPage() {
                   placeholder="Contoh: Tugas Paper AI & Machine Learning"
                   value={form.title}
                   onChange={handleChange}
-                  className="w-full h-11 px-4 rounded-xl border border-border bg-white text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all font-medium"
+                  className="w-full h-12 md:h-13 px-4 rounded-xl border border-border bg-white text-base text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all font-medium"
                 />
               </div>
 
               {/* Description */}
-              <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-gray-700 uppercase tracking-wide" htmlFor="description">
+              <div className="space-y-2">
+                <label className="text-sm md:text-base font-bold text-gray-800" htmlFor="description">
                   Catatan Tambahan (Opsional)
                 </label>
                 <textarea
                   id="description"
                   name="description"
-                  rows={2}
+                  rows={3}
                   placeholder="Instruksi tugas, referensi bab, atau link sumber..."
                   value={form.description}
                   onChange={handleChange}
-                  className="w-full px-4 py-3 rounded-xl border border-border bg-white text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary resize-none transition-all"
+                  className="w-full px-4 py-3 rounded-xl border border-border bg-white text-base text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary resize-none transition-all leading-relaxed"
                 />
               </div>
 
               {/* Deadline */}
-              <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-gray-700 uppercase tracking-wide flex items-center gap-1.5" htmlFor="deadline">
-                  <CalendarDays className="w-4 h-4 text-primary" />
+              <div className="space-y-2">
+                <label className="text-sm md:text-base font-bold text-gray-800 flex items-center gap-2" htmlFor="deadline">
+                  <CalendarDays className="w-5 h-5 text-primary" />
                   <span>Tenggat Waktu (Deadline) <span className="text-red-500">*</span></span>
                 </label>
                 <input
@@ -274,13 +272,13 @@ export default function CreateTaskPage() {
                   type="date"
                   value={form.deadline}
                   onChange={handleChange}
-                  className="w-full h-11 px-4 rounded-xl border border-border bg-white text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all font-medium"
+                  className="w-full h-12 px-4 rounded-xl border border-border bg-white text-base text-gray-900 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all font-medium"
                 />
                 {form.deadline && (
-                  <div className="flex items-center gap-1.5 pt-1">
-                    <Clock className="w-3.5 h-3.5 text-gray-400" />
+                  <div className="flex items-center gap-2 pt-1">
+                    <Clock className="w-4 h-4 text-gray-500" />
                     <span className={cn(
-                      "text-xs font-semibold",
+                      "text-sm font-bold",
                       deadlineDays < 0 ? "text-red-600" : deadlineDays < 2 ? "text-red-500" : deadlineDays < 5 ? "text-amber-600" : "text-emerald-600"
                     )}>
                       {deadlineDays < 0 ? `Terlambat ${Math.abs(Math.round(deadlineDays))} hari` : deadlineDays < 1 ? "Jatuh tempo HARI INI!" : `Sisa waktu: ${Math.round(deadlineDays)} hari lagi`}
@@ -290,17 +288,17 @@ export default function CreateTaskPage() {
               </div>
 
               {/* Importance Preset Buttons */}
-              <div className="space-y-2">
+              <div className="space-y-2.5">
                 <div className="flex items-center justify-between">
-                  <label className="text-xs font-semibold text-gray-700 uppercase tracking-wide flex items-center gap-1.5">
-                    <Target className="w-4 h-4 text-primary" />
-                    Tingkat Kepentingan (Importance)
+                  <label className="text-sm md:text-base font-bold text-gray-800 flex items-center gap-2">
+                    <Target className="w-5 h-5 text-primary" />
+                    Tingkat Kepentingan
                   </label>
-                  <span className="text-xs font-bold text-primary bg-primary/10 px-2 py-0.5 rounded-md">
+                  <span className="text-xs md:text-sm font-bold text-primary bg-primary/10 px-2.5 py-1 rounded-lg">
                     Skala: {form.importance} / 10
                   </span>
                 </div>
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
                   {IMPORTANCE_PRESETS.map((p) => {
                     const isSelected = Math.abs(form.importance - p.value) <= 1.5;
                     return (
@@ -309,14 +307,14 @@ export default function CreateTaskPage() {
                         type="button"
                         onClick={() => setForm((prev) => ({ ...prev, importance: p.value }))}
                         className={cn(
-                          "flex flex-col items-start p-2.5 rounded-xl border text-left transition-all",
+                          "flex flex-col items-start p-3 rounded-xl border text-left transition-all",
                           isSelected
-                            ? "border-primary bg-primary/5 text-primary ring-2 ring-primary/20"
-                            : "border-border hover:border-gray-300 text-gray-600 bg-gray-50/50"
+                            ? "border-primary bg-primary/10 text-primary ring-2 ring-primary/30 shadow-sm"
+                            : "border-border hover:border-gray-300 text-gray-700 bg-gray-50/70"
                         )}
                       >
-                        <span className="text-xs font-bold">{p.label}</span>
-                        <span className="text-[10px] text-gray-400 leading-tight mt-0.5">{p.desc}</span>
+                        <span className="text-sm font-extrabold">{p.label}</span>
+                        <span className="text-xs text-gray-500 leading-snug mt-1">{p.desc}</span>
                       </button>
                     );
                   })}
@@ -324,17 +322,17 @@ export default function CreateTaskPage() {
               </div>
 
               {/* Difficulty Preset Buttons */}
-              <div className="space-y-2">
+              <div className="space-y-2.5">
                 <div className="flex items-center justify-between">
-                  <label className="text-xs font-semibold text-gray-700 uppercase tracking-wide flex items-center gap-1.5">
-                    <BarChart2 className="w-4 h-4 text-primary" />
-                    Tingkat Kesulitan (Difficulty)
+                  <label className="text-sm md:text-base font-bold text-gray-800 flex items-center gap-2">
+                    <BarChart2 className="w-5 h-5 text-primary" />
+                    Tingkat Kesulitan
                   </label>
-                  <span className="text-xs font-bold text-primary bg-primary/10 px-2 py-0.5 rounded-md">
+                  <span className="text-xs md:text-sm font-bold text-primary bg-primary/10 px-2.5 py-1 rounded-lg">
                     Skala: {form.difficulty} / 10
                   </span>
                 </div>
-                <div className="grid grid-cols-3 gap-2">
+                <div className="grid grid-cols-3 gap-2.5">
                   {DIFFICULTY_PRESETS.map((p) => {
                     const isSelected = Math.abs(form.difficulty - p.value) <= 1.5;
                     return (
@@ -343,14 +341,14 @@ export default function CreateTaskPage() {
                         type="button"
                         onClick={() => setForm((prev) => ({ ...prev, difficulty: p.value }))}
                         className={cn(
-                          "flex flex-col items-start p-2.5 rounded-xl border text-left transition-all",
+                          "flex flex-col items-start p-3 rounded-xl border text-left transition-all",
                           isSelected
-                            ? "border-primary bg-primary/5 text-primary ring-2 ring-primary/20"
-                            : "border-border hover:border-gray-300 text-gray-600 bg-gray-50/50"
+                            ? "border-primary bg-primary/10 text-primary ring-2 ring-primary/30 shadow-sm"
+                            : "border-border hover:border-gray-300 text-gray-700 bg-gray-50/70"
                         )}
                       >
-                        <span className="text-xs font-bold">{p.label}</span>
-                        <span className="text-[10px] text-gray-400 leading-tight mt-0.5">{p.desc}</span>
+                        <span className="text-sm font-extrabold">{p.label}</span>
+                        <span className="text-xs text-gray-500 leading-snug mt-1">{p.desc}</span>
                       </button>
                     );
                   })}
@@ -358,12 +356,12 @@ export default function CreateTaskPage() {
               </div>
 
               {/* Progress Slider */}
-              <div className="space-y-1.5 pt-1">
+              <div className="space-y-2 pt-1">
                 <div className="flex items-center justify-between">
-                  <label className="text-xs font-semibold text-gray-700 uppercase tracking-wide" htmlFor="progress">
-                    Progres Pengerjaan
+                  <label className="text-sm md:text-base font-bold text-gray-800" htmlFor="progress">
+                    Progres Pengerjaan Saat Ini
                   </label>
-                  <span className="text-xs font-bold text-gray-700">{form.progress}%</span>
+                  <span className="text-sm font-extrabold text-primary bg-primary/10 px-3 py-0.5 rounded-full">{form.progress}% Selesai</span>
                 </div>
                 <input
                   id="progress"
@@ -374,17 +372,17 @@ export default function CreateTaskPage() {
                   step={5}
                   value={form.progress}
                   onChange={handleChange}
-                  className="w-full h-2 rounded-full appearance-none bg-gray-200 accent-primary cursor-pointer"
+                  className="w-full h-2.5 rounded-full appearance-none bg-gray-200 accent-primary cursor-pointer"
                 />
               </div>
 
               {/* Submit Buttons */}
-              <div className="flex gap-3 pt-3 border-t border-border">
-                <Button type="submit" variant="primary" size="lg" loading={saving} className="flex-1 shadow-md">
+              <div className="flex gap-3 pt-4 border-t border-border">
+                <Button type="submit" variant="primary" size="lg" loading={saving} className="flex-1 py-3 text-base font-bold shadow-md">
                   {saving ? "Menyimpan Tugas..." : "Simpan Tugas"}
                 </Button>
                 <Link href="/tasks">
-                  <Button type="button" variant="outline" size="lg">Batal</Button>
+                  <Button type="button" variant="outline" size="lg" className="py-3 text-base font-semibold">Batal</Button>
                 </Link>
               </div>
             </form>
@@ -393,77 +391,77 @@ export default function CreateTaskPage() {
           {/* ════════════════════════════════════════════
               RIGHT PANEL: Clean AI Smart Summary (5 Cols)
           ════════════════════════════════════════════ */}
-          <div className="lg:col-span-5 space-y-4">
+          <div className="lg:col-span-5 space-y-5">
 
             {/* Smart AI Recommendation Card */}
-            <div className="bg-gradient-to-br from-white to-gray-50/80 rounded-2xl border border-border shadow-card p-5 space-y-4 relative overflow-hidden">
+            <div className="bg-gradient-to-br from-white to-gray-50/90 rounded-2xl border border-border shadow-card p-6 space-y-5 relative overflow-hidden">
               <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <div className="w-8 h-8 rounded-xl bg-primary/10 flex items-center justify-center text-primary">
-                    <Sparkles className="w-4 h-4" />
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center text-primary">
+                    <Sparkles className="w-5 h-5" />
                   </div>
                   <div>
-                    <h3 className="text-sm font-bold text-gray-900">Rekomendasi Pintar AI</h3>
-                    <p className="text-[11px] text-gray-500">Dihitung otomatis berdasarkan deadline & profil belajarmu</p>
+                    <h3 className="text-base font-bold text-gray-900">Rekomendasi Pintar AI</h3>
+                    <p className="text-xs md:text-sm text-gray-500">Dihitung otomatis berdasarkan deadline & profil belajarmu</p>
                   </div>
                 </div>
               </div>
 
               {/* Priority Status Hero */}
-              <div className={cn("p-4 rounded-xl border flex items-center justify-between", badgeStyle.bg, badgeStyle.border)}>
-                <div className="space-y-0.5">
-                  <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Status Prioritas</p>
-                  <p className={cn("text-lg font-extrabold", badgeStyle.text)}>
+              <div className={cn("p-5 rounded-2xl border flex items-center justify-between shadow-sm", badgeStyle.bg, badgeStyle.border)}>
+                <div className="space-y-1">
+                  <p className="text-xs font-bold text-gray-500 uppercase tracking-wider">Status Prioritas</p>
+                  <p className={cn("text-xl md:text-2xl font-black", badgeStyle.text)}>
                     {badgeStyle.label}
                   </p>
                 </div>
                 <div className="text-right">
-                  <div className="text-2xl font-black text-gray-900 leading-none">
+                  <div className="text-3xl font-black text-gray-900 leading-none">
                     {fuzzy.priorityScore}
-                    <span className="text-xs text-gray-400 font-normal">/100</span>
+                    <span className="text-sm text-gray-400 font-medium">/100</span>
                   </div>
-                  <span className="text-[10px] text-gray-500 font-medium">Skor Urgensi</span>
+                  <span className="text-xs text-gray-500 font-semibold">Skor Urgensi</span>
                 </div>
               </div>
 
               {/* Focus & Pomodoro Recommendation */}
-              <div className="p-4 rounded-xl bg-white border border-border space-y-3 shadow-sm">
-                <div className="flex items-center gap-2 text-xs font-bold text-gray-800">
-                  <Timer className="w-4 h-4 text-orange-500" />
+              <div className="p-5 rounded-2xl bg-white border border-border space-y-3.5 shadow-sm">
+                <div className="flex items-center gap-2 text-sm md:text-base font-bold text-gray-900">
+                  <Timer className="w-5 h-5 text-orange-500" />
                   Rekomendasi Sesi Pomodoro
                 </div>
 
-                <div className="flex items-center justify-between bg-orange-50/60 border border-orange-100 rounded-xl p-3">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-xl bg-orange-500 text-white flex items-center justify-center font-bold text-sm shadow-sm">
+                <div className="flex items-center justify-between bg-orange-50/70 border border-orange-200/60 rounded-xl p-4">
+                  <div className="flex items-center gap-3.5">
+                    <div className="w-12 h-12 rounded-xl bg-orange-500 text-white flex items-center justify-center font-extrabold text-base shadow-sm">
                       {pomodoro.recommendedMinutes}m
                     </div>
                     <div>
-                      <p className="text-xs font-bold text-gray-900">
+                      <p className="text-sm md:text-base font-bold text-gray-900">
                         Mode {pomodoro.label} Focus
                       </p>
-                      <p className="text-[11px] text-gray-500">
+                      <p className="text-xs md:text-sm text-gray-600">
                         Istirahat +{pomodoro.breakMinutes} menit tiap sesi
                       </p>
                     </div>
                   </div>
-                  <span className="text-xs font-bold text-orange-700 bg-orange-100 px-2.5 py-1 rounded-full">
+                  <span className="text-xs md:text-sm font-bold text-orange-700 bg-orange-100/90 px-3 py-1.5 rounded-full">
                     {isMicro ? "1 Sesi Singkat" : `${totalSessions} Sesi`}
                   </span>
                 </div>
 
-                <div className="flex items-center justify-between text-xs text-gray-500 pt-1">
+                <div className="flex items-center justify-between text-sm text-gray-600 pt-1 font-medium">
                   <span>Estimasi Total Waktu:</span>
-                  <span className="font-bold text-gray-800">{fuzzy.estimatedTotalMinutes} Menit</span>
+                  <span className="font-bold text-gray-900 text-base">{fuzzy.estimatedTotalMinutes} Menit</span>
                 </div>
               </div>
 
               {/* AI Insight Reason */}
-              <div className="p-3.5 rounded-xl bg-blue-50/60 border border-blue-100 space-y-1">
-                <p className="text-[11px] font-bold text-blue-700 flex items-center gap-1.5">
-                  <Zap className="w-3.5 h-3.5 text-blue-600" /> Analisis AI
+              <div className="p-4 rounded-2xl bg-blue-50/70 border border-blue-100 space-y-1.5">
+                <p className="text-xs md:text-sm font-bold text-blue-800 flex items-center gap-2">
+                  <Zap className="w-4 h-4 text-blue-600" /> Analisis & Saran AI
                 </p>
-                <p className="text-xs text-blue-900/80 leading-relaxed">
+                <p className="text-sm text-blue-950/90 leading-relaxed font-normal">
                   {fuzzy.reasoning}
                 </p>
               </div>
@@ -474,23 +472,23 @@ export default function CreateTaskPage() {
               <button
                 type="button"
                 onClick={() => setShowAdvanced(!showAdvanced)}
-                className="w-full flex items-center justify-between p-4 text-left hover:bg-gray-50 transition-colors"
+                className="w-full flex items-center justify-between p-4 md:p-5 text-left hover:bg-gray-50 transition-colors"
               >
-                <div className="flex items-center gap-2">
-                  <BookOpen className="w-4 h-4 text-gray-400" />
-                  <span className="text-xs font-bold text-gray-700">Detail Teknis AI & Logika Fuzzy</span>
+                <div className="flex items-center gap-2.5">
+                  <BookOpen className="w-5 h-5 text-gray-400" />
+                  <span className="text-sm font-bold text-gray-800">Detail Teknis AI & Logika Fuzzy</span>
                 </div>
-                <div className="flex items-center gap-1.5 text-xs text-primary font-semibold">
+                <div className="flex items-center gap-1.5 text-xs md:text-sm text-primary font-bold">
                   <span>{showAdvanced ? "Sembunyikan" : "Tampilkan"}</span>
                   {showAdvanced ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
                 </div>
               </button>
 
               {showAdvanced && (
-                <div className="p-4 pt-0 border-t border-border space-y-3 bg-gray-50/50 text-xs">
-                  <div className="p-3 rounded-xl bg-white border border-border space-y-1.5">
-                    <p className="font-bold text-gray-800">Profil Akademik Mahasiswa</p>
-                    <div className="grid grid-cols-2 gap-2 text-[11px] text-gray-600">
+                <div className="p-5 pt-0 border-t border-border space-y-4 bg-gray-50/50 text-sm">
+                  <div className="p-4 rounded-xl bg-white border border-border space-y-2">
+                    <p className="font-bold text-gray-900">Profil Akademik Mahasiswa</p>
+                    <div className="grid grid-cols-2 gap-3 text-xs md:text-sm text-gray-600">
                       <div>Prediksi ML: <strong className="text-gray-900">{prediction}</strong></div>
                       <div>Academic Risk: <strong className="text-gray-900">{academicRisk}/100</strong></div>
                       {academicScore !== null && (
@@ -499,19 +497,19 @@ export default function CreateTaskPage() {
                     </div>
                   </div>
 
-                  <div className="p-3 rounded-xl bg-white border border-border space-y-1.5">
-                    <p className="font-bold text-gray-800">Inferensi Mamdani Fuzzy (80 Aturan)</p>
-                    <p className="text-[11px] text-gray-500">
+                  <div className="p-4 rounded-xl bg-white border border-border space-y-2">
+                    <p className="font-bold text-gray-900">Inferensi Mamdani Fuzzy (80 Aturan)</p>
+                    <p className="text-xs text-gray-500">
                       Aturan aktif teratas: {fuzzy.activatedRules.length} aturan terpicu dengan metode defuzzifikasi Centroid.
                     </p>
-                    <div className="space-y-1 max-h-36 overflow-y-auto pr-1">
+                    <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
                       {fuzzy.activatedRules.slice(0, 4).map((rule) => (
-                        <div key={rule.id} className="p-2 rounded-lg bg-gray-50 border border-gray-100 text-[10px] space-y-0.5">
-                          <div className="flex justify-between font-bold text-gray-700">
+                        <div key={rule.id} className="p-2.5 rounded-lg bg-gray-50 border border-gray-200 text-xs space-y-1">
+                          <div className="flex justify-between font-bold text-gray-800">
                             <span>Rule #{rule.id}</span>
                             <span className="text-primary">{rule.conclusion} (α={rule.strength.toFixed(2)})</span>
                           </div>
-                          <p className="text-gray-500 text-[9px]">{rule.conditions.join(" AND ")}</p>
+                          <p className="text-gray-600 text-xs">{rule.conditions.join(" AND ")}</p>
                         </div>
                       ))}
                     </div>
