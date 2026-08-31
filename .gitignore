@@ -51,9 +51,16 @@ web/node_modules/
 desktop/node_modules/
 desktop/dist/
 
+# user uploads (images & files)
+web/public/uploads/*
+!web/public/uploads/.gitkeep
+public/uploads/*
+!public/uploads/.gitkeep
+
 # graphify
 graphify-out
 graphify/cache/
 graphify/.graphify_*
 .graphify_*
+
 
