@@ -15,9 +15,10 @@ export { buildReasoning, deriveRiskLevel, estimateFocusMinutes } from "./fuzzy/r
  * Derive academic risk (0–100) from AI-generated academic insight.
  * Lower academic score + poor prediction label = higher risk.
  */
-export function deriveAcademicRiskFromInsight(academicScore: number, prediction: string): number {
-  let risk = Math.round(100 - academicScore);
-  const label = prediction.toLowerCase();
+export function deriveAcademicRiskFromInsight(academicScore?: number | null, prediction?: string | null): number {
+  const score = typeof academicScore === "number" && !isNaN(academicScore) ? academicScore : 60;
+  let risk = Math.round(100 - score);
+  const label = (prediction || "").toLowerCase();
   if      (label.includes("excellent") || label.includes("very high") || label.includes("high performer"))
     risk = Math.max(0, risk - 20);
   else if (label.includes("above average") || label.includes("good"))

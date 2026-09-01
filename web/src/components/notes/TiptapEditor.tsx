@@ -46,7 +46,6 @@ import {
   CheckSquare,
   Table as TableIcon,
   Smile,
-  Info,
   ChevronDown,
   Highlighter,
 } from "lucide-react";
@@ -130,7 +129,6 @@ export function TiptapEditor({ content, onChange, userId, onStatsChange }: Tipta
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [imageUploading, setImageUploading] = useState(false);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
-  const [showShortcuts, setShowShortcuts] = useState(false);
 
   const editor = useEditor({
     immediatelyRender: false,
@@ -343,9 +341,9 @@ export function TiptapEditor({ content, onChange, userId, onStatsChange }: Tipta
   };
 
   return (
-    <div className="flex flex-col border border-border bg-white rounded-2xl overflow-hidden shadow-card relative">
-      {/* Editor Toolbar */}
-      <div className="flex flex-wrap items-center gap-1.5 bg-gray-50 border-b border-border p-2.5 sticky top-0 z-20">
+    <div className="flex flex-col border border-border bg-white rounded-2xl shadow-card relative">
+      {/* Editor Toolbar (Flush Sticky at Top of Screen) */}
+      <div className="flex flex-wrap items-center gap-1.5 bg-white/95 backdrop-blur-md border-b border-border p-2.5 sticky -top-8 md:-top-10 z-30 rounded-t-2xl shadow-sm transition-all">
         {/* Undo/Redo */}
         <div className="flex items-center gap-0.5 mr-1">
           <button
@@ -660,7 +658,7 @@ export function TiptapEditor({ content, onChange, userId, onStatsChange }: Tipta
 
           {/* Emoji Popover */}
           {showEmojiPicker && (
-            <div className="absolute right-0 top-9 bg-white border border-border shadow-float rounded-xl p-2.5 z-30 grid grid-cols-7 gap-1.5 w-44 animate-scale-in">
+            <div className="absolute right-0 top-9 bg-white border border-border shadow-float rounded-xl p-2.5 z-50 grid grid-cols-7 gap-1.5 w-44 animate-scale-in">
               {emojis.map((emoji) => (
                 <button
                   key={emoji}
@@ -675,60 +673,12 @@ export function TiptapEditor({ content, onChange, userId, onStatsChange }: Tipta
               ))}
             </div>
           )}
-
-          <button
-            onClick={() => setShowShortcuts(!showShortcuts)}
-            className={`p-1.5 rounded-lg transition-all cursor-pointer ${
-              showShortcuts ? "bg-primary-50 text-primary" : "text-gray-500 hover:text-primary hover:bg-white"
-            }`}
-            title="Formatting Shortcuts Help"
-          >
-            <Info className="w-4 h-4" />
-          </button>
-
-          {/* Shortcuts Popover */}
-          {showShortcuts && (
-            <div className="absolute right-0 top-9 bg-white border border-border shadow-float rounded-xl p-4 z-30 w-72 text-xs space-y-2.5 text-gray-600 animate-scale-in">
-              <h4 className="font-bold text-gray-800 border-b border-border pb-1">Keyboard Shortcuts</h4>
-              <div className="flex justify-between">
-                <span>Bold</span>
-                <kbd className="bg-gray-100 px-1.5 py-0.5 rounded border border-border font-mono">Cmd + B</kbd>
-              </div>
-              <div className="flex justify-between">
-                <span>Italic</span>
-                <kbd className="bg-gray-100 px-1.5 py-0.5 rounded border border-border font-mono">Cmd + I</kbd>
-              </div>
-              <div className="flex justify-between">
-                <span>Underline</span>
-                <kbd className="bg-gray-100 px-1.5 py-0.5 rounded border border-border font-mono">Cmd + U</kbd>
-              </div>
-              <div className="flex justify-between">
-                <span>Code Inline</span>
-                <kbd className="bg-gray-100 px-1.5 py-0.5 rounded border border-border font-mono">Cmd + E</kbd>
-              </div>
-              <div className="flex justify-between">
-                <span>Bullet List</span>
-                <kbd className="bg-gray-100 px-1.5 py-0.5 rounded border border-border font-mono">Cmd + Shift + 8</kbd>
-              </div>
-              <div className="flex justify-between">
-                <span>Numbered List</span>
-                <kbd className="bg-gray-100 px-1.5 py-0.5 rounded border border-border font-mono">Cmd + Shift + 9</kbd>
-              </div>
-              <div className="flex justify-between">
-                <span>Heading 1-3</span>
-                <kbd className="bg-gray-100 px-1.5 py-0.5 rounded border border-border font-mono">Cmd + Alt + 1-3</kbd>
-              </div>
-              <div className="flex justify-between text-gray-400 pt-1 border-t border-border/60">
-                <span>Drag & Drop images directly in editor</span>
-              </div>
-            </div>
-          )}
         </div>
       </div>
 
       {/* Floating Table Controls when inside Table */}
       {editor.isActive("table") && (
-        <div className="flex flex-wrap items-center gap-1.5 bg-primary-50 border-b border-border/60 px-4 py-1.5 text-xs text-primary-800 font-semibold select-none">
+        <div className="flex flex-wrap items-center gap-1.5 bg-primary-50/95 backdrop-blur-md border-b border-border/60 px-4 py-2 text-xs text-primary-800 font-semibold select-none sticky top-[16px] md:top-[8px] z-25 shadow-sm">
           <span className="mr-1.5 text-primary-700">Table Settings:</span>
           <button
             onClick={() => editor.chain().focus().addColumnBefore().run()}

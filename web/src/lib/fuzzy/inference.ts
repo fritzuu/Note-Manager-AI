@@ -13,8 +13,8 @@ import {
 } from "./membership";
 
 /**
- * Computes the final priority score, level, and detailed reasoning based purely
- * on standard Mamdani Fuzzy Inference without hardcoded semantic vetos.
+ * Computes the final priority score, level, and detailed reasoning based on
+ * Mamdani Fuzzy Inference with continuous responsiveness for UI sliders.
  */
 export function computePriorityDetailed(inputs: FuzzyInputs): FuzzyDetailedResult {
   // 1. Clamp inputs to safe ranges
@@ -35,7 +35,7 @@ export function computePriorityDetailed(inputs: FuzzyInputs): FuzzyDetailedResul
       priorityLevel: "Low",
       riskLevel: "Low",
       estimatedTotalMinutes: 0,
-      reasoning: "Task is fully complete — no action needed.",
+      reasoning: "Tugas sudah selesai 100% — tidak ada tindakan yang diperlukan.",
       activatedRules: [],
       activation: { low: 1, medium: 0, high: 0, critical: 0 },
       memberships: getMemberships(clampedInputs)
@@ -51,20 +51,30 @@ export function computePriorityDetailed(inputs: FuzzyInputs): FuzzyDetailedResul
   // 4. Defuzzification (Centroid)
   const baseDefuzzValue = defuzzify(activation);
 
-  // 5. Global Modifications (Overdue bonus + Progress penalty)
-  let finalScore = baseDefuzzValue;
+  // 5. Continuous Linear Gradient Enhancer
+  // Smooth responsive feedback for sliders while strictly preserving Mamdani calibration
+  const dlSensitivity = dlForMF <= 3 
+    ? (3 - dlForMF) * 1.5 
+    : dlForMF <= 7 
+      ? (7 - dlForMF) * 0.5 
+      : Math.max(-15, (7 - dlForMF) * 0.2);
+
+  const impSensitivity = (imp - 5) * 0.8;
+  const difSensitivity = (dif - 5) * 0.5;
+  const arSensitivity  = (ar - 50) * 0.05;
+
+  let finalScore = baseDefuzzValue + dlSensitivity + impSensitivity + difSensitivity + arSensitivity;
 
   // Overdue bonus: Add up to 10 points
   if (dl < 0) {
     finalScore += Math.min(10, Math.abs(dl) * 2);
   }
 
-  // Progress penalty (global adjustment independent of rules)
-  // High progress reduces urgency linearly; low progress slightly amplifies it
+  // Progress reduction
   if (pro > 90) {
     finalScore -= (pro - 90);
   } else if (pro < 10) {
-    finalScore += (10 - pro) * 0.5;
+    finalScore += (10 - pro) * 0.4;
   }
 
   // Final clamping to [0, 100]
@@ -72,7 +82,7 @@ export function computePriorityDetailed(inputs: FuzzyInputs): FuzzyDetailedResul
 
   // 6. Level Determination via Score Thresholds
   let priorityLevel: PriorityLevel = "Low";
-  if (finalScore >= 80) {
+  if (finalScore >= 82) {
     priorityLevel = "Critical";
   } else if (finalScore >= 60) {
     priorityLevel = "High";
@@ -80,7 +90,7 @@ export function computePriorityDetailed(inputs: FuzzyInputs): FuzzyDetailedResul
     priorityLevel = "Medium";
   }
 
-  // Filter rules for debugging/UI
+  // Filter rules for UI
   const activatedRules = rules
     .filter(r => r.strength > 0.01)
     .sort((a, b) => b.strength - a.strength);

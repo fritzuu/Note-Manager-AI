@@ -2,7 +2,7 @@
 
 import React from "react";
 import Link from "next/link";
-import { CheckSquare, ArrowUpRight, Plus, AlertCircle } from "lucide-react";
+import { CheckSquare, ArrowUpRight, Plus } from "lucide-react";
 import { TaskDocument } from "@/lib/firestore";
 import { deadlineToDays } from "@/lib/fuzzyLogic";
 
@@ -33,7 +33,7 @@ export function PriorityTasksWidget({ tasks }: PriorityTasksWidgetProps) {
           </div>
           <div>
             <h4 className="text-xs font-bold text-gray-900">Priority Tasks</h4>
-            <p className="text-[10px] text-gray-400">Mamdani Fuzzy Ranking</p>
+            <p className="text-[10px] text-gray-400">Prioritas Cerdas MindFlow</p>
           </div>
         </div>
         <Link

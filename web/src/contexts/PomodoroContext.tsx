@@ -76,6 +76,7 @@ export function PomodoroProvider({ children }: { children: React.ReactNode }) {
   const [sessionCompleted, setSessionCompleted] = useState(false);
   const [breakSeconds, setBreakSeconds] = useState(5 * 60);
   const [showFloatingWidget, setShowFloatingWidget] = useState(false);
+  const [widgetDismissed, setWidgetDismissed] = useState(false);
 
   // Progress check-in states upon focus session completion
   const [showProgressPrompt, setShowProgressPrompt] = useState(false);
@@ -132,14 +133,10 @@ export function PomodoroProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (authLoading) return;
     if (user) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
       refreshData();
     } else {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
       setTasks([]);
-      // eslint-disable-next-line react-hooks/set-state-in-effect
       setSessions([]);
-      // eslint-disable-next-line react-hooks/set-state-in-effect
       setLoading(false);
     }
   }, [user, authLoading, refreshData]);
@@ -386,6 +383,7 @@ export function PomodoroProvider({ children }: { children: React.ReactNode }) {
     setIsRunning(true);
     setSessionCompleted(false);
     setShowFloatingWidget(true);
+    setWidgetDismissed(false);
   };
 
   const pauseTimer = () => {
@@ -645,7 +643,7 @@ export function PomodoroProvider({ children }: { children: React.ReactNode }) {
       {children}
 
       {/* Floating Pomodoro Widget - shown on all pages except /pomodoro */}
-      {mounted && user && (isRunning || showFloatingWidget) && (
+      {mounted && user && !widgetDismissed && (isRunning || showFloatingWidget) && (
         <FloatingPomodoroWidget
           isRunning={isRunning}
           timerSeconds={timerSeconds}
@@ -655,7 +653,13 @@ export function PomodoroProvider({ children }: { children: React.ReactNode }) {
           onPause={pauseTimer}
           onReset={resetTimer}
           onExpand={() => router.push("/pomodoro")}
-          onDismiss={() => setShowFloatingWidget(false)}
+          onDismiss={() => {
+            setWidgetDismissed(true);
+            setShowFloatingWidget(false);
+            if (typeof window !== "undefined") {
+              localStorage.setItem("pomodoro_show_widget", "false");
+            }
+          }}
         />
       )}
     </PomodoroContext.Provider>

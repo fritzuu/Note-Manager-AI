@@ -3,6 +3,7 @@
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
+import { LoadingScreen } from "@/components/ui/LoadingScreen";
 
 export default function RootPage() {
   const { user, userDoc, loading } = useAuth();
@@ -24,11 +25,12 @@ export default function RootPage() {
   }, [user, userDoc, loading, router]);
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-background" suppressHydrationWarning>
-      <div className="flex flex-col items-center gap-4" suppressHydrationWarning>
-        <div className="w-12 h-12 rounded-full border-4 border-primary-200 border-t-primary animate-spin" />
-        <p className="text-sm text-gray-500 font-medium">Loading MindFlow AI…</p>
-      </div>
+    <div className="min-h-screen w-full flex items-center justify-center bg-background" suppressHydrationWarning>
+      <LoadingScreen
+        label="Membuka MindFlow AI..."
+        subtext="Menghubungkan profil belajar Anda"
+        fullHeight
+      />
     </div>
   );
 }

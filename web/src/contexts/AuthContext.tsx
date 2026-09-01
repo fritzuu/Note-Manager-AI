@@ -16,6 +16,7 @@ interface AuthContextValue {
   userDoc: UserDocument | null;
   loading: boolean;
   refreshUserDoc: () => Promise<void>;
+  reloadUser: () => Promise<boolean>;
 }
 
 const AuthContext = createContext<AuthContextValue>({
@@ -23,6 +24,7 @@ const AuthContext = createContext<AuthContextValue>({
   userDoc: null,
   loading: true,
   refreshUserDoc: async () => {},
+  reloadUser: async () => false,
 });
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
@@ -39,6 +41,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       console.error("Failed to refresh user document (offline?):", error);
     }
   }, [user]);
+
+  const reloadUser = useCallback(async (): Promise<boolean> => {
+    if (!auth.currentUser) return false;
+    try {
+      await auth.currentUser.reload();
+      const reloadedUser = auth.currentUser;
+      setUser(reloadedUser ? { ...reloadedUser } as unknown as User : null);
+      return reloadedUser ? reloadedUser.emailVerified : false;
+    } catch (err) {
+      console.error("Failed to reload user:", err);
+      return false;
+    }
+  }, []);
+
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
@@ -77,7 +93,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   return (
-    <AuthContext.Provider value={{ user, userDoc, loading, refreshUserDoc }}>
+    <AuthContext.Provider value={{ user, userDoc, loading, refreshUserDoc, reloadUser }}>
       {children}
     </AuthContext.Provider>
   );

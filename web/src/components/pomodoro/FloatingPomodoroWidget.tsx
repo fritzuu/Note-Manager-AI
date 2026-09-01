@@ -56,7 +56,7 @@ export function FloatingPomodoroWidget({
   useEffect(() => {
     if (prevTimerRef.current > 0 && timerSeconds === 0 && isRunning) {
       if (typeof window !== "undefined" && "Notification" in window && notificationPermission === "granted") {
-        const title = phase === "focus" ? "🍅 Focus Session Complete!" : "☕ Break Time Over!";
+        const title = phase === "focus" ? "Focus Session Complete!" : "Break Time Over!";
         const body =
           phase === "focus"
             ? `Great work on "${taskTitle || "your task"}"! Time for a break.`

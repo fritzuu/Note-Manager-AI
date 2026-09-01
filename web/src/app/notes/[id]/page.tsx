@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useState, useRef, useMemo } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useParams } from "next/navigation";
 import Link from "next/link";
 import {
   ArrowLeft,
@@ -29,6 +29,7 @@ import {
   Paperclip,
   Bookmark,
   AlertTriangle,
+  MoreHorizontal,
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import {
@@ -43,9 +44,13 @@ import {
   type NoteDocument,
   type NoteAttachment,
 } from "@/lib/firestore";
-import { getCustomApiKey } from "@/lib/aiConfig";
+import { getCustomApiKey, getAiProvider, getOpenRouterModel } from "@/lib/aiConfig";
 import { DashboardShell } from "@/components/layout/DashboardShell";
 import { Button } from "@/components/ui/Button";
+import { LoadingScreen } from "@/components/ui/LoadingScreen";
+import { ErrorState } from "@/components/ui/ErrorState";
+import { MarkdownRenderer } from "@/components/ui/MarkdownRenderer";
+import { WarningModal } from "@/components/ui/WarningModal";
 import { TiptapEditor } from "@/components/notes/TiptapEditor";
 // Firebase Storage imports removed - local upload endpoint is used instead
 
@@ -57,15 +62,13 @@ interface ParsedSummary {
   suggestedQuestions: string[];
 }
 
-export default function NoteDetailPage({
-  params,
-}: {
-  params: Promise<{ id: string }>;
-}) {
+export default function NoteDetailPage() {
   const { user, loading: authLoading } = useAuth();
   const router = useRouter();
+  const routeParams = useParams();
+  const noteId = (routeParams?.id as string) || "";
 
-  const [noteId, setNoteId] = useState<string | null>(null);
+  const [noteError, setNoteError] = useState<string | null>(null);
   const [summary, setSummary] = useState<ParsedSummary | null>(null);
 
   // Note Document state
@@ -85,6 +88,30 @@ export default function NoteDetailPage({
   // Layout states
   const [leftSidebarOpen, setLeftSidebarOpen] = useState(true);
   const [rightSidebarOpen, setRightSidebarOpen] = useState(true);
+  const [moreMenuOpen, setMoreMenuOpen] = useState(false);
+  const [permanentDeleteModalOpen, setPermanentDeleteModalOpen] = useState(false);
+  const [isPermanentlyDeleting, setIsPermanentlyDeleting] = useState(false);
+  const moreMenuRef = useRef<HTMLDivElement>(null);
+
+  // Close more menu on click outside
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (moreMenuRef.current && !moreMenuRef.current.contains(e.target as Node)) {
+        setMoreMenuOpen(false);
+      }
+    };
+    if (moreMenuOpen) {
+      document.addEventListener("mousedown", handleClickOutside);
+    }
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [moreMenuOpen]);
+
+  // Adjust default sidebar visibility based on screen width on mount
+  useEffect(() => {
+    if (typeof window !== "undefined" && window.innerWidth < 1280) {
+      setLeftSidebarOpen(false);
+    }
+  }, []);
 
   // Loaders & Save statuses
   const [loading, setLoading] = useState(true);
@@ -110,12 +137,16 @@ export default function NoteDetailPage({
     setTimeout(() => setToast(null), 3000);
   };
 
-  // Unwrap routing parameters
+  // Clean up debounce timer on unmount
   useEffect(() => {
-    params.then((p) => setNoteId(p.id));
-  }, [params]);
+    return () => {
+      if (debounceTimer.current) {
+        clearTimeout(debounceTimer.current);
+      }
+    };
+  }, []);
 
-  // Load Note & Sidebar data
+  // Load workspace & note details
   useEffect(() => {
     if (authLoading) return;
     if (!user) {
@@ -125,24 +156,25 @@ export default function NoteDetailPage({
 
     const loadWorkspace = async (nId: string) => {
       setLoading(true);
+      setNoteError(null);
       try {
         // Fetch active note
         const noteDoc = await getNote(nId);
         if (!noteDoc) {
-          router.replace("/notes");
+          setNoteError("Catatan ini tidak dapat ditemukan atau telah dihapus.");
           return;
         }
 
-        setTitle(noteDoc.title);
-        setContent(noteDoc.content);
-        setTagsStr(noteDoc.tags.join(", "));
-        setIsPinned(noteDoc.isPinned || false);
-        setIsArchived(noteDoc.isArchived || false);
-        setIsTrashed(noteDoc.isTrashed || false);
-        setAttachments(noteDoc.attachments || []);
+        setTitle(noteDoc.title || "Untitled Note");
+        setContent(noteDoc.content || "");
+        setTagsStr(Array.isArray(noteDoc.tags) ? noteDoc.tags.join(", ") : "");
+        setIsPinned(Boolean(noteDoc.isPinned));
+        setIsArchived(Boolean(noteDoc.isArchived));
+        setIsTrashed(Boolean(noteDoc.isTrashed));
+        setAttachments(Array.isArray(noteDoc.attachments) ? noteDoc.attachments : []);
 
         // Load summaries
-        const summaryDoc = await getNoteSummary(nId);
+        const summaryDoc = await getNoteSummary(nId).catch(() => null);
         if (summaryDoc) {
           try {
             const parsed = JSON.parse(summaryDoc.summary);
@@ -160,11 +192,21 @@ export default function NoteDetailPage({
           setSummary(null);
         }
 
-        // Fetch sidebar notes
-        const notesList = await getUserNotes(user.uid);
-        setAllNotes(notesList);
+        // Fetch sidebar notes safely
+        const notesList = await getUserNotes(user.uid).catch(() => []);
+        const sanitizedList = (notesList || []).map((n) => ({
+          ...n,
+          title: n.title || "Untitled Note",
+          content: n.content || "",
+          tags: Array.isArray(n.tags) ? n.tags : [],
+          isPinned: Boolean(n.isPinned),
+          isArchived: Boolean(n.isArchived),
+          isTrashed: Boolean(n.isTrashed),
+        }));
+        setAllNotes(sanitizedList);
       } catch (err) {
         console.error("Failed to load note detail workspace:", err);
+        setNoteError("Terjadi kesalahan saat memuat catatan. Periksa koneksi internet Anda.");
       } finally {
         setLoading(false);
       }
@@ -304,21 +346,23 @@ export default function NoteDetailPage({
   };
 
   // Permanent delete note
-  const handlePermanentDelete = async () => {
+  const handlePermanentDelete = () => {
+    setPermanentDeleteModalOpen(true);
+  };
+
+  const handleConfirmPermanentDelete = async () => {
     if (!noteId) return;
-    if (
-      !window.confirm(
-        "Are you sure you want to permanently delete this note? This action cannot be undone."
-      )
-    )
-      return;
+    setIsPermanentlyDeleting(true);
     try {
       await deleteNote(noteId);
-      showToast("Note permanently deleted");
+      showToast("Catatan berhasil dihapus permanen");
       router.push("/notes");
     } catch (err) {
       console.error("Delete note error:", err);
-      showToast("Failed to delete note", "error");
+      showToast("Gagal menghapus catatan", "error");
+    } finally {
+      setIsPermanentlyDeleting(false);
+      setPermanentDeleteModalOpen(false);
     }
   };
 
@@ -437,9 +481,16 @@ export default function NoteDetailPage({
     setSummarizing(true);
     try {
       const customKey = getCustomApiKey();
-      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      const provider = getAiProvider();
+      const headers: Record<string, string> = {
+        "Content-Type": "application/json",
+        "x-ai-provider": provider,
+      };
       if (customKey) {
         headers["x-custom-api-key"] = customKey;
+      }
+      if (provider === "openrouter") {
+        headers["x-ai-model"] = getOpenRouterModel();
       }
 
       const res = await fetch("/api/notes/summarize", {
@@ -613,10 +664,24 @@ export default function NoteDetailPage({
   if (authLoading || loading || !noteId) {
     return (
       <DashboardShell fullWidth={true}>
-        <div className="flex flex-col items-center justify-center py-32 gap-4">
-          <div className="w-12 h-12 rounded-full border-4 border-primary-200 border-t-primary animate-spin" />
-          <p className="text-sm text-gray-500 font-semibold">Opening Note Workspace...</p>
-        </div>
+        <LoadingScreen
+          label="Membuka Ruang Catatan..."
+          subtext="Memuat konten catatan dan asisten AI"
+          fullHeight
+        />
+      </DashboardShell>
+    );
+  }
+
+  if (noteError) {
+    return (
+      <DashboardShell fullWidth={true}>
+        <ErrorState
+          title="Catatan Tidak Ditemukan"
+          message={noteError}
+          showHomeButton
+          fullHeight
+        />
       </DashboardShell>
     );
   }
@@ -627,8 +692,8 @@ export default function NoteDetailPage({
       <div className="flex h-[calc(100vh-140px)] md:h-[calc(100vh-80px)] border border-border bg-white rounded-2xl overflow-hidden shadow-card relative">
         {/* Left Sidebar: Note list */}
         <div
-          className={`flex flex-col bg-gray-50/50 border-r border-border h-full transition-all duration-300 overflow-hidden ${
-            leftSidebarOpen ? "w-64 md:w-72" : "w-0 border-r-0"
+          className={`flex flex-col bg-gray-50/50 border-r border-border h-full transition-all duration-300 overflow-hidden shrink-0 ${
+            leftSidebarOpen ? "w-64 lg:w-72" : "w-0 border-r-0"
           }`}
         >
           {/* Sidebar Header */}
@@ -783,27 +848,27 @@ export default function NoteDetailPage({
           )}
 
           {/* Workspace Controls Header */}
-          <div className="flex items-center justify-between px-6 py-3 border-b border-border bg-white print:hidden">
+          <div className="flex items-center justify-between px-3 md:px-5 h-14 border-b border-border bg-white print:hidden gap-2 min-w-0 shrink-0">
             {/* Sidebar toggle & Back button */}
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1.5 shrink-0">
               <button
                 onClick={() => setLeftSidebarOpen(!leftSidebarOpen)}
                 className="p-2 text-gray-500 hover:text-primary hover:bg-gray-50 border border-border rounded-xl transition-all cursor-pointer"
-                title={leftSidebarOpen ? "Collapse Note Library" : "Expand Note Library"}
+                title={leftSidebarOpen ? "Tutup Catatan" : "Buka Catatan"}
               >
                 {leftSidebarOpen ? <ChevronLeft className="w-4 h-4" /> : <Menu className="w-4 h-4" />}
               </button>
               <Link
                 href="/notes"
-                className="flex items-center gap-1 px-3 py-2 text-xs font-bold text-gray-500 hover:text-primary hover:bg-primary-50 rounded-xl transition-colors shrink-0"
+                className="flex items-center gap-1 px-2 py-1.5 text-xs font-bold text-gray-600 hover:text-primary hover:bg-primary-50 rounded-xl transition-colors shrink-0"
               >
                 <ArrowLeft className="w-3.5 h-3.5" />
-                All Notes
+                <span className="hidden sm:inline">All Notes</span>
               </Link>
             </div>
 
             {/* Note Settings Action Row */}
-            <div className="flex items-center gap-2.5">
+            <div className="flex items-center gap-1.5 shrink-0">
               {/* Star Favorite */}
               <button
                 onClick={handleTogglePin}
@@ -830,66 +895,104 @@ export default function NoteDetailPage({
                 <Archive className="w-4 h-4" />
               </button>
 
-              {/* Move to Trash */}
-              <button
-                onClick={handleToggleTrash}
-                className="p-2 border border-border text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all cursor-pointer"
-                title="Move to Trash"
-              >
-                <Trash2 className="w-4 h-4" />
-              </button>
-
-              {/* Duplicate Note */}
-              <button
-                onClick={handleDuplicateNote}
-                className="p-2 border border-border text-gray-400 hover:text-primary hover:bg-primary-50 rounded-xl transition-all cursor-pointer"
-                title="Duplicate Note"
-              >
-                <Copy className="w-4 h-4" />
-              </button>
-
-              <div className="w-[1px] h-6 bg-border mx-1" />
-
-              {/* Export dropdown */}
-              <div className="relative group/menu">
-                <button className="flex items-center gap-1.5 px-3 py-2 text-xs font-bold text-gray-500 hover:text-primary border border-border rounded-xl hover:bg-gray-50 cursor-pointer">
-                  <FileDown className="w-4 h-4" />
-                  Export
+              {/* More Options Dropdown (Duplicate, Export, Import, Trash) */}
+              <div className="relative" ref={moreMenuRef}>
+                <button
+                  type="button"
+                  onClick={() => setMoreMenuOpen(!moreMenuOpen)}
+                  className={`p-2 border rounded-xl transition-all cursor-pointer ${
+                    moreMenuOpen
+                      ? "bg-gray-100 border-gray-300 text-gray-900"
+                      : "border-border text-gray-500 hover:text-gray-800 hover:bg-gray-50"
+                  }`}
+                  title="Opsi & Ekspor Catatan"
+                >
+                  <MoreHorizontal className="w-4 h-4" />
                 </button>
-                <div className="absolute right-0 top-9 bg-white border border-border shadow-float rounded-xl py-1.5 w-36 hidden group-hover/menu:block hover:block z-30 animate-scale-in">
-                  <button
-                    onClick={handleExportPdf}
-                    className="w-full text-left px-4 py-2 text-xs text-gray-700 hover:bg-primary-50 hover:text-primary font-semibold flex items-center gap-2 cursor-pointer"
-                  >
-                    <FileText className="w-3.5 h-3.5 text-gray-400" />
-                    Print / PDF
-                  </button>
-                  <button
-                    onClick={handleExportMarkdown}
-                    className="w-full text-left px-4 py-2 text-xs text-gray-700 hover:bg-primary-50 hover:text-primary font-semibold flex items-center gap-2 cursor-pointer"
-                  >
-                    <Download className="w-3.5 h-3.5 text-gray-400" />
-                    Markdown (.md)
-                  </button>
-                  <button
-                    onClick={handleExportDoc}
-                    className="w-full text-left px-4 py-2 text-xs text-gray-700 hover:bg-primary-50 hover:text-primary font-semibold flex items-center gap-2 cursor-pointer"
-                  >
-                    <Paperclip className="w-3.5 h-3.5 text-gray-400" />
-                    MS Word (.doc)
-                  </button>
-                </div>
+
+                {moreMenuOpen && (
+                  <div className="absolute right-0 top-11 bg-white border border-border shadow-float rounded-2xl py-1.5 w-52 z-50 animate-scale-in">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        handleDuplicateNote();
+                        setMoreMenuOpen(false);
+                      }}
+                      className="w-full text-left px-3.5 py-2 text-xs text-gray-700 hover:bg-primary-50 hover:text-primary font-semibold flex items-center gap-2 cursor-pointer transition-colors"
+                    >
+                      <Copy className="w-3.5 h-3.5 text-gray-400" />
+                      Duplikasi Catatan
+                    </button>
+
+                    <div className="my-1 border-t border-gray-100" />
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        handleExportPdf();
+                        setMoreMenuOpen(false);
+                      }}
+                      className="w-full text-left px-3.5 py-2 text-xs text-gray-700 hover:bg-primary-50 hover:text-primary font-semibold flex items-center gap-2 cursor-pointer transition-colors"
+                    >
+                      <FileText className="w-3.5 h-3.5 text-gray-400" />
+                      Ekspor PDF / Cetak
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        handleExportMarkdown();
+                        setMoreMenuOpen(false);
+                      }}
+                      className="w-full text-left px-3.5 py-2 text-xs text-gray-700 hover:bg-primary-50 hover:text-primary font-semibold flex items-center gap-2 cursor-pointer transition-colors"
+                    >
+                      <Download className="w-3.5 h-3.5 text-gray-400" />
+                      Ekspor Markdown (.md)
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        handleExportDoc();
+                        setMoreMenuOpen(false);
+                      }}
+                      className="w-full text-left px-3.5 py-2 text-xs text-gray-700 hover:bg-primary-50 hover:text-primary font-semibold flex items-center gap-2 cursor-pointer transition-colors"
+                    >
+                      <Paperclip className="w-3.5 h-3.5 text-gray-400" />
+                      Ekspor MS Word (.doc)
+                    </button>
+
+                    <div className="my-1 border-t border-gray-100" />
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        mdInputRef.current?.click();
+                        setMoreMenuOpen(false);
+                      }}
+                      className="w-full text-left px-3.5 py-2 text-xs text-gray-700 hover:bg-primary-50 hover:text-primary font-semibold flex items-center gap-2 cursor-pointer transition-colors"
+                    >
+                      <Upload className="w-3.5 h-3.5 text-gray-400" />
+                      Impor File (.md)
+                    </button>
+
+                    <div className="my-1 border-t border-gray-100" />
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        handleToggleTrash();
+                        setMoreMenuOpen(false);
+                      }}
+                      className="w-full text-left px-3.5 py-2 text-xs text-rose-600 hover:bg-rose-50 font-semibold flex items-center gap-2 cursor-pointer transition-colors"
+                    >
+                      <Trash2 className="w-3.5 h-3.5 text-rose-500" />
+                      Pindahkan ke Sampah
+                    </button>
+                  </div>
+                )}
               </div>
 
-              {/* Import Markdown */}
-              <button
-                onClick={() => mdInputRef.current?.click()}
-                className="flex items-center gap-1.5 px-3 py-2 text-xs font-bold text-gray-500 hover:text-primary border border-border rounded-xl hover:bg-gray-50 transition-all cursor-pointer"
-                title="Import Markdown file"
-              >
-                <Upload className="w-4 h-4" />
-                Import
-              </button>
               <input
                 type="file"
                 ref={mdInputRef}
@@ -897,6 +1000,23 @@ export default function NoteDetailPage({
                 accept=".md,text/markdown"
                 className="hidden"
               />
+
+              <div className="w-[1px] h-5 bg-border mx-0.5" />
+
+              {/* AI Assistant Toggle Button in Header */}
+              <button
+                type="button"
+                onClick={() => setRightSidebarOpen(!rightSidebarOpen)}
+                className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-xl transition-all cursor-pointer shrink-0 ${
+                  rightSidebarOpen
+                    ? "bg-primary text-white shadow-xs"
+                    : "bg-primary/10 text-primary hover:bg-primary/20 border border-primary/30"
+                }`}
+                title={rightSidebarOpen ? "Tutup AI Assistant" : "Buka AI Assistant"}
+              >
+                <Brain className="w-3.5 h-3.5 animate-pulse" />
+                <span>AI Assistant</span>
+              </button>
             </div>
           </div>
 
@@ -1070,30 +1190,30 @@ export default function NoteDetailPage({
 
         {/* Right Panel: Collapsible AI Academic Summary Assistance */}
         <div
-          className={`flex flex-col bg-gray-50/50 border-l border-border h-full transition-all duration-300 overflow-hidden print:hidden relative ${
-            rightSidebarOpen ? "w-80 md:w-96" : "w-0 border-l-0"
+          className={`flex flex-col bg-gray-50/50 border-l border-border h-full transition-all duration-300 overflow-hidden print:hidden shrink-0 ${
+            rightSidebarOpen ? "w-72 lg:w-80 xl:w-96" : "w-0 border-l-0"
           }`}
         >
           {/* Header */}
-          <div className="bg-gradient-to-r from-primary to-primary-600 px-5 py-4 text-white flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Sparkles className="w-4.5 h-4.5 animate-pulse" />
-              <h3 className="font-extrabold text-sm tracking-tight">AI Academic Assistant</h3>
+          <div className="bg-gradient-to-r from-primary to-primary-600 px-4 h-14 text-white flex items-center justify-between shrink-0">
+            <div className="flex items-center gap-2 min-w-0">
+              <Sparkles className="w-4 h-4 animate-pulse shrink-0" />
+              <h3 className="font-extrabold text-xs sm:text-sm tracking-tight truncate">AI Academic Assistant</h3>
             </div>
-            <div className="flex items-center gap-1">
+            <div className="flex items-center gap-1 shrink-0">
               {summary && (
                 <button
                   onClick={handleGenerateSummary}
                   disabled={summarizing}
                   title="Regenerate summary"
-                  className="p-1 hover:bg-white/20 rounded transition-colors cursor-pointer text-white"
+                  className="p-1.5 hover:bg-white/20 rounded-lg transition-colors cursor-pointer text-white"
                 >
                   <RefreshCw className={`w-3.5 h-3.5 ${summarizing ? "animate-spin" : ""}`} />
                 </button>
               )}
               <button
                 onClick={() => setRightSidebarOpen(false)}
-                className="p-1 hover:bg-white/20 rounded transition-colors cursor-pointer text-white"
+                className="p-1.5 hover:bg-white/20 rounded-lg transition-colors cursor-pointer text-white"
                 title="Collapse Assistant"
               >
                 <ChevronRight className="w-4 h-4" />
@@ -1109,10 +1229,9 @@ export default function NoteDetailPage({
                   <Brain className="w-6 h-6 animate-pulse" />
                 </div>
                 <div>
-                  <h4 className="font-bold text-gray-700 text-sm">Synthesize Academic insights</h4>
-                  <p className="text-[11px] text-gray-400 mt-1 max-w-[200px] mx-auto leading-relaxed">
-                    Have our custom Gemini model generate key points, definitions, and questions based
-                    on this note.
+                  <h4 className="font-bold text-gray-700 text-sm">Ringkasan & Wawasan AI</h4>
+                  <p className="text-[11px] text-gray-400 mt-1 max-w-[220px] mx-auto leading-relaxed">
+                    Biarkan MindFlow AI menganalisis poin penting, definisi konsep, dan pertanyaan latihan dari catatan ini.
                   </p>
                 </div>
                 <Button
@@ -1121,7 +1240,7 @@ export default function NoteDetailPage({
                   onClick={handleGenerateSummary}
                   icon={<Sparkles className="w-3.5 h-3.5" />}
                 >
-                  Synthesize Note
+                  Analisis Catatan
                 </Button>
               </div>
             ) : summarizing ? (
@@ -1133,8 +1252,8 @@ export default function NoteDetailPage({
                   <div className="absolute -top-1 -right-1 w-3.5 h-3.5 rounded-full bg-amber-400 animate-ping" />
                 </div>
                 <div>
-                  <h4 className="font-bold text-gray-700 text-xs animate-pulse">Running ML Synthesis...</h4>
-                  <p className="text-[10px] text-gray-400 mt-1">Extracting core concepts and vocabulary</p>
+                  <h4 className="font-bold text-gray-700 text-xs animate-pulse">MindFlow AI Menganalisis...</h4>
+                  <p className="text-[10px] text-gray-400 mt-1">Menyusun poin penting dan rangkuman materi</p>
                 </div>
               </div>
             ) : (
@@ -1178,23 +1297,23 @@ export default function NoteDetailPage({
                 {summary?.summaryText && (
                   <div className="space-y-1.5">
                     <h4 className="font-bold text-[10px] text-gray-400 uppercase tracking-wider">
-                      Synthesis Summary
+                      Ringkasan Catatan
                     </h4>
-                    <p className="text-gray-700 text-justify leading-relaxed font-serif bg-white p-3 rounded-xl border border-border">
-                      {summary.summaryText}
-                    </p>
+                    <div className="bg-white p-3.5 rounded-2xl border border-border">
+                      <MarkdownRenderer content={summary.summaryText} />
+                    </div>
                   </div>
                 )}
 
                 {/* Conclusion */}
                 {summary?.conclusionText && (
-                  <div className="border-l-4 border-primary bg-primary-50/40 p-3 rounded-r-xl">
+                  <div className="border-l-4 border-primary bg-primary-50/40 p-3.5 rounded-r-2xl">
                     <h4 className="font-bold text-[10px] text-primary uppercase tracking-wider mb-1">
-                      Academic Conclusion
+                      Kesimpulan Penting
                     </h4>
-                    <p className="text-gray-600 italic font-semibold">
-                      &ldquo;{summary.conclusionText}&rdquo;
-                    </p>
+                    <div className="text-gray-700 italic font-medium">
+                      <MarkdownRenderer content={summary.conclusionText} />
+                    </div>
                   </div>
                 )}
 
@@ -1223,18 +1342,20 @@ export default function NoteDetailPage({
             )}
           </div>
         </div>
-
-        {/* Collapsed right sidebar trigger */}
-        {!rightSidebarOpen && (
-          <button
-            onClick={() => setRightSidebarOpen(true)}
-            className="absolute right-4 top-4 z-10 p-2.5 bg-primary text-white hover:bg-primary-600 rounded-xl shadow-float transition-all cursor-pointer hover:scale-105"
-            title="Expand AI Assistant"
-          >
-            <Brain className="w-5 h-5 animate-pulse" />
-          </button>
-        )}
       </div>
+
+      {/* Permanent Delete Warning Modal */}
+      <WarningModal
+        isOpen={permanentDeleteModalOpen}
+        onClose={() => setPermanentDeleteModalOpen(false)}
+        onConfirm={handleConfirmPermanentDelete}
+        isLoading={isPermanentlyDeleting}
+        variant="danger"
+        title="Hapus Catatan Permanen?"
+        description="Apakah Anda yakin ingin menghapus catatan ini secara permanen dari server? Tindakan ini tidak dapat dibatalkan dan seluruh konten catatan akan hilang selamanya."
+        confirmText="Ya, Hapus Permanen"
+        cancelText="Batal"
+      />
 
       {/* Pop Toast Notification */}
       {toast && (

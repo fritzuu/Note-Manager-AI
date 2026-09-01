@@ -1,22 +1,28 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Calendar as CalendarIcon, ChevronLeft, ChevronRight } from "lucide-react";
 import { TaskDocument } from "@/lib/firestore";
+import { useMounted } from "@/hooks/useMounted";
 
 interface CalendarBentoWidgetProps {
   tasks: TaskDocument[];
 }
 
 export function CalendarBentoWidget({ tasks }: CalendarBentoWidgetProps) {
-  const [currentDate, setCurrentDate] = useState(new Date());
+  const mounted = useMounted();
+  const [currentDate, setCurrentDate] = useState<Date>(() => new Date());
+
+  useEffect(() => {
+    setCurrentDate(new Date());
+  }, []);
 
   const year = currentDate.getFullYear();
   const month = currentDate.getMonth();
 
   const monthNames = [
-    "January", "February", "March", "April", "May", "June",
-    "July", "August", "September", "October", "November", "December"
+    "Januari", "Februari", "Maret", "April", "Mei", "Juni",
+    "Juli", "Agustus", "September", "Oktober", "November", "Desember"
   ];
 
   const daysInMonth = new Date(year, month + 1, 0).getDate();
@@ -30,7 +36,7 @@ export function CalendarBentoWidget({ tasks }: CalendarBentoWidgetProps) {
     setCurrentDate(new Date(year, month + 1, 1));
   };
 
-  const today = new Date();
+  const today = mounted ? new Date() : currentDate;
   const isCurrentMonth = today.getFullYear() === year && today.getMonth() === month;
 
   // Extract task deadline dates for dots
@@ -45,7 +51,7 @@ export function CalendarBentoWidget({ tasks }: CalendarBentoWidgetProps) {
   const blankDays = Array.from({ length: firstDayIndex }, (_, i) => i);
 
   return (
-    <div className="p-5 flex flex-col justify-between h-full group bg-white">
+    <div className="p-5 flex flex-col justify-between h-full group bg-white" suppressHydrationWarning>
       {/* Header Month Navigation */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
@@ -53,7 +59,7 @@ export function CalendarBentoWidget({ tasks }: CalendarBentoWidgetProps) {
             <CalendarIcon className="w-4 h-4" />
           </div>
           <div>
-            <h4 className="text-xs font-bold text-gray-900">
+            <h4 className="text-xs font-bold text-gray-900" suppressHydrationWarning>
               {monthNames[month]} {year}
             </h4>
             <p className="text-[10px] text-gray-400">Mini Planner</p>
@@ -64,14 +70,14 @@ export function CalendarBentoWidget({ tasks }: CalendarBentoWidgetProps) {
           <button
             onClick={prevMonth}
             className="p-1 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors cursor-pointer"
-            title="Previous Month"
+            title="Bulan Sebelumnya"
           >
             <ChevronLeft className="w-3.5 h-3.5" />
           </button>
           <button
             onClick={nextMonth}
             className="p-1 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors cursor-pointer"
-            title="Next Month"
+            title="Bulan Berikutnya"
           >
             <ChevronRight className="w-3.5 h-3.5" />
           </button>
@@ -79,16 +85,16 @@ export function CalendarBentoWidget({ tasks }: CalendarBentoWidgetProps) {
       </div>
 
       {/* Mini Calendar Grid */}
-      <div className="my-auto py-1">
+      <div className="my-auto py-1" suppressHydrationWarning>
         {/* Days of week */}
         <div className="grid grid-cols-7 text-center text-[10px] font-bold text-gray-400 mb-1">
-          <span>Su</span>
-          <span>Mo</span>
-          <span>Tu</span>
-          <span>We</span>
-          <span>Th</span>
-          <span>Fr</span>
-          <span>Sa</span>
+          <span>Min</span>
+          <span>Sen</span>
+          <span>Sel</span>
+          <span>Rab</span>
+          <span>Kam</span>
+          <span>Jum</span>
+          <span>Sab</span>
         </div>
 
         {/* Days matrix */}
@@ -112,6 +118,7 @@ export function CalendarBentoWidget({ tasks }: CalendarBentoWidgetProps) {
                       ? "bg-primary text-white font-bold shadow-xs scale-105"
                       : "text-gray-700 hover:bg-primary-50 hover:text-primary"
                   }`}
+                  suppressHydrationWarning
                 >
                   {day}
                 </span>
@@ -127,13 +134,13 @@ export function CalendarBentoWidget({ tasks }: CalendarBentoWidgetProps) {
       {/* Footer */}
       <div className="flex items-center justify-between text-[10px] text-gray-400 pt-1.5 border-t border-border/50">
         <span className="flex items-center gap-1">
-          <span className="w-1.5 h-1.5 bg-amber-500 rounded-full inline-block" /> Task deadline
+          <span className="w-1.5 h-1.5 bg-amber-500 rounded-full inline-block" /> Deadline tugas
         </span>
         <button
           onClick={() => setCurrentDate(new Date())}
           className="text-primary font-bold hover:underline cursor-pointer"
         >
-          Today
+          Hari Ini
         </button>
       </div>
     </div>

@@ -3,15 +3,30 @@
 import React, { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Eye, EyeOff, Mail, Lock, User } from "lucide-react";
+import {
+  Eye,
+  EyeOff,
+  Mail,
+  Lock,
+  User,
+  Brain,
+  AlertCircle,
+  MailCheck,
+  Sparkles,
+  ArrowRight,
+  RefreshCw,
+} from "lucide-react";
 import { BrandingPanel } from "@/components/auth/BrandingPanel";
 import { GoogleButton } from "@/components/auth/GoogleButton";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
-import { signUpWithEmail, signInWithGoogle } from "@/lib/auth";
+import { signUpWithEmail, signInWithGoogle, sendVerificationEmail } from "@/lib/auth";
+
+import { useAuth } from "@/contexts/AuthContext";
 
 export default function RegisterPage() {
   const router = useRouter();
+  const { reloadUser } = useAuth();
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -23,18 +38,26 @@ export default function RegisterPage() {
   const [error, setError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
+  // Verification Screen State
+  const [verificationSent, setVerificationSent] = useState(false);
+  const [registeredEmail, setRegisteredEmail] = useState("");
+  const [resending, setResending] = useState(false);
+  const [resendSuccess, setResendSuccess] = useState(false);
+  const [checkingVerification, setCheckingVerification] = useState(false);
+  const [verificationError, setVerificationError] = useState<string | null>(null);
+
   const setAuthCookie = (token: string) => {
     document.cookie = `auth-token=${token}; path=/; max-age=${60 * 60 * 24 * 7}; SameSite=Lax`;
   };
 
   const validate = () => {
     const errors: Record<string, string> = {};
-    if (!fullName.trim()) errors.fullName = "Full name is required";
-    if (!email.includes("@")) errors.email = "Enter a valid email address";
+    if (!fullName.trim()) errors.fullName = "Nama lengkap wajib diisi";
+    if (!email.includes("@")) errors.email = "Masukkan alamat email yang valid";
     if (password.length < 8)
-      errors.password = "Password must be at least 8 characters";
+      errors.password = "Kata sandi minimal 8 karakter";
     if (password !== confirmPassword)
-      errors.confirmPassword = "Passwords do not match";
+      errors.confirmPassword = "Konfirmasi kata sandi tidak cocok";
     return errors;
   };
 
@@ -51,21 +74,57 @@ export default function RegisterPage() {
     setLoading(true);
 
     try {
-      const credential = await signUpWithEmail(fullName.trim(), email, password);
+      const credential = await signUpWithEmail(fullName.trim(), email.trim(), password);
       const token = await credential.user.getIdToken();
       setAuthCookie(token);
-      router.push("/assessment");
+
+      setRegisteredEmail(email.trim());
+      setVerificationSent(true);
     } catch (err: unknown) {
       const firebaseError = err as { code?: string };
       if (firebaseError.code === "auth/email-already-in-use") {
-        setError("An account with this email already exists. Please sign in.");
+        setError("Email ini sudah terdaftar. Silakan masuk.");
       } else if (firebaseError.code === "auth/weak-password") {
-        setError("Password is too weak. Use at least 8 characters.");
+        setError("Kata sandi terlalu lemah. Gunakan minimal 8 karakter.");
       } else {
-        setError("Registration failed. Please try again.");
+        setError("Pendaftaran gagal. Silakan coba lagi.");
       }
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleResendVerification = async () => {
+    setResending(true);
+    setVerificationError(null);
+    try {
+      await sendVerificationEmail();
+      setResendSuccess(true);
+      setTimeout(() => setResendSuccess(false), 4000);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setResending(false);
+    }
+  };
+
+  const handleCheckAndProceed = async () => {
+    setCheckingVerification(true);
+    setVerificationError(null);
+    try {
+      const isVerified = await reloadUser();
+      if (isVerified) {
+        router.push("/assessment");
+      } else {
+        setVerificationError(
+          "Tautan di Gmail belum dikonfirmasi. Buka email Anda dan klik tautan verifikasi terlebih dahulu."
+        );
+      }
+    } catch (err: unknown) {
+      const errObj = err as { message?: string };
+      setVerificationError(errObj.message || "Gagal memeriksa status email.");
+    } finally {
+      setCheckingVerification(false);
     }
   };
 
@@ -88,6 +147,76 @@ export default function RegisterPage() {
     }
   };
 
+  // ── Verification Sent Screen ──────────────────────────────────────────────
+  if (verificationSent) {
+    return (
+      <div className="min-h-screen flex">
+        <div className="hidden lg:flex lg:w-[45%] xl:w-[42%] shrink-0">
+          <BrandingPanel />
+        </div>
+
+        <div className="flex-1 flex items-center justify-center p-6 sm:p-10 bg-background">
+          <div className="w-full max-w-md bg-white p-8 sm:p-10 rounded-3xl border border-border shadow-card text-center animate-scale-in space-y-6">
+            <div className="w-20 h-20 rounded-3xl bg-primary/10 text-primary flex items-center justify-center mx-auto shadow-inner">
+              <MailCheck className="w-10 h-10" />
+            </div>
+
+            <div className="space-y-2">
+              <h2 className="text-2xl font-extrabold text-gray-900 tracking-tight">
+                Verifikasi Email Telah Dikirim!
+              </h2>
+              <p className="text-sm text-gray-600 leading-relaxed">
+                Tautan verifikasi akun telah kami kirimkan ke:
+              </p>
+              <div className="p-2.5 bg-primary/5 rounded-xl border border-primary/20 text-primary font-bold text-sm break-all font-mono">
+                {registeredEmail}
+              </div>
+              <p className="text-xs text-gray-400 pt-1">
+                Silakan buka kotak masuk atau folder spam email Anda, lalu klik tautan konfirmasi untuk mengaktifkan akun Anda.
+              </p>
+            </div>
+
+            {verificationError && (
+              <div className="p-3 bg-rose-50 text-rose-700 rounded-xl border border-rose-200 text-xs font-bold text-left flex items-start gap-2 animate-shake">
+                <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+                <span>{verificationError}</span>
+              </div>
+            )}
+
+            {resendSuccess && (
+              <div className="p-3 bg-emerald-50 text-emerald-700 rounded-xl border border-emerald-200 text-xs font-bold animate-fade-in">
+                ✓ Email verifikasi baru berhasil dikirim ulang!
+              </div>
+            )}
+
+            <div className="space-y-3 pt-2">
+              <Button
+                variant="primary"
+                size="lg"
+                loading={checkingVerification}
+                onClick={handleCheckAndProceed}
+                icon={<ArrowRight className="w-4 h-4" />}
+                className="w-full font-bold shadow-sm cursor-pointer"
+              >
+                Saya Sudah Verifikasi / Lanjutkan
+              </Button>
+
+              <button
+                type="button"
+                onClick={handleResendVerification}
+                disabled={resending}
+                className="w-full py-2.5 text-xs font-bold text-gray-500 hover:text-primary transition-colors flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${resending ? "animate-spin" : ""}`} />
+                <span>Kirim Ulang Email Verifikasi</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen flex">
       {/* Left: Branding */}
@@ -100,7 +229,7 @@ export default function RegisterPage() {
         <div className="w-full max-w-md animate-slide-up py-4">
           {/* Mobile logo */}
           <div className="flex items-center gap-2 mb-8 lg:hidden">
-            <span className="text-3xl">🌱</span>
+            <Brain className="w-8 h-8 text-primary" />
             <span className="text-xl font-bold text-primary">MindFlow AI</span>
           </div>
 
@@ -114,8 +243,8 @@ export default function RegisterPage() {
           </div>
 
           {error && (
-            <div className="mb-5 p-4 rounded-xl bg-red-50 border border-red-200 text-red-700 text-sm flex gap-2 items-start animate-scale-in">
-              <span className="text-lg shrink-0">⚠️</span>
+            <div className="mb-5 p-4 rounded-xl bg-red-50 border border-red-200 text-red-700 text-sm flex gap-2.5 items-start animate-scale-in">
+              <AlertCircle className="w-5 h-5 text-red-500 shrink-0 mt-0.5" />
               <span>{error}</span>
             </div>
           )}

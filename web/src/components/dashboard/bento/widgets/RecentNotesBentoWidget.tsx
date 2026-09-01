@@ -2,7 +2,7 @@
 
 import React from "react";
 import Link from "next/link";
-import { FileText, ArrowUpRight, Plus, Calendar } from "lucide-react";
+import { FileText, ArrowUpRight, Plus } from "lucide-react";
 import { NoteDocument } from "@/lib/firestore";
 
 interface RecentNotesBentoWidgetProps {
