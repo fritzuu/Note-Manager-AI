@@ -11,7 +11,6 @@ import {
   Sparkles,
   Timer,
   Zap,
-  Loader2,
   Clock,
   Target,
   BarChart2,
@@ -31,6 +30,8 @@ import {
 import { DashboardShell } from "@/components/layout/DashboardShell";
 import { computePomodoroFocus } from "@/lib/pomodoroFuzzy";
 import { Button } from "@/components/ui/Button";
+import { LoadingScreen } from "@/components/ui/LoadingScreen";
+import { ErrorState } from "@/components/ui/ErrorState";
 import { cn } from "@/lib/utils";
 
 const PRIORITY_BADGE_STYLE: Record<PriorityLevel, { bg: string; text: string; border: string; label: string }> = {
@@ -41,16 +42,16 @@ const PRIORITY_BADGE_STYLE: Record<PriorityLevel, { bg: string; text: string; bo
 };
 
 const IMPORTANCE_PRESETS = [
-  { value: 2, label: "Low", desc: "Bisa santai / fleksibel" },
-  { value: 5, label: "Normal", desc: "Tugas mingguan standar" },
-  { value: 8, label: "Important", desc: "Tugas besar / Ujian" },
-  { value: 10, label: "Critical", desc: "Skripsi / Wajib selesai" },
+  { value: 2, label: "Low (2)", desc: "Bisa santai / fleksibel" },
+  { value: 5, label: "Normal (5)", desc: "Tugas mingguan standar" },
+  { value: 8, label: "Important (8)", desc: "Tugas besar / Ujian" },
+  { value: 10, label: "Critical (10)", desc: "Skripsi / Wajib selesai" },
 ];
 
 const DIFFICULTY_PRESETS = [
-  { value: 2, label: "Mudah", desc: "Baca materi / Kuis kilat" },
-  { value: 5, label: "Sedang", desc: "Paper / Laporan praktikum" },
-  { value: 8, label: "Sulit", desc: "Coding rumit / Riset mendalam" },
+  { value: 2, label: "Mudah (2)", desc: "Baca materi / Kuis kilat" },
+  { value: 5, label: "Sedang (5)", desc: "Paper / Laporan praktikum" },
+  { value: 8, label: "Sulit (8)", desc: "Coding rumit / Riset mendalam" },
 ];
 
 export default function EditTaskPage() {
@@ -61,6 +62,7 @@ export default function EditTaskPage() {
 
   const [form, setForm] = useState({
     title: "",
+    workspace: "",
     description: "",
     deadline: "",
     importance: 5,
@@ -75,6 +77,16 @@ export default function EditTaskPage() {
   const [error, setError] = useState("");
   const [showAdvanced, setShowAdvanced] = useState(false);
 
+  const WORKSPACE_PRESETS = [
+    "Kecerdasan Buatan",
+    "Basis Data",
+    "Pemrograman Web",
+    "Jaringan Komputer",
+    "Proyek Akhir",
+    "Organisasi",
+    "Personal",
+  ];
+
   useEffect(() => {
     if (authLoading || !user) return;
     const load = async () => {
@@ -88,6 +100,7 @@ export default function EditTaskPage() {
         const deadlineDate = task.deadline?.toDate ? task.deadline.toDate() : new Date();
         setForm({
           title:       task.title,
+          workspace:   task.workspace || task.course || "",
           description: task.description,
           deadline:    deadlineDate.toISOString().split("T")[0],
           importance:  task.importance,
@@ -124,10 +137,19 @@ export default function EditTaskPage() {
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
-    setForm((prev) => ({
-      ...prev,
-      [name]: ["importance", "difficulty", "progress"].includes(name) ? Number(value) : value,
-    }));
+    if (name === "importance" || name === "difficulty") {
+      let num = Number(value);
+      if (isNaN(num)) num = 1;
+      num = Math.max(1, Math.min(10, num));
+      setForm((prev) => ({ ...prev, [name]: num }));
+    } else if (name === "progress") {
+      let num = Number(value);
+      if (isNaN(num)) num = 0;
+      num = Math.max(0, Math.min(100, num));
+      setForm((prev) => ({ ...prev, [name]: num }));
+    } else {
+      setForm((prev) => ({ ...prev, [name]: value }));
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -138,8 +160,11 @@ export default function EditTaskPage() {
     setSaving(true);
     setError("");
     try {
+      const selectedWs = form.workspace.trim() || "Umum";
       await updateTask(taskId, {
         title:                  form.title.trim(),
+        workspace:              selectedWs,
+        course:                 selectedWs,
         description:            form.description.trim(),
         deadline:               Timestamp.fromDate(new Date(form.deadline)),
         importance:             form.importance,
@@ -164,10 +189,21 @@ export default function EditTaskPage() {
 
   if (authLoading || loading) {
     return (
-      <DashboardShell>
-        <div className="flex items-center justify-center py-24">
-          <Loader2 className="w-8 h-8 animate-spin text-primary" />
-        </div>
+      <DashboardShell fullWidth>
+        <LoadingScreen label="Memuat Detail Tugas..." subtext="Mengambil data tugas dari Firestore" fullHeight />
+      </DashboardShell>
+    );
+  }
+
+  if (error) {
+    return (
+      <DashboardShell fullWidth>
+        <ErrorState
+          title="Tugas Tidak Ditemukan"
+          message={error}
+          showHomeButton
+          fullHeight
+        />
       </DashboardShell>
     );
   }
@@ -228,14 +264,14 @@ export default function EditTaskPage() {
                 </label>
                 <div className="grid grid-cols-3 gap-2.5">
                   {[
-                    { id: "todo", label: "To Do" },
-                    { id: "doing", label: "In Progress" },
-                    { id: "done", label: "Completed" },
+                    { id: "todo" as const, label: "To Do" },
+                    { id: "doing" as const, label: "In Progress" },
+                    { id: "done" as const, label: "Completed" },
                   ].map((s) => (
                     <button
                       key={s.id}
                       type="button"
-                      onClick={() => setForm((prev) => ({ ...prev, status: s.id as any }))}
+                      onClick={() => setForm((prev) => ({ ...prev, status: s.id }))}
                       className={cn(
                         "py-3 rounded-xl border text-sm font-bold transition-all",
                         form.status === s.id
@@ -261,6 +297,49 @@ export default function EditTaskPage() {
                   value={form.title}
                   onChange={handleChange}
                   className="w-full h-12 md:h-13 px-4 rounded-xl border border-border bg-white text-base text-gray-900 font-medium focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                />
+              </div>
+
+              {/* Workspace / Mata Kuliah */}
+              <div className="space-y-3 bg-gradient-to-br from-primary/5 to-secondary/5 p-4 rounded-2xl border border-primary/15">
+                <div className="flex items-center justify-between">
+                  <label className="text-sm md:text-base font-bold text-gray-800 flex items-center gap-2" htmlFor="edit-workspace">
+                    <BookOpen className="w-5 h-5 text-primary" />
+                    <span>Workspace / Mata Kuliah</span>
+                  </label>
+                  <span className="text-xs text-gray-400 font-semibold">Pilih atau ubah</span>
+                </div>
+
+                {/* Quick Presets */}
+                <div className="flex flex-wrap gap-1.5">
+                  {WORKSPACE_PRESETS.map((preset) => {
+                    const isSelected = form.workspace === preset;
+                    return (
+                      <button
+                        key={preset}
+                        type="button"
+                        onClick={() => setForm((prev) => ({ ...prev, workspace: isSelected ? "" : preset }))}
+                        className={cn(
+                          "px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer border",
+                          isSelected
+                            ? "bg-primary text-white border-primary shadow-xs"
+                            : "bg-white text-gray-600 border-border hover:border-primary/40 hover:bg-primary-50/40"
+                        )}
+                      >
+                        {preset}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                <input
+                  id="edit-workspace"
+                  name="workspace"
+                  type="text"
+                  placeholder="Atau ketik nama workspace kustom (misal: Struktur Data, Robotika)..."
+                  value={form.workspace}
+                  onChange={handleChange}
+                  className="w-full h-11 px-3.5 rounded-xl border border-border bg-white text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all font-medium shadow-xs"
                 />
               </div>
 
@@ -306,81 +385,140 @@ export default function EditTaskPage() {
                 )}
               </div>
 
-              {/* Importance Preset Buttons */}
-              <div className="space-y-2.5">
+              {/* Importance Section (Manual Number + Slider + Presets) */}
+              <div className="space-y-3 bg-gray-50/60 p-4 rounded-2xl border border-border/80">
                 <div className="flex items-center justify-between">
                   <label className="text-sm md:text-base font-bold text-gray-800 flex items-center gap-2">
                     <Target className="w-5 h-5 text-primary" />
                     Tingkat Kepentingan
                   </label>
-                  <span className="text-xs md:text-sm font-bold text-primary bg-primary/10 px-2.5 py-1 rounded-lg">
-                    Skala: {form.importance} / 10
-                  </span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-gray-500 font-medium">Input Manual:</span>
+                    <input
+                      type="number"
+                      name="importance"
+                      min={1}
+                      max={10}
+                      value={form.importance}
+                      onChange={handleChange}
+                      className="w-16 h-8 text-center text-sm font-black text-primary bg-white border border-primary/30 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
+                    />
+                    <span className="text-xs font-bold text-gray-400">/ 10</span>
+                  </div>
                 </div>
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+
+                {/* Range Slider */}
+                <input
+                  type="range"
+                  name="importance"
+                  min={1}
+                  max={10}
+                  step={1}
+                  value={form.importance}
+                  onChange={handleChange}
+                  className="w-full h-2 rounded-full appearance-none bg-gray-200 accent-primary cursor-pointer"
+                />
+
+                {/* Quick Presets */}
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1">
                   {IMPORTANCE_PRESETS.map((p) => {
-                    const isSelected = Math.abs(form.importance - p.value) <= 1.5;
+                    const isSelected = form.importance === p.value;
                     return (
                       <button
                         key={p.label}
                         type="button"
                         onClick={() => setForm((prev) => ({ ...prev, importance: p.value }))}
                         className={cn(
-                          "flex flex-col items-start p-3 rounded-xl border text-left transition-all",
+                          "flex flex-col items-start p-2.5 rounded-xl border text-left transition-all",
                           isSelected
                             ? "border-primary bg-primary/10 text-primary ring-2 ring-primary/30 shadow-sm"
-                            : "border-border hover:border-gray-300 text-gray-700 bg-gray-50/70"
+                            : "border-border hover:border-gray-300 text-gray-700 bg-white"
                         )}
                       >
-                        <span className="text-sm font-extrabold">{p.label}</span>
-                        <span className="text-xs text-gray-500 leading-snug mt-1">{p.desc}</span>
+                        <span className="text-xs md:text-sm font-extrabold">{p.label}</span>
+                        <span className="text-[11px] text-gray-500 leading-tight mt-0.5">{p.desc}</span>
                       </button>
                     );
                   })}
                 </div>
               </div>
 
-              {/* Difficulty Preset Buttons */}
-              <div className="space-y-2.5">
+              {/* Difficulty Section (Manual Number + Slider + Presets) */}
+              <div className="space-y-3 bg-gray-50/60 p-4 rounded-2xl border border-border/80">
                 <div className="flex items-center justify-between">
                   <label className="text-sm md:text-base font-bold text-gray-800 flex items-center gap-2">
                     <BarChart2 className="w-5 h-5 text-primary" />
                     Tingkat Kesulitan
                   </label>
-                  <span className="text-xs md:text-sm font-bold text-primary bg-primary/10 px-2.5 py-1 rounded-lg">
-                    Skala: {form.difficulty} / 10
-                  </span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-gray-500 font-medium">Input Manual:</span>
+                    <input
+                      type="number"
+                      name="difficulty"
+                      min={1}
+                      max={10}
+                      value={form.difficulty}
+                      onChange={handleChange}
+                      className="w-16 h-8 text-center text-sm font-black text-primary bg-white border border-primary/30 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
+                    />
+                    <span className="text-xs font-bold text-gray-400">/ 10</span>
+                  </div>
                 </div>
-                <div className="grid grid-cols-3 gap-2.5">
+
+                {/* Range Slider */}
+                <input
+                  type="range"
+                  name="difficulty"
+                  min={1}
+                  max={10}
+                  step={1}
+                  value={form.difficulty}
+                  onChange={handleChange}
+                  className="w-full h-2 rounded-full appearance-none bg-gray-200 accent-primary cursor-pointer"
+                />
+
+                {/* Quick Presets */}
+                <div className="grid grid-cols-3 gap-2 pt-1">
                   {DIFFICULTY_PRESETS.map((p) => {
-                    const isSelected = Math.abs(form.difficulty - p.value) <= 1.5;
+                    const isSelected = form.difficulty === p.value;
                     return (
                       <button
                         key={p.label}
                         type="button"
                         onClick={() => setForm((prev) => ({ ...prev, difficulty: p.value }))}
                         className={cn(
-                          "flex flex-col items-start p-3 rounded-xl border text-left transition-all",
+                          "flex flex-col items-start p-2.5 rounded-xl border text-left transition-all",
                           isSelected
                             ? "border-primary bg-primary/10 text-primary ring-2 ring-primary/30 shadow-sm"
-                            : "border-border hover:border-gray-300 text-gray-700 bg-gray-50/70"
+                            : "border-border hover:border-gray-300 text-gray-700 bg-white"
                         )}
                       >
-                        <span className="text-sm font-extrabold">{p.label}</span>
-                        <span className="text-xs text-gray-500 leading-snug mt-1">{p.desc}</span>
+                        <span className="text-xs md:text-sm font-extrabold">{p.label}</span>
+                        <span className="text-[11px] text-gray-500 leading-tight mt-0.5">{p.desc}</span>
                       </button>
                     );
                   })}
                 </div>
               </div>
 
-              {/* Progress Slider */}
-              <div className="space-y-2 pt-1">
+              {/* Progress Slider & Manual Number */}
+              <div className="space-y-2 bg-gray-50/60 p-4 rounded-2xl border border-border/80">
                 <div className="flex items-center justify-between">
                   <label className="text-sm md:text-base font-bold text-gray-800" htmlFor="edit-progress">
-                    Progres Pengerjaan Saat Ini
+                    Progres Pengerjaan
                   </label>
-                  <span className="text-sm font-extrabold text-primary bg-primary/10 px-3 py-0.5 rounded-full">{form.progress}% Selesai</span>
+                  <div className="flex items-center gap-1.5">
+                    <input
+                      type="number"
+                      name="progress"
+                      min={0}
+                      max={100}
+                      value={form.progress}
+                      onChange={handleChange}
+                      className="w-16 h-8 text-center text-sm font-black text-primary bg-white border border-primary/30 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
+                    />
+                    <span className="text-xs font-bold text-gray-500">%</span>
+                  </div>
                 </div>
                 <input
                   id="edit-progress"
@@ -400,9 +538,9 @@ export default function EditTaskPage() {
                 <Button type="submit" variant="primary" size="lg" loading={saving} className="flex-1 py-3 text-base font-bold shadow-md">
                   {saving ? "Menyimpan Perubahan..." : "Simpan Perubahan"}
                 </Button>
-                <Link href="/tasks">
-                  <Button type="button" variant="outline" size="lg" className="py-3 text-base font-semibold">Batal</Button>
-                </Link>
+                <Button variant="outline" size="lg" href="/tasks" className="py-3 text-base font-semibold">
+                  Batal
+                </Button>
               </div>
             </form>
           </div>

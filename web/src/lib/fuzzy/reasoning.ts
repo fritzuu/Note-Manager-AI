@@ -1,7 +1,26 @@
 import type { FuzzyInputs, PriorityLevel, RuleResult, RiskLevel } from "./types";
 
+const CONDITION_ID_MAP: Record<string, string> = {
+  "Deadline Near": "Tenggat waktu sangat dekat",
+  "Deadline Medium": "Tenggat waktu dalam rentang sedang",
+  "Deadline Far": "Tenggat waktu masih panjang",
+  "Importance High": "tingkat kepentingan tinggi",
+  "Importance Medium": "tingkat kepentingan standar",
+  "Importance Low": "tingkat kepentingan fleksibel",
+  "Progress Low": "progres pengerjaan masih minim",
+  "Progress Medium": "progres pengerjaan sudah separuh jalan",
+  "Progress High": "tugas sudah mendekati selesai",
+  "Difficulty Hard": "tingkat kesulitan cukup rumit",
+  "Difficulty Medium": "tingkat kesulitan sedang",
+  "Difficulty Easy": "tingkat kesulitan ringan",
+  "Academic Risk Critical": "profil risiko akademik sangat tinggi",
+  "Academic Risk High": "profil risiko akademik perlu perhatian",
+  "Academic Risk Medium": "profil risiko akademik stabil",
+  "Academic Risk Low": "profil risiko akademik aman",
+};
+
 /**
- * Builds a human-readable reasoning string based on the activated rules.
+ * Builds a natural, human-friendly reasoning string based on the activated fuzzy rules.
  */
 export function buildReasoning(
   inputs: FuzzyInputs,
@@ -9,24 +28,30 @@ export function buildReasoning(
   activatedRules: RuleResult[]
 ): string {
   if (inputs.progress >= 100) {
-    return "Task is fully complete — no action needed.";
+    return "Tugas sudah selesai 100% — tidak ada tindakan lebih lanjut yang diperlukan.";
   }
   if (inputs.deadlineDays < 0) {
-    return "Task is OVERDUE! Immediate action required.";
+    return "Tugas sudah MELEWATI tenggat waktu (Terlambat)! Sangat disarankan untuk segera diselesaikan hari ini.";
   }
 
   if (activatedRules.length === 0) {
-    return "No strong priority signals detected.";
+    return "Tugas berada pada prioritas standar tanpa sinyal urgensi mendesak.";
   }
 
-  // Find the strongest rule that matches the final output level
+  // Find dominant rule matching output level
   const dominantRule = activatedRules.find(r => r.outputLevel === priorityLevel) || activatedRules[0];
+  const indonesianConditions = dominantRule.conditions.map(c => CONDITION_ID_MAP[c] || c);
 
-  let reason = `Priority is ${priorityLevel} because ${dominantRule.conditions.join(" and ")}.`;
+  const levelLabel = 
+    priorityLevel === "Critical" ? "Sangat Mendesak (Urgent)" :
+    priorityLevel === "High" ? "Tinggi (High)" :
+    priorityLevel === "Medium" ? "Sedang (Medium)" : "Fleksibel (Low)";
+
+  let reason = `Status diprioritaskan ${levelLabel} karena ${indonesianConditions.join(" serta ")}.`;
 
   if (inputs.progress > 0 && inputs.progress < 100) {
     if (priorityLevel === "Critical" || priorityLevel === "High") {
-      reason += ` Progress is at ${inputs.progress.toFixed(0)}%, keep pushing.`;
+      reason += ` Progres saat ini ${inputs.progress.toFixed(0)}%, teruskan fokusmu!`;
     }
   }
 
@@ -49,7 +74,7 @@ export function deriveRiskLevel(
 }
 
 /**
- * Estimates required focus minutes based on difficulty and priority.
+ * Estimates required focus minutes based on difficulty, priority, and progress.
  */
 export function estimateFocusMinutes(difficulty: number, priorityScore: number, progress: number): number {
   if (progress >= 100) return 0;

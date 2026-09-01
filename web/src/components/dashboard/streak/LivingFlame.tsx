@@ -1,6 +1,6 @@
 "use client";
 
-import React from "react";
+import React, { useId } from "react";
 
 export type FlameTier = "spark" | "scholar" | "diamond" | "inferno";
 
@@ -9,13 +9,14 @@ interface LivingFlameProps {
   streakDays?: number;
   size?: "sm" | "md" | "lg" | "xl";
   className?: string;
+  showGlow?: boolean;
 }
 
-const SIZE_MAP = {
-  sm: "w-5 h-5",
-  md: "w-8 h-8",
-  lg: "w-16 h-16",
-  xl: "w-24 h-24",
+const SIZE_CONFIG = {
+  sm: "w-6 h-7",
+  md: "w-10 h-12",
+  lg: "w-16 h-20",
+  xl: "w-28 h-34",
 };
 
 export function LivingFlame({
@@ -23,7 +24,10 @@ export function LivingFlame({
   streakDays,
   size = "md",
   className = "",
+  showGlow = true,
 }: LivingFlameProps) {
+  const uniqueId = useId().replace(/:/g, "_");
+
   // Infer tier from streakDays if provided
   const getTier = (): FlameTier => {
     if (propTier) return propTier;
@@ -31,128 +35,172 @@ export function LivingFlame({
       if (streakDays >= 30) return "inferno";
       if (streakDays >= 14) return "diamond";
       if (streakDays >= 7) return "scholar";
+      if (streakDays >= 1) return "spark";
     }
-    return "spark";
+    return "scholar"; // Default to classic flame
   };
 
   const activeTier = getTier();
+  const sizeClasses = SIZE_CONFIG[size] || SIZE_CONFIG.md;
 
-  // Gradients for outer, middle, and inner cores
-  const TIER_CONFIG = {
-    inferno: {
-      outer: ["#fef08a", "#f59e0b", "#b45309"],
-      mid: ["#fffbeb", "#fcd34d", "#f59e0b"],
-      core: "#ffffff",
-      ember: "#fef08a",
-      glowFilter: "drop-shadow(0 0 16px rgba(245, 158, 11, 0.85))",
-    },
-    diamond: {
-      outer: ["#f3e8ff", "#c084fc", "#7e22ce"],
-      mid: ["#ffffff", "#e879f9", "#a855f7"],
-      core: "#ffffff",
-      ember: "#f5d0fe",
-      glowFilter: "drop-shadow(0 0 16px rgba(168, 85, 247, 0.85))",
-    },
+  // Tier Color Themes based on Reference Aesthetic
+  const TIER_THEMES = {
+    // Classic Solar Flame (Exact match with user image)
     scholar: {
-      outer: ["#fef08a", "#f97316", "#dc2626"],
-      mid: ["#ffffff", "#fed7aa", "#f97316"],
-      core: "#ffffff",
-      ember: "#fed7aa",
-      glowFilter: "drop-shadow(0 0 16px rgba(239, 68, 68, 0.85))",
+      gradStops: [
+        { offset: "0%", color: "#FFF176" },    // Bright lemon yellow top
+        { offset: "28%", color: "#FFCA28" },   // Warm amber
+        { offset: "55%", color: "#FF7043" },   // Coral orange
+        { offset: "82%", color: "#F4511E" },   // Deep flame red-orange
+        { offset: "100%", color: "#D84315" },  // Rich base
+      ],
+      glowColor: "rgba(255, 112, 67, 0.45)",
+      coreColor: "#FFFFFF",
+      gradAngle: { x1: "42%", y1: "0%", x2: "58%", y2: "100%" },
     },
+    // Legendary Inferno (Golden Sunburst)
+    inferno: {
+      gradStops: [
+        { offset: "0%", color: "#FEF08A" },
+        { offset: "30%", color: "#FBBF24" },
+        { offset: "60%", color: "#F59E0B" },
+        { offset: "85%", color: "#D97706" },
+        { offset: "100%", color: "#B45309" },
+      ],
+      glowColor: "rgba(245, 158, 11, 0.5)",
+      coreColor: "#FFFFFF",
+      gradAngle: { x1: "40%", y1: "0%", x2: "60%", y2: "100%" },
+    },
+    // Diamond Focus (Plasma Amethyst)
+    diamond: {
+      gradStops: [
+        { offset: "0%", color: "#FDF4FF" },
+        { offset: "25%", color: "#F0ABFC" },
+        { offset: "55%", color: "#C084FC" },
+        { offset: "80%", color: "#9333EA" },
+        { offset: "100%", color: "#6B21A8" },
+      ],
+      glowColor: "rgba(168, 85, 247, 0.5)",
+      coreColor: "#FFFFFF",
+      gradAngle: { x1: "40%", y1: "0%", x2: "60%", y2: "100%" },
+    },
+    // Spark Habit (Mint Emerald)
     spark: {
-      outer: ["#a7f3d0", "#34d399", "#059669"],
-      mid: ["#ecfdf5", "#6ee7b7", "#10b981"],
-      core: "#ffffff",
-      ember: "#a7f3d0",
-      glowFilter: "drop-shadow(0 0 14px rgba(16, 185, 129, 0.8))",
+      gradStops: [
+        { offset: "0%", color: "#E6FFFA" },
+        { offset: "25%", color: "#6EE7B7" },
+        { offset: "55%", color: "#10B981" },
+        { offset: "80%", color: "#059669" },
+        { offset: "100%", color: "#047857" },
+      ],
+      glowColor: "rgba(16, 185, 129, 0.45)",
+      coreColor: "#FFFFFF",
+      gradAngle: { x1: "40%", y1: "0%", x2: "60%", y2: "100%" },
     },
   };
 
-  const config = TIER_CONFIG[activeTier];
-  const sizeClasses = SIZE_MAP[size] || SIZE_MAP.md;
-  const gradientId = `living-flame-${activeTier}-${size}`;
+  const theme = TIER_THEMES[activeTier] || TIER_THEMES.scholar;
 
   return (
     <div
-      className={`relative inline-flex items-center justify-center select-none ${sizeClasses} ${className}`}
-      style={{ filter: config.glowFilter }}
+      className={`relative inline-flex items-center justify-center select-none shrink-0 ${sizeClasses} ${className}`}
+      style={{
+        filter: showGlow ? `drop-shadow(0 4px 18px ${theme.glowColor})` : undefined,
+      }}
     >
-      {/* Rising Embers (Only on larger sizes) */}
-      {(size === "lg" || size === "xl") && (
-        <>
-          <div
-            className="absolute top-1 left-1/3 w-1.5 h-1.5 rounded-full animate-ember-rise-1 pointer-events-none"
-            style={{ backgroundColor: config.ember }}
-          />
-          <div
-            className="absolute top-0 right-1/3 w-1 h-1 rounded-full animate-ember-rise-2 pointer-events-none"
-            style={{ backgroundColor: config.ember }}
-          />
-        </>
+      {/* Background Ambient Glow */}
+      {showGlow && (
+        <div
+          className="absolute inset-0 rounded-full blur-lg pointer-events-none transition-all duration-700 opacity-60 animate-pulse"
+          style={{
+            backgroundColor: theme.glowColor,
+            transform: "scale(1.25)",
+          }}
+        />
       )}
 
-      {/* SVG Living Multi-layered Fire with Explicit Keyframes */}
+      {/* SVG Exact Duolingo-Style Iconic Living Flame */}
       <svg
-        viewBox="0 0 32 36"
+        viewBox="0 0 100 115"
         fill="none"
         xmlns="http://www.w3.org/2000/svg"
-        className="w-full h-full overflow-visible pointer-events-none"
+        className="w-full h-full overflow-visible pointer-events-none drop-shadow-sm"
       >
         <defs>
-          {/* Outer Flame Gradient */}
+          {/* Main Flame Gradient */}
           <linearGradient
-            id={`${gradientId}-outer`}
-            x1="16"
-            y1="2"
-            x2="16"
-            y2="34"
-            gradientUnits="userSpaceOnUse"
+            id={`${uniqueId}-flame-grad`}
+            x1={theme.gradAngle.x1}
+            y1={theme.gradAngle.y1}
+            x2={theme.gradAngle.x2}
+            y2={theme.gradAngle.y2}
           >
-            <stop stopColor={config.outer[0]} />
-            <stop offset="0.45" stopColor={config.outer[1]} />
-            <stop offset="1" stopColor={config.outer[2]} />
+            {theme.gradStops.map((stop, idx) => (
+              <stop key={idx} offset={stop.offset} stopColor={stop.color} />
+            ))}
           </linearGradient>
 
-          {/* Middle Tongue Gradient */}
-          <linearGradient
-            id={`${gradientId}-mid`}
-            x1="16"
-            y1="10"
-            x2="16"
-            y2="34"
-            gradientUnits="userSpaceOnUse"
+          {/* Smooth Inner Shadow/Highlight Gradient */}
+          <radialGradient
+            id={`${uniqueId}-highlight-grad`}
+            cx="48%"
+            cy="35%"
+            r="45%"
+            fx="45%"
+            fy="25%"
           >
-            <stop stopColor={config.mid[0]} />
-            <stop offset="0.5" stopColor={config.mid[1]} />
-            <stop offset="1" stopColor={config.mid[2]} />
-          </linearGradient>
+            <stop offset="0%" stopColor="#FFFFFF" stopOpacity="0.28" />
+            <stop offset="60%" stopColor="#FFFFFF" stopOpacity="0" />
+          </radialGradient>
         </defs>
 
-        {/* 1. Outer Flame Tongue (Swaying fluidly) */}
-        <g className="flame-sway-anim">
+        {/* Flame Body Group with Gentle Lifelike Organic Swaying */}
+        <g className="flame-duo-anim">
+          {/* 1. Main Outer Flame Silhouette */}
           <path
-            d="M16 2C16 2 20.5 7.5 20.5 11C20.5 12.8 19.8 14.3 18.8 15.5C21.8 16.2 25 19.3 25 24C25 28.5 21 34 16 34C11 34 7 28.5 7 24C7 20.2 9.2 17.5 12.2 16.2C11 15 10 13.2 10 11C10 7.5 16 2 16 2Z"
-            fill={`url(#${gradientId}-outer)`}
+            d="M 46 14
+               C 44 26, 26 42, 21 60
+               C 14 78, 22 98, 42 107
+               C 56 113, 72 110, 82 99
+               C 92 88, 93 72, 88 56
+               C 85 46, 80 40, 81 37
+               C 81 37, 72 44, 64 47
+               C 56 50, 50 43, 48 31
+               C 46 22, 46 14, 46 14 Z"
+            fill={`url(#${uniqueId}-flame-grad)`}
           />
-        </g>
 
-        {/* 2. Middle Flame Tongue (Flickering with dynamic phase) */}
-        <g className="flame-flicker-anim">
+          {/* 2. Ambient Top-Left Soft Highlight Layer */}
           <path
-            d="M16 11C16 11 19 14.5 19 17C19 18.2 18.5 19.3 17.8 20C19.8 20.5 21.5 22.5 21.5 25.5C21.5 28.5 19 32 16 32C13 32 10.5 28.5 10.5 25.5C10.5 23 12 21.2 13.8 20.2C13.2 19.5 12.8 18.2 12.8 17C12.8 14.5 16 11 16 11Z"
-            fill={`url(#${gradientId}-mid)`}
+            d="M 46 14
+               C 44 26, 26 42, 21 60
+               C 14 78, 22 98, 42 107
+               C 56 113, 72 110, 82 99
+               C 92 88, 93 72, 88 56
+               C 85 46, 80 40, 81 37
+               C 81 37, 72 44, 64 47
+               C 56 50, 50 43, 48 31
+               C 46 22, 46 14, 46 14 Z"
+            fill={`url(#${uniqueId}-highlight-grad)`}
           />
-        </g>
 
-        {/* 3. Hot White-Core Pulse (Center kernel) */}
-        <g className="flame-core-anim">
-          <path
-            d="M16 19C16 19 18 21.5 18 23.5C18 24.5 17.5 25.5 17 26C18 26.5 18.5 27.5 18.5 28.8C18.5 30.5 17.2 31.5 16 31.5C14.8 31.5 13.5 30.5 13.5 28.8C13.5 27.5 14 26.5 15 26C14.5 25.5 14 24.5 14 23.5C14 21.5 16 19 16 19Z"
-            fill={config.core}
-          />
+          {/* 3. Iconic White Hot Core (Matches exact reference geometry) */}
+          <g className="flame-duo-core">
+            <path
+              d="M 49 68
+                 C 47 74, 38 82, 36 90
+                 C 34 98, 38 106, 48 108
+                 C 54 109, 60 108, 64 103
+                 C 68 98, 68 91, 65 83
+                 C 64 78, 62 75, 63 73
+                 C 63 73, 59 76, 56 77
+                 C 52 78, 50 75, 49 68 Z"
+              fill={theme.coreColor}
+            />
+          </g>
         </g>
       </svg>
     </div>
   );
 }
+

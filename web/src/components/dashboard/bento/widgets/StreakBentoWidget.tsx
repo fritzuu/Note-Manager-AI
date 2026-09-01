@@ -1,9 +1,10 @@
 "use client";
 
 import React, { useState } from "react";
-import { Flame, Share2, Zap } from "lucide-react";
+import { Share2, Zap } from "lucide-react";
 import { PomodoroSession } from "@/lib/firestore";
 import { useAuth } from "@/contexts/AuthContext";
+import { useScreenTime } from "@/contexts/ScreenTimeContext";
 import { StreakShareModal } from "@/components/dashboard/streak/StreakShareModal";
 import { LivingFlame } from "@/components/dashboard/streak/LivingFlame";
 
@@ -13,6 +14,7 @@ interface StreakBentoWidgetProps {
 
 export function StreakBentoWidget({ sessions }: StreakBentoWidgetProps) {
   const { user, userDoc } = useAuth();
+  const { todayMinutes: screenTimeMins, history: screenTimeHistory } = useScreenTime();
   const [shareModalOpen, setShareModalOpen] = useState(false);
 
   const today = new Date();
@@ -20,19 +22,27 @@ export function StreakBentoWidget({ sessions }: StreakBentoWidgetProps) {
     const d = s.startedAt?.toDate ? s.startedAt.toDate() : null;
     return d && d.toDateString() === today.toDateString() && s.completed;
   });
-  const todayMinutes = todaySessions.reduce((acc, s) => acc + s.duration, 0);
+  const pomodoroMins = todaySessions.reduce((acc, s) => acc + s.duration, 0);
+  const todayMinutes = Math.max(pomodoroMins, screenTimeMins);
 
-  // Real 7-day streak calculation
+  // Real 7-day streak calculation from Screen Time + Pomodoro Sessions
   let streakDays = 0;
   for (let i = 0; i < 30; i++) {
     const d = new Date(today);
     d.setDate(d.getDate() - i);
     const dayStr = d.toDateString();
+    const isoDateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+
     const hasSession = sessions.some((s) => {
       const sd = s.startedAt?.toDate ? s.startedAt.toDate() : null;
       return sd && sd.toDateString() === dayStr && s.completed;
     });
-    if (hasSession) streakDays++;
+
+    const hasScreenTime =
+      (i === 0 && screenTimeMins > 0) ||
+      screenTimeHistory.some((h) => h.dateStr === isoDateStr && h.screenTimeSeconds >= 60);
+
+    if (hasSession || hasScreenTime) streakDays++;
     else if (i > 0) break;
   }
 
@@ -43,7 +53,7 @@ export function StreakBentoWidget({ sessions }: StreakBentoWidgetProps) {
         bg: "from-amber-500 via-orange-500 to-yellow-500",
         flameFill: "text-yellow-100 fill-yellow-200",
         glow: "drop-shadow-[0_0_20px_rgba(245,158,11,0.9)]",
-        tierTitle: "Inferno 👑",
+        tierTitle: "Inferno",
       };
     }
     if (days >= 14) {
@@ -51,7 +61,7 @@ export function StreakBentoWidget({ sessions }: StreakBentoWidgetProps) {
         bg: "from-purple-600 via-pink-600 to-indigo-600",
         flameFill: "text-pink-200 fill-purple-200",
         glow: "drop-shadow-[0_0_20px_rgba(168,85,247,0.9)]",
-        tierTitle: "Diamond 💎",
+        tierTitle: "Diamond",
       };
     }
     if (days >= 7) {
@@ -59,14 +69,14 @@ export function StreakBentoWidget({ sessions }: StreakBentoWidgetProps) {
         bg: "from-orange-500 via-amber-500 to-red-500",
         flameFill: "text-yellow-200 fill-yellow-300",
         glow: "drop-shadow-[0_0_20px_rgba(249,115,22,0.9)]",
-        tierTitle: "Scholar 🔥",
+        tierTitle: "Scholar",
       };
     }
     return {
       bg: "from-emerald-600 via-teal-600 to-primary",
       flameFill: "text-emerald-100 fill-emerald-200",
       glow: "drop-shadow-[0_0_15px_rgba(16,185,129,0.9)]",
-      tierTitle: "Spark ⚡",
+      tierTitle: "Spark",
     };
   };
 
@@ -87,6 +97,7 @@ export function StreakBentoWidget({ sessions }: StreakBentoWidgetProps) {
       <div
         onClick={() => setShareModalOpen(true)}
         className={`p-5 flex flex-col justify-between h-full group bg-gradient-to-br ${theme.bg} text-white cursor-pointer relative overflow-hidden transition-all duration-500`}
+        suppressHydrationWarning
       >
         {/* Floating Sparks */}
         <div className="absolute inset-0 pointer-events-none">
@@ -95,7 +106,7 @@ export function StreakBentoWidget({ sessions }: StreakBentoWidgetProps) {
         </div>
 
         {/* Header */}
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between" suppressHydrationWarning>
           <div className="flex items-center gap-1.5 bg-black/25 backdrop-blur-md px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wider">
             <Zap className="w-3 h-3 text-yellow-300" />
             <span>{theme.tierTitle}</span>

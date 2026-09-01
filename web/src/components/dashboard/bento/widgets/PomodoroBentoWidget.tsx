@@ -13,7 +13,6 @@ import {
   Coffee,
   CheckSquare,
   ChevronDown,
-  Sparkles,
 } from "lucide-react";
 import { usePomodoro } from "@/contexts/PomodoroContext";
 import { Button } from "@/components/ui/Button";

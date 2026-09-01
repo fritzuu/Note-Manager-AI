@@ -3,7 +3,6 @@
 import React, { useState, useRef } from "react";
 import {
   X,
-  Flame,
   Share2,
   Copy,
   Check,
@@ -50,7 +49,6 @@ export function StreakShareModal({
         theme: "from-amber-500 via-orange-600 to-red-600",
         glow: "rgba(245, 158, 11, 0.6)",
         flameGradient: ["#fef08a", "#f59e0b", "#b45309"],
-        flameEmoji: "👑",
       };
     }
     if (days >= 14) {
@@ -60,7 +58,6 @@ export function StreakShareModal({
         theme: "from-purple-600 via-pink-600 to-orange-500",
         glow: "rgba(168, 85, 247, 0.6)",
         flameGradient: ["#e9d5ff", "#c084fc", "#7e22ce"],
-        flameEmoji: "💎",
       };
     }
     if (days >= 7) {
@@ -70,7 +67,6 @@ export function StreakShareModal({
         theme: "from-orange-500 via-red-500 to-amber-500",
         glow: "rgba(239, 68, 68, 0.6)",
         flameGradient: ["#fef08a", "#f97316", "#dc2626"],
-        flameEmoji: "🔥",
       };
     }
     return {
@@ -79,13 +75,12 @@ export function StreakShareModal({
       theme: "from-emerald-600 via-teal-600 to-primary",
       glow: "rgba(79, 138, 107, 0.6)",
       flameGradient: ["#a7f3d0", "#34d399", "#059669"],
-      flameEmoji: "⚡",
     };
   };
 
   const tier = getStreakTier(currentStreak);
   const shareUrl = typeof window !== "undefined" ? window.location.origin : "https://mindflow.ai";
-  const shareText = `🔥 I am on a ${currentStreak}-day study streak on MindFlow AI! I just completed ${todayMinutes} focus minutes today. Join me and boost your productivity! 👉 ${shareUrl}`;
+  const shareText = `I am on a ${currentStreak}-day study streak on MindFlow AI! I just completed ${todayMinutes} focus minutes today. Join me and boost your productivity! ${shareUrl}`;
 
   const handleCopyLink = async () => {
     try {
@@ -172,7 +167,7 @@ export function StreakShareModal({
 
       // Flame emoji / icon
       ctx.font = "140px serif";
-      ctx.fillText(tier.flameEmoji, 540, 430);
+      ctx.fillText("🔥", 540, 430);
 
       // Streak number
       ctx.font = "900 160px Inter, sans-serif";
@@ -297,10 +292,10 @@ export function StreakShareModal({
         <div className="p-6 bg-white space-y-4 overflow-y-auto">
           <div className="text-center space-y-0.5">
             <h4 className="text-xs font-bold text-gray-900">
-              Share your achievement & inspire friends! 🚀
+              Bagikan pencapaian & inspirasi teman belajarmu
             </h4>
             <p className="text-[11px] text-gray-500">
-              Export high-res card or invite friends to join your study challenge.
+              Simpan kartu grafis atau undang teman untuk bergabung.
             </p>
           </div>
 

@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
+import { Brain } from "lucide-react";
 
 const BRAND_CHARS = Array.from("MindFlow AI");
 
@@ -48,8 +49,8 @@ export function BrandingPanel() {
       <div className="relative z-10 flex flex-col h-full p-10 lg:p-12">
         {/* ── Logo (top-left, enlarged, no text) ── */}
         <div className="shrink-0">
-          <div className="w-16 h-16 lg:w-20 lg:h-20 rounded-2xl bg-white/15 backdrop-blur-sm flex items-center justify-center text-4xl lg:text-5xl shadow-lg shadow-black/10">
-            🌱
+          <div className="w-16 h-16 lg:w-20 lg:h-20 rounded-2xl bg-white/15 backdrop-blur-sm flex items-center justify-center shadow-lg shadow-black/10 text-white">
+            <Brain className="w-9 h-9 lg:w-11 lg:h-11 text-white" />
           </div>
         </div>
 

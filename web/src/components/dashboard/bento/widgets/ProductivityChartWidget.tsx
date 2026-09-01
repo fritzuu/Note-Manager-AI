@@ -4,14 +4,13 @@ import React, { useState } from "react";
 import Link from "next/link";
 import {
   TrendingUp,
-  Flame,
   ArrowUpRight,
-  Clock,
   Share2,
   Sparkles,
 } from "lucide-react";
 import { PomodoroSession } from "@/lib/firestore";
 import { useAuth } from "@/contexts/AuthContext";
+import { useScreenTime } from "@/contexts/ScreenTimeContext";
 import { StreakShareModal } from "@/components/dashboard/streak/StreakShareModal";
 import { LivingFlame } from "@/components/dashboard/streak/LivingFlame";
 
@@ -21,6 +20,7 @@ interface ProductivityChartWidgetProps {
 
 export function ProductivityChartWidget({ sessions }: ProductivityChartWidgetProps) {
   const { user, userDoc } = useAuth();
+  const { todayMinutes: screenTimeMins, history: screenTimeHistory } = useScreenTime();
   const [shareModalOpen, setShareModalOpen] = useState(false);
 
   const today = new Date();
@@ -28,19 +28,27 @@ export function ProductivityChartWidget({ sessions }: ProductivityChartWidgetPro
     const d = s.startedAt?.toDate ? s.startedAt.toDate() : null;
     return d && d.toDateString() === today.toDateString() && s.completed;
   });
-  const todayMinutes = todaySessions.reduce((acc, s) => acc + s.duration, 0);
+  const pomodoroMins = todaySessions.reduce((acc, s) => acc + s.duration, 0);
+  const todayMinutes = Math.max(pomodoroMins, screenTimeMins);
 
-  // Real 7-day consecutive streak calculation from Pomodoro sessions
+  // Real 7-day consecutive streak calculation from Screen Time + Pomodoro sessions
   let streakDays = 0;
   for (let i = 0; i < 30; i++) {
     const d = new Date(today);
     d.setDate(d.getDate() - i);
     const dayStr = d.toDateString();
+    const isoDateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+
     const hasSession = sessions.some((s) => {
       const sd = s.startedAt?.toDate ? s.startedAt.toDate() : null;
       return sd && sd.toDateString() === dayStr && s.completed;
     });
-    if (hasSession) streakDays++;
+
+    const hasScreenTime =
+      (i === 0 && screenTimeMins > 0) ||
+      screenTimeHistory.some((h) => h.dateStr === isoDateStr && h.screenTimeSeconds >= 60);
+
+    if (hasSession || hasScreenTime) streakDays++;
     else if (i > 0) break;
   }
 
@@ -48,7 +56,7 @@ export function ProductivityChartWidget({ sessions }: ProductivityChartWidgetPro
   const getWidgetTheme = (days: number) => {
     if (days >= 30) {
       return {
-        tierName: "Inferno 👑",
+        tierName: "Inferno",
         cardBg: "from-white via-amber-50/30 to-orange-50/20",
         badgeGradient: "from-amber-500 via-orange-500 to-yellow-500",
         badgeShadow: "shadow-amber-500/40",
@@ -61,7 +69,7 @@ export function ProductivityChartWidget({ sessions }: ProductivityChartWidgetPro
     }
     if (days >= 14) {
       return {
-        tierName: "Diamond 💎",
+        tierName: "Diamond",
         cardBg: "from-white via-purple-50/30 to-pink-50/20",
         badgeGradient: "from-purple-600 via-pink-600 to-indigo-600",
         badgeShadow: "shadow-purple-500/40",
@@ -74,7 +82,7 @@ export function ProductivityChartWidget({ sessions }: ProductivityChartWidgetPro
     }
     if (days >= 7) {
       return {
-        tierName: "Scholar 🔥",
+        tierName: "Scholar",
         cardBg: "from-white via-orange-50/30 to-red-50/20",
         badgeGradient: "from-orange-500 to-red-500",
         badgeShadow: "shadow-orange-500/40",
@@ -86,7 +94,7 @@ export function ProductivityChartWidget({ sessions }: ProductivityChartWidgetPro
       };
     }
     return {
-      tierName: "Spark ⚡",
+      tierName: "Spark",
       cardBg: "from-white via-emerald-50/30 to-teal-50/20",
       badgeGradient: "from-emerald-600 to-teal-600",
       badgeShadow: "shadow-emerald-500/40",
@@ -100,18 +108,25 @@ export function ProductivityChartWidget({ sessions }: ProductivityChartWidgetPro
 
   const theme = getWidgetTheme(streakDays);
 
-  // Last 7 days chart points
+  // Last 7 days chart points (Focus + Screen Time)
   const last7Days = Array.from({ length: 7 }, (_, i) => {
     const d = new Date(today);
     d.setDate(d.getDate() - (6 - i));
     const dayStr = d.toDateString();
+    const isoDateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
     const dayName = d.toLocaleDateString("en-US", { weekday: "narrow" });
-    const mins = sessions
+
+    const focusMins = sessions
       .filter((s) => {
         const sd = s.startedAt?.toDate ? s.startedAt.toDate() : null;
         return sd && sd.toDateString() === dayStr && s.completed;
       })
       .reduce((acc, s) => acc + s.duration, 0);
+
+    const stRecord = screenTimeHistory.find((h) => h.dateStr === isoDateStr);
+    const stMins = i === 6 ? screenTimeMins : stRecord ? Math.floor(stRecord.screenTimeSeconds / 60) : 0;
+    const mins = Math.max(focusMins, stMins);
+
     return { dayName, mins };
   });
 
@@ -131,9 +146,10 @@ export function ProductivityChartWidget({ sessions }: ProductivityChartWidgetPro
 
       <div
         className={`p-5 flex flex-col justify-between h-full group bg-gradient-to-br ${theme.cardBg} transition-colors duration-500 relative`}
+        suppressHydrationWarning
       >
         {/* Header */}
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between" suppressHydrationWarning>
           <div className="flex items-center gap-2">
             <div
               className={`w-8 h-8 rounded-xl ${theme.iconBg} flex items-center justify-center transition-colors duration-300`}

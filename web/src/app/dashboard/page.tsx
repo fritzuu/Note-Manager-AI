@@ -2,7 +2,6 @@
 
 import React, { useEffect, useState, Suspense } from "react";
 import { useRouter } from "next/navigation";
-import Link from "next/link";
 import {
   Plus,
   Bell,
@@ -25,6 +24,8 @@ import {
 import { DashboardShell } from "@/components/layout/DashboardShell";
 import { Button } from "@/components/ui/Button";
 import { BentoGrid } from "@/components/dashboard/bento/BentoGrid";
+import { LoadingScreen } from "@/components/ui/LoadingScreen";
+import { ErrorState } from "@/components/ui/ErrorState";
 
 function DashboardContentImpl() {
   const { user, userDoc, loading: authLoading } = useAuth();
@@ -38,8 +39,43 @@ function DashboardContentImpl() {
   const [notifications, setNotifications] = useState<NotificationDocument[]>([]);
   const [showNotifications, setShowNotifications] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   const firstName = userDoc?.name?.split(" ")[0] || user?.displayName?.split(" ")[0] || "Student";
+
+  const loadData = React.useCallback(async () => {
+    if (!user) return;
+    setLoading(true);
+    setError(null);
+    try {
+      const [
+        userNotes,
+        count,
+        userInsight,
+        userTasks,
+        userSessions,
+        userNotifs,
+      ] = await Promise.all([
+        getUserNotes(user.uid),
+        getUserSummariesCount(user.uid),
+        getAcademicInsight(user.uid).catch(() => null),
+        getUserTasks(user.uid),
+        getUserPomodoroSessions(user.uid),
+        getUserNotifications(user.uid),
+      ]);
+      setNotes(userNotes);
+      setSummariesCount(count);
+      setInsight(userInsight);
+      setTasks(userTasks);
+      setSessions(userSessions);
+      setNotifications(userNotifs);
+    } catch (err) {
+      console.error("Failed to load dashboard data:", err);
+      setError("Gagal memuat data dashboard. Periksa koneksi internet Anda.");
+    } finally {
+      setLoading(false);
+    }
+  }, [user]);
 
   useEffect(() => {
     if (authLoading) return;
@@ -47,46 +83,22 @@ function DashboardContentImpl() {
       router.replace("/login");
       return;
     }
-
-    const loadData = async () => {
-      try {
-        const [
-          userNotes,
-          count,
-          userInsight,
-          userTasks,
-          userSessions,
-          userNotifs,
-        ] = await Promise.all([
-          getUserNotes(user.uid),
-          getUserSummariesCount(user.uid),
-          getAcademicInsight(user.uid),
-          getUserTasks(user.uid),
-          getUserPomodoroSessions(user.uid),
-          getUserNotifications(user.uid),
-        ]);
-        setNotes(userNotes);
-        setSummariesCount(count);
-        setInsight(userInsight);
-        setTasks(userTasks);
-        setSessions(userSessions);
-        setNotifications(userNotifs);
-      } catch (err) {
-        console.error("Failed to load dashboard data:", err);
-      } finally {
-        setLoading(false);
-      }
-    };
-
     loadData();
-  }, [user, authLoading, router]);
+  }, [user, authLoading, router, loadData]);
 
   if (authLoading || loading) {
     return (
-      <div className="flex flex-col items-center justify-center py-24 gap-4" suppressHydrationWarning>
-        <div className="w-10 h-10 rounded-full border-4 border-primary-200 border-t-primary animate-spin" />
-        <p className="text-sm text-gray-500 font-medium">Loading Dashboard...</p>
-      </div>
+      <LoadingScreen label="Memuat Dashboard..." subtext="Menyiapkan ringkasan belajar & data terkini" />
+    );
+  }
+
+  if (error) {
+    return (
+      <ErrorState
+        title="Gagal Memuat Dashboard"
+        message={error}
+        onRetry={loadData}
+      />
     );
   }
 
@@ -106,7 +118,7 @@ function DashboardContentImpl() {
         <div>
           <h1 className="text-2xl font-bold text-[#1F2937] tracking-tight" suppressHydrationWarning>
             Good {new Date().getHours() < 12 ? "morning" : new Date().getHours() < 18 ? "afternoon" : "evening"},{" "}
-            {firstName} 👋
+            {firstName}
           </h1>
           <p className="text-sm text-gray-500 mt-1">
             Personalized modular dashboard & study command center
@@ -166,16 +178,15 @@ function DashboardContentImpl() {
             )}
           </div>
 
-          <Link href="/notes">
-            <Button
-              variant="primary"
-              size="md"
-              icon={<Plus className="w-4 h-4" />}
-              className="rounded-2xl shadow-sm font-bold"
-            >
-              New Note
-            </Button>
-          </Link>
+          <Button
+            variant="primary"
+            size="md"
+            href="/notes"
+            icon={<Plus className="w-4 h-4" />}
+            className="rounded-2xl shadow-sm font-bold"
+          >
+            New Note
+          </Button>
         </div>
       </div>
 
@@ -201,17 +212,11 @@ export default function DashboardPage() {
   return (
     <DashboardShell>
       {!mounted ? (
-        <div className="flex flex-col items-center justify-center py-24 gap-4" suppressHydrationWarning>
-          <div className="w-10 h-10 rounded-full border-4 border-primary-200 border-t-primary animate-spin" />
-          <p className="text-sm text-gray-500 font-medium">Loading Dashboard...</p>
-        </div>
+        <LoadingScreen label="Memuat Dashboard..." subtext="Menyiapkan ringkasan belajar & data terkini" />
       ) : (
         <Suspense
           fallback={
-            <div className="flex flex-col items-center justify-center py-24 gap-4" suppressHydrationWarning>
-              <div className="w-10 h-10 rounded-full border-4 border-primary-200 border-t-primary animate-spin" />
-              <p className="text-sm text-gray-500 font-medium">Loading Dashboard...</p>
-            </div>
+            <LoadingScreen label="Memuat Dashboard..." subtext="Menyiapkan ringkasan belajar & data terkini" />
           }
         >
           <DashboardContentImpl />

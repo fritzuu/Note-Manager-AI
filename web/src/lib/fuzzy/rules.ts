@@ -11,9 +11,8 @@ import {
  * Builds the complete Rule Matrix.
  * Hierarchy: Deadline > Importance > Progress > Difficulty > Academic Risk
  *
- * Generic rules that don't specify high-hierarchy inputs (like Deadline)
- * are completely avoided to prevent them from firing in inappropriate contexts
- * and dragging the centroid down.
+ * When deadline is Far (e.g. > 12 days, months away), standard tasks with Normal/Low
+ * importance are categorized as Low (Flexible Priority).
  */
 export function buildRules(inputs: FuzzyInputs): RuleResult[] {
   const { deadlineDays: dl, importance: imp, difficulty: dif, progress: pro, academicRisk: ar } = inputs;
@@ -25,9 +24,6 @@ export function buildRules(inputs: FuzzyInputs): RuleResult[] {
   const pL = proLow(pro), pM = proMedium(pro), pH = proHigh(pro);
   const aL = arLow(ar), aM = arMedium(ar), aH = arHigh(ar), aC = arCritical(ar);
 
-  // We use standard max-min Mamdani inference.
-  // By explicitly partitioning the space using Deadline, we prevent "Medium"
-  // rules from firing when Deadline is Near.
   return [
     // ── DEADLINE NEAR ───────────────────────────────────────────────────────
     // If deadline is near, priority is generally Critical or High.
@@ -46,7 +42,7 @@ export function buildRules(inputs: FuzzyInputs): RuleResult[] {
     
     // Importance High
     { id: 8,  strength: Math.min(dM, iH, pL), conditions: ["Deadline Medium", "Importance High", "Progress Low"], conclusion: "High", outputLevel: "High" },
-    { id: 9, strength: Math.min(dM, iH, pM), conditions: ["Deadline Medium", "Importance High", "Progress Medium"], conclusion: "High", outputLevel: "High" },
+    { id: 9,  strength: Math.min(dM, iH, pM), conditions: ["Deadline Medium", "Importance High", "Progress Medium"], conclusion: "High", outputLevel: "High" },
     { id: 10, strength: Math.min(dM, iH, pH, aC), conditions: ["Deadline Medium", "Importance High", "Progress High", "Academic Risk Critical"], conclusion: "High", outputLevel: "High" },
     { id: 11, strength: Math.min(dM, iH, pH, aH), conditions: ["Deadline Medium", "Importance High", "Progress High", "Academic Risk High"], conclusion: "High", outputLevel: "High" },
     { id: 12, strength: Math.min(dM, iH, pH, aM), conditions: ["Deadline Medium", "Importance High", "Progress High", "Academic Risk Medium"], conclusion: "Medium", outputLevel: "Medium" },
@@ -63,8 +59,8 @@ export function buildRules(inputs: FuzzyInputs): RuleResult[] {
     { id: 19, strength: Math.min(dM, iL, aM), conditions: ["Deadline Medium", "Importance Low", "Academic Risk Medium"], conclusion: "Low", outputLevel: "Low" },
     { id: 20, strength: Math.min(dM, iL, aL), conditions: ["Deadline Medium", "Importance Low", "Academic Risk Low"], conclusion: "Low", outputLevel: "Low" },
 
-    // ── DEADLINE FAR ────────────────────────────────────────────────────────
-    // Priority is generally Low, sometimes Medium or High if severe inputs.
+    // ── DEADLINE FAR (Days > 12) ────────────────────────────────────────────
+    // Priority is Flexible (Low), unless Importance is High with severe Academic Risk.
 
     // Importance High
     { id: 21, strength: Math.min(dF, iH, aC), conditions: ["Deadline Far", "Importance High", "Academic Risk Critical"], conclusion: "High", outputLevel: "High" },
@@ -72,20 +68,17 @@ export function buildRules(inputs: FuzzyInputs): RuleResult[] {
     { id: 23, strength: Math.min(dF, iH, aM), conditions: ["Deadline Far", "Importance High", "Academic Risk Medium"], conclusion: "Medium", outputLevel: "Medium" },
     { id: 24, strength: Math.min(dF, iH, aL), conditions: ["Deadline Far", "Importance High", "Academic Risk Low"], conclusion: "Medium", outputLevel: "Medium" },
 
-    // Importance Medium
-    { id: 25, strength: Math.min(dF, iM, pL), conditions: ["Deadline Far", "Importance Medium", "Progress Low"], conclusion: "Medium", outputLevel: "Medium" },
-    { id: 26, strength: Math.min(dF, iM, pM), conditions: ["Deadline Far", "Importance Medium", "Progress Medium"], conclusion: "Low", outputLevel: "Low" },
-    { id: 27, strength: Math.min(dF, iM, pH), conditions: ["Deadline Far", "Importance Medium", "Progress High"], conclusion: "Low", outputLevel: "Low" },
+    // Importance Medium -> Far deadline makes standard task Flexible (Low)
+    { id: 25, strength: Math.min(dF, iM, diffH), conditions: ["Deadline Far", "Importance Medium", "Difficulty Hard"], conclusion: "Medium", outputLevel: "Medium" },
+    { id: 26, strength: Math.min(dF, iM, diffM), conditions: ["Deadline Far", "Importance Medium", "Difficulty Medium"], conclusion: "Low", outputLevel: "Low" },
+    { id: 27, strength: Math.min(dF, iM, diffE), conditions: ["Deadline Far", "Importance Medium", "Difficulty Easy"], conclusion: "Low", outputLevel: "Low" },
 
-    // Importance Low
+    // Importance Low -> Always Flexible (Low)
     { id: 28, strength: Math.min(dF, iL), conditions: ["Deadline Far", "Importance Low"], conclusion: "Low", outputLevel: "Low" },
 
-    // ── EXTREME CORNER CASES (Bypass strict deadline partition) ─────────────
-    // Very high academic risk with progress low should always be at least High (except when already Critical via dN)
+    // ── EXTREME CORNER CASES ────────────────────────────────────────────────
     { id: 29, strength: Math.min(aC, pL, dM), conditions: ["Academic Risk Critical", "Progress Low", "Deadline Medium"], conclusion: "High", outputLevel: "High" },
     { id: 30, strength: Math.min(aC, pL, dF), conditions: ["Academic Risk Critical", "Progress Low", "Deadline Far"], conclusion: "High", outputLevel: "High" },
-
-    // High Academic Risk + High Importance is extremely dangerous (Critical)
     { id: 31, strength: Math.min(aH, iH), conditions: ["Academic Risk High", "Importance High"], conclusion: "Critical", outputLevel: "Critical" },
     { id: 32, strength: Math.min(aC, iM), conditions: ["Academic Risk Critical", "Importance Medium"], conclusion: "Critical", outputLevel: "Critical" },
   ];

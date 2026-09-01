@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useRef } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
 import {
   LayoutDashboard,
@@ -20,11 +21,17 @@ import {
   Key,
   ShieldCheck,
   Cpu,
+  User,
+  Edit3,
+  BookOpen,
+  MailWarning,
+  RefreshCw,
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { signOut } from "@/lib/auth";
 import { getCustomApiKey } from "@/lib/aiConfig";
 import { AiApiKeyModal } from "@/components/modals/AiApiKeyModal";
+import { EmailVerificationGatekeeper } from "@/components/auth/EmailVerificationGatekeeper";
 
 interface DashboardShellProps {
   children: React.ReactNode;
@@ -44,17 +51,15 @@ export function DashboardShell({ children, fullWidth = false }: DashboardShellPr
 
   useEffect(() => {
     setMounted(true);
-    setHasCustomApiKey(!!getCustomApiKey());
-
-    const handleKeyUpdate = () => {
+    const updateKeyStatus = () => {
       setHasCustomApiKey(!!getCustomApiKey());
     };
-
-    window.addEventListener("mindflow-api-key-updated", handleKeyUpdate);
-    return () => window.removeEventListener("mindflow-api-key-updated", handleKeyUpdate);
+    updateKeyStatus();
+    window.addEventListener("mindflow-api-key-updated", updateKeyStatus);
+    return () => window.removeEventListener("mindflow-api-key-updated", updateKeyStatus);
   }, []);
 
-  // Close user menu on outside click
+  // Close dropdown menu when clicking outside
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (userMenuRef.current && !userMenuRef.current.contains(event.target as Node)) {
@@ -73,7 +78,7 @@ export function DashboardShell({ children, fullWidth = false }: DashboardShellPr
     router.push("/login");
   };
 
-  // Main navigation items (Settings is now in User Profile Menu)
+  // Main navigation items (Settings is in User Profile Menu)
   const navItems = [
     { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
     { name: "Notes", href: "/notes", icon: FileText },
@@ -91,46 +96,109 @@ export function DashboardShell({ children, fullWidth = false }: DashboardShellPr
     ? userDoc?.name || user?.displayName || "Student"
     : "Student";
   const email = mounted ? user?.email || "" : "";
+  const avatarUrl = mounted ? userDoc?.avatarUrl || user?.photoURL || null : null;
+  const major = mounted ? userDoc?.major || null : null;
 
   const userDropdownMenu = (
     <div
       ref={userMenuRef}
-      className="absolute bottom-full left-4 right-4 mb-2 bg-white rounded-2xl border border-border shadow-xl p-2 z-50 animate-scale-in"
+      className="absolute bottom-full left-4 right-4 mb-2 bg-white rounded-3xl border border-border shadow-2xl p-2.5 z-50 animate-scale-in space-y-1.5"
     >
-      {/* User Header */}
-      <div className="p-3 border-b border-border/60 flex items-center gap-3">
-        <div className="w-10 h-10 rounded-full bg-gradient-to-br from-primary to-primary-600 flex items-center justify-center text-white font-bold text-sm shrink-0 shadow-sm">
-          {firstName[0]}
-        </div>
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-1.5">
-            <p className="text-xs font-bold text-gray-900 truncate">{displayName}</p>
-            <span className="text-[10px] bg-primary/10 text-primary font-semibold px-1.5 py-0.2 rounded-full">
-              Student
-            </span>
+      {/* User Header with Avatar & Quick Edit */}
+      <div className="p-3 bg-gradient-to-br from-primary/5 via-primary/10 to-accent/10 rounded-2xl border border-primary/15 flex items-center justify-between gap-3">
+        <div className="flex items-center gap-3 min-w-0">
+          <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-primary to-primary-600 flex items-center justify-center text-white font-bold text-base shrink-0 shadow-sm relative overflow-hidden border border-white/60">
+            {avatarUrl ? (
+              <Image
+                src={avatarUrl}
+                alt="Avatar"
+                fill
+                className="object-cover"
+                unoptimized
+              />
+            ) : (
+              firstName[0]
+            )}
           </div>
-          <p className="text-[11px] text-gray-400 truncate">{email}</p>
+          <div className="min-w-0">
+            <p className="text-xs font-bold text-gray-900 truncate">{displayName}</p>
+            <p className="text-[10px] text-gray-500 truncate">{major || email}</p>
+          </div>
         </div>
+
+        <Link
+          href="/settings"
+          onClick={() => setUserMenuOpen(false)}
+          className="p-2 bg-white hover:bg-primary hover:text-white text-gray-600 rounded-xl transition-all shadow-xs border border-border shrink-0 cursor-pointer"
+          title="Ubah Profil & Foto"
+        >
+          <Edit3 className="w-3.5 h-3.5" />
+        </Link>
       </div>
 
       {/* Menu Options */}
-      <div className="py-1 space-y-0.5">
+      <div className="py-1 space-y-1">
+        {/* Quick Profile & Avatar Edit */}
+        <Link
+          href="/settings"
+          onClick={() => {
+            setUserMenuOpen(false);
+            setMobileMenuOpen(false);
+          }}
+          className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-xs font-semibold transition-colors cursor-pointer group ${
+            pathname === "/settings"
+              ? "bg-primary text-white shadow-xs"
+              : "text-gray-700 hover:bg-primary-50 hover:text-primary"
+          }`}
+        >
+          <div
+            className={`w-6 h-6 rounded-lg flex items-center justify-center transition-colors ${
+              pathname === "/settings"
+                ? "bg-white/20 text-white"
+                : "bg-gray-100 text-gray-500 group-hover:bg-primary group-hover:text-white"
+            }`}
+          >
+            <User className="w-3.5 h-3.5" />
+          </div>
+          <span>Ubah Profil & Foto</span>
+        </Link>
+
+        {/* Academic Assessment Quick Status & Calibration */}
+        <Link
+          href="/assessment"
+          onClick={() => {
+            setUserMenuOpen(false);
+            setMobileMenuOpen(false);
+          }}
+          className="w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-semibold text-gray-700 hover:bg-primary-50 hover:text-primary transition-colors cursor-pointer group"
+        >
+          <div className="flex items-center gap-2.5">
+            <div className="w-6 h-6 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center group-hover:bg-indigo-600 group-hover:text-white transition-colors">
+              <BookOpen className="w-3.5 h-3.5" />
+            </div>
+            <span>Gaya Belajar</span>
+          </div>
+          <span className="text-[10px] px-2 py-0.5 rounded-full font-bold bg-primary/10 text-primary border border-primary/20">
+            {userDoc?.assessmentCompleted ? "Terkalibrasi" : "Belum Diisi"}
+          </span>
+        </Link>
+
         {/* Custom AI API Key Option */}
         <button
           onClick={() => {
             setUserMenuOpen(false);
             setApiKeyModalOpen(true);
           }}
-          className="w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-medium text-gray-700 hover:bg-primary-50 hover:text-primary transition-colors cursor-pointer group"
+          className="w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-semibold text-gray-700 hover:bg-primary-50 hover:text-primary transition-colors cursor-pointer group"
         >
           <div className="flex items-center gap-2.5">
             <div className="w-6 h-6 rounded-lg bg-primary-50 text-primary flex items-center justify-center group-hover:bg-primary group-hover:text-white transition-colors">
               <Key className="w-3.5 h-3.5" />
             </div>
-            <span>AI API Key Setup</span>
+            <span>AI Provider & Key</span>
           </div>
           <span
-            className={`text-[10px] px-2 py-0.5 rounded-full font-semibold flex items-center gap-1 ${
+            className={`text-[10px] px-2 py-0.5 rounded-full font-bold flex items-center gap-1 ${
               hasCustomApiKey
                 ? "bg-emerald-100 text-emerald-700"
                 : "bg-gray-100 text-gray-500"
@@ -147,43 +215,18 @@ export function DashboardShell({ children, fullWidth = false }: DashboardShellPr
             )}
           </span>
         </button>
-
-        {/* Settings Option */}
-        <Link
-          href="/settings"
-          onClick={() => {
-            setUserMenuOpen(false);
-            setMobileMenuOpen(false);
-          }}
-          className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-xs font-medium transition-colors cursor-pointer group ${
-            pathname === "/settings"
-              ? "bg-primary text-white"
-              : "text-gray-700 hover:bg-primary-50 hover:text-primary"
-          }`}
-        >
-          <div
-            className={`w-6 h-6 rounded-lg flex items-center justify-center transition-colors ${
-              pathname === "/settings"
-                ? "bg-white/20 text-white"
-                : "bg-gray-100 text-gray-500 group-hover:bg-primary group-hover:text-white"
-            }`}
-          >
-            <Settings className="w-3.5 h-3.5" />
-          </div>
-          <span>Account Settings</span>
-        </Link>
       </div>
 
-      {/* Logout Divider & Action */}
-      <div className="pt-1 mt-1 border-t border-border/60">
+      {/* Logout Action */}
+      <div className="pt-1 border-t border-border/60">
         <button
           onClick={handleSignOut}
-          className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-xs font-medium text-red-600 hover:bg-red-50 transition-colors cursor-pointer"
+          className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold text-red-600 hover:bg-red-50 transition-colors cursor-pointer"
         >
           <div className="w-6 h-6 rounded-lg bg-red-100/60 text-red-600 flex items-center justify-center">
             <LogOut className="w-3.5 h-3.5" />
           </div>
-          <span>Sign Out</span>
+          <span>Keluar Akun</span>
         </button>
       </div>
     </div>
@@ -237,14 +280,24 @@ export function DashboardShell({ children, fullWidth = false }: DashboardShellPr
         >
           <div className="flex items-center gap-2.5 min-w-0" suppressHydrationWarning>
             <div
-              className="w-9 h-9 rounded-full bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center text-primary font-bold text-sm shrink-0 ring-2 ring-primary/10 relative"
+              className="w-9 h-9 rounded-full bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center text-primary font-bold text-sm shrink-0 ring-2 ring-primary/10 relative overflow-hidden"
               suppressHydrationWarning
             >
-              {firstName[0]}
+              {avatarUrl ? (
+                <Image
+                  src={avatarUrl}
+                  alt="Avatar"
+                  fill
+                  className="object-cover rounded-full"
+                  unoptimized
+                />
+              ) : (
+                firstName[0]
+              )}
               {hasCustomApiKey && (
                 <span
                   title="Custom AI Key Active"
-                  className="absolute -top-0.5 -right-0.5 w-3 h-3 bg-emerald-500 rounded-full ring-2 ring-white"
+                  className="absolute -top-0.5 -right-0.5 w-3 h-3 bg-emerald-500 rounded-full ring-2 ring-white z-10"
                 />
               )}
             </div>
@@ -253,7 +306,7 @@ export function DashboardShell({ children, fullWidth = false }: DashboardShellPr
                 {displayName}
               </p>
               <p className="text-[10px] text-gray-400 truncate" suppressHydrationWarning>
-                {email}
+                {major || email}
               </p>
             </div>
           </div>
@@ -318,20 +371,33 @@ export function DashboardShell({ children, fullWidth = false }: DashboardShellPr
             </button>
             <span className="font-bold text-primary tracking-tight">MindFlow AI</span>
           </div>
-          <button
-            onClick={() => setApiKeyModalOpen(true)}
-            className="w-8 h-8 rounded-full bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center text-primary font-semibold text-sm ring-2 ring-primary/10 cursor-pointer"
+          <Link
+            href="/settings"
+            className="w-8 h-8 rounded-full bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center text-primary font-semibold text-sm ring-2 ring-primary/10 cursor-pointer relative overflow-hidden shrink-0"
             suppressHydrationWarning
+            title="Pengaturan Profil"
           >
-            {firstName[0]}
-          </button>
+            {avatarUrl ? (
+              <Image
+                src={avatarUrl}
+                alt="Avatar"
+                fill
+                className="object-cover rounded-full"
+                unoptimized
+              />
+            ) : (
+              firstName[0]
+            )}
+          </Link>
         </header>
 
         {/* Inner Content page */}
         <div className={`flex-1 w-full animate-fade-in ${
           fullWidth ? "p-4 md:p-6" : "max-w-7xl mx-auto p-6 md:p-8 space-y-8"
         }`}>
-          {children}
+          <EmailVerificationGatekeeper>
+            {children}
+          </EmailVerificationGatekeeper>
         </div>
       </div>
     </div>

@@ -20,7 +20,12 @@ export interface UserDocument {
   name: string;
   email: string;
   assessmentCompleted: boolean;
+  avatarUrl?: string;
+  major?: string;
+  university?: string;
+  role?: "admin" | "user";
   createdAt?: unknown;
+  updatedAt?: unknown;
 }
 
 export async function createUserDocument(
@@ -31,7 +36,23 @@ export async function createUserDocument(
   await setDoc(userRef, {
     ...data,
     createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
   });
+}
+
+export async function updateUserDocument(
+  uid: string,
+  data: Partial<UserDocument>
+): Promise<void> {
+  const userRef = doc(db, "users", uid);
+  await setDoc(
+    userRef,
+    {
+      ...data,
+      updatedAt: serverTimestamp(),
+    },
+    { merge: true }
+  );
 }
 
 export async function getUserDocument(
@@ -45,7 +66,7 @@ export async function getUserDocument(
 
 export async function markAssessmentComplete(uid: string): Promise<void> {
   const userRef = doc(db, "users", uid);
-  await setDoc(userRef, { assessmentCompleted: true }, { merge: true });
+  await setDoc(userRef, { assessmentCompleted: true, updatedAt: serverTimestamp() }, { merge: true });
 }
 
 // ── Academic Assessment ───────────────────────────────────────────────────────
@@ -142,6 +163,7 @@ export interface NoteDocument {
   isPinned?: boolean;
   isArchived?: boolean;
   isTrashed?: boolean;
+  trashedAt?: unknown;
   attachments?: NoteAttachment[];
   createdAt?: unknown;
   updatedAt?: unknown;
@@ -168,6 +190,7 @@ export async function createNote(
     isPinned,
     isArchived,
     isTrashed,
+    trashedAt: isTrashed ? serverTimestamp() : null,
     attachments,
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
@@ -177,13 +200,22 @@ export async function createNote(
 
 export async function updateNote(
   noteId: string,
-  fields: Partial<Omit<NoteDocument, "id" | "userId" | "createdAt" | "updatedAt">>
+  data: Partial<Omit<NoteDocument, "id" | "userId" | "createdAt">>
 ): Promise<void> {
   const noteRef = doc(db, "notes", noteId);
-  await updateDoc(noteRef, {
-    ...fields,
+  const payload: Record<string, unknown> = {
+    ...data,
     updatedAt: serverTimestamp(),
-  });
+  };
+
+  // Set or clear trashedAt timestamp
+  if (data.isTrashed === true && data.trashedAt === undefined) {
+    payload.trashedAt = serverTimestamp();
+  } else if (data.isTrashed === false) {
+    payload.trashedAt = null;
+  }
+
+  await updateDoc(noteRef, payload);
 }
 
 export async function duplicateNote(note: NoteDocument): Promise<string> {
@@ -195,12 +227,15 @@ export async function duplicateNote(note: NoteDocument): Promise<string> {
   delete rest.id;
   delete rest.createdAt;
   delete rest.updatedAt;
+  delete rest.trashedAt;
   
   await setDoc(noteRef, {
     ...rest,
     id: noteId,
     title: `${note.title} (Copy)`,
     isPinned: false,
+    isTrashed: false,
+    trashedAt: null,
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
   });
@@ -219,6 +254,9 @@ export async function getNote(noteId: string): Promise<NoteDocument | null> {
   return snap.data() as NoteDocument;
 }
 
+// 3 Days in milliseconds
+const TRASH_RETENTION_MS = 3 * 24 * 60 * 60 * 1000;
+
 export async function getUserNotes(userId: string): Promise<NoteDocument[]> {
   const q = query(
     collection(db, "notes"),
@@ -226,9 +264,36 @@ export async function getUserNotes(userId: string): Promise<NoteDocument[]> {
   );
   const snap = await getDocs(q);
   const notes: NoteDocument[] = [];
+  const now = Date.now();
+  const expiredNoteIds: string[] = [];
+
   snap.forEach((docSnap) => {
-    notes.push(docSnap.data() as NoteDocument);
+    const data = docSnap.data() as NoteDocument;
+    
+    // Check if trashed note is older than 3 days
+    if (data.isTrashed) {
+      let trashedTime = 0;
+      if (data.trashedAt && typeof (data.trashedAt as { seconds?: number }).seconds === "number") {
+        trashedTime = (data.trashedAt as { seconds: number }).seconds * 1000;
+      } else if (data.updatedAt && typeof (data.updatedAt as { seconds?: number }).seconds === "number") {
+        trashedTime = (data.updatedAt as { seconds: number }).seconds * 1000;
+      }
+
+      if (trashedTime > 0 && now - trashedTime >= TRASH_RETENTION_MS) {
+        // Expired after 3 days -> auto purge permanently
+        expiredNoteIds.push(data.id);
+        return;
+      }
+    }
+
+    notes.push(data);
   });
+
+  // Permanently delete expired trashed notes in background
+  if (expiredNoteIds.length > 0) {
+    Promise.all(expiredNoteIds.map((id) => deleteDoc(doc(db, "notes", id)))).catch(() => {});
+  }
+
   // Sort client side by updatedAt desc
   notes.sort((a, b) => {
     const timeA = a.updatedAt ? (a.updatedAt as { seconds?: number }).seconds || 0 : 0;
@@ -331,6 +396,21 @@ export async function getUserChatHistory(
   return chatList.slice(0, limitCount);
 }
 
+export async function deleteChatHistory(chatId: string): Promise<void> {
+  const chatRef = doc(db, "chat_history", chatId);
+  await deleteDoc(chatRef);
+}
+
+export async function clearAllUserChatHistory(userId: string): Promise<void> {
+  const q = query(
+    collection(db, "chat_history"),
+    where("userId", "==", userId)
+  );
+  const snap = await getDocs(q);
+  const deletePromises = snap.docs.map((docSnap) => deleteDoc(docSnap.ref));
+  await Promise.all(deletePromises);
+}
+
 // ── Tasks ────────────────────────────────────────────────────────────────────
 
 export interface TaskDocument {
@@ -350,6 +430,8 @@ export interface TaskDocument {
   estimatedTotalMinutes: number;
   /** Human-readable reasoning produced by the fuzzy engine. */
   reasoning: string;
+  course?: string;
+  workspace?: string;
   status: "todo" | "doing" | "done";
   createdAt?: unknown;
   updatedAt?: unknown;
@@ -412,6 +494,55 @@ export async function getUserTasks(userId: string): Promise<TaskDocument[]> {
     return bS - aS;
   });
   return tasks;
+}
+
+export const DEFAULT_TASK_WORKSPACES = [
+  "Kecerdasan Buatan",
+  "Basis Data",
+  "Pemrograman Web",
+  "Proyek Akhir",
+  "Organisasi",
+  "Personal",
+];
+
+export function getEffectiveWorkspaces(
+  tasks: Array<{ workspace?: string; course?: string }>,
+  hiddenWorkspaces: string[] = []
+): string[] {
+  const taskWorkspaces = tasks.map((t) => (t.workspace || t.course || "Umum").trim()).filter(Boolean);
+  const combined = Array.from(new Set([...taskWorkspaces, ...DEFAULT_TASK_WORKSPACES]));
+  const filtered = combined.filter((w) => !hiddenWorkspaces.includes(w));
+  return filtered.length > 0 ? filtered : ["Personal"];
+}
+
+export async function deleteWorkspaceTasks(
+  userId: string,
+  workspaceName: string,
+  action: "relocate" | "delete_all" = "relocate"
+): Promise<void> {
+  const q = query(collection(db, "tasks"), where("userId", "==", userId));
+  const snap = await getDocs(q);
+  const batchUpdates: Promise<void>[] = [];
+
+  snap.forEach((d) => {
+    const data = d.data() as TaskDocument;
+    const currentWs = data.workspace || data.course || "Umum";
+    if (currentWs.toLowerCase() === workspaceName.toLowerCase()) {
+      if (action === "relocate") {
+        batchUpdates.push(
+          updateDoc(doc(db, "tasks", d.id), {
+            workspace: "Umum",
+            course: "Umum",
+            updatedAt: serverTimestamp(),
+          })
+        );
+      } else {
+        batchUpdates.push(deleteDoc(doc(db, "tasks", d.id)));
+      }
+    }
+  });
+
+  await Promise.all(batchUpdates);
 }
 
 // ── Notifications ─────────────────────────────────────────────────────────────
@@ -540,3 +671,186 @@ export async function getUserPomodoroSessions(userId: string): Promise<PomodoroS
   });
   return sessions;
 }
+
+// ── Screen Time & Daily Activity Tracking ────────────────────────────────────
+
+export interface DailyScreenTime {
+  id: string; // e.g. `${userId}_${dateStr}`
+  userId: string;
+  dateStr: string; // YYYY-MM-DD
+  screenTimeSeconds: number;
+  updatedAt?: unknown;
+}
+
+export async function saveDailyScreenTime(
+  userId: string,
+  dateStr: string,
+  totalSeconds: number
+): Promise<void> {
+  try {
+    const docId = `${userId}_${dateStr}`;
+    const docRef = doc(db, "daily_screentime", docId);
+    await setDoc(
+      docRef,
+      {
+        id: docId,
+        userId,
+        dateStr,
+        screenTimeSeconds: totalSeconds,
+        updatedAt: serverTimestamp(),
+      },
+      { merge: true }
+    );
+  } catch (err) {
+    // Firestore rules might not have been applied yet, gracefully ignore
+    console.warn("Could not save daily screen time to Firestore:", err);
+  }
+}
+
+export async function getUserScreenTimes(
+  userId: string
+): Promise<DailyScreenTime[]> {
+  try {
+    const q = query(
+      collection(db, "daily_screentime"),
+      where("userId", "==", userId)
+    );
+    const snap = await getDocs(q);
+    const list: DailyScreenTime[] = [];
+    snap.forEach((d) => list.push(d.data() as DailyScreenTime));
+    list.sort((a, b) => b.dateStr.localeCompare(a.dateStr));
+    return list;
+  } catch (err) {
+    console.warn("Could not fetch daily screen times from Firestore:", err);
+    return [];
+  }
+}
+
+// ── Account Deletion & Purge All User Data ───────────────────────────────────
+
+export interface AccountDeletionOtp {
+  userId: string;
+  email: string;
+  code: string;
+  expiresAt: number; // timestamp in ms
+  createdAt?: unknown;
+}
+
+export async function getOrCreateAccountDeletionOtp(
+  userId: string,
+  email: string
+): Promise<{ code: string; isNew: boolean; remainingMinutes: number }> {
+  const otpRef = doc(db, "account_deletion_otps", userId);
+  try {
+    const snap = await getDoc(otpRef);
+    if (snap.exists()) {
+      const data = snap.data() as AccountDeletionOtp;
+      // If code exists and is still valid (within 10-minute window)
+      if (data && data.code && data.expiresAt && Date.now() < data.expiresAt) {
+        const remainingMinutes = Math.max(1, Math.ceil((data.expiresAt - Date.now()) / 60000));
+        return { code: data.code, isNew: false, remainingMinutes };
+      }
+    }
+  } catch (err) {
+    console.warn("Could not check existing OTP in Firestore:", err);
+  }
+
+  // Generate new 6-digit numeric OTP valid for 10 minutes
+  const newCode = Math.floor(100000 + Math.random() * 900000).toString();
+  try {
+    await setDoc(otpRef, {
+      userId,
+      email,
+      code: newCode,
+      expiresAt: Date.now() + 10 * 60 * 1000,
+      createdAt: serverTimestamp(),
+    });
+  } catch (err) {
+    console.warn("Could not save new OTP to Firestore:", err);
+  }
+
+  return { code: newCode, isNew: true, remainingMinutes: 10 };
+}
+
+export async function saveAccountDeletionOtp(
+  userId: string,
+  email: string,
+  code: string
+): Promise<void> {
+  const otpRef = doc(db, "account_deletion_otps", userId);
+  await setDoc(otpRef, {
+    userId,
+    email,
+    code,
+    expiresAt: Date.now() + 10 * 60 * 1000, // 10 minutes expiry
+    createdAt: serverTimestamp(),
+  });
+}
+
+export async function verifyAccountDeletionOtp(
+  userId: string,
+  enteredCode: string
+): Promise<{ valid: boolean; message?: string }> {
+  const otpRef = doc(db, "account_deletion_otps", userId);
+  const snap = await getDoc(otpRef);
+  if (!snap.exists()) {
+    return { valid: false, message: "Kode verifikasi tidak ditemukan. Silakan minta kode baru." };
+  }
+  const data = snap.data() as AccountDeletionOtp;
+  if (Date.now() > data.expiresAt) {
+    return { valid: false, message: "Kode verifikasi telah kedaluwarsa (lebih dari 10 menit). Silakan minta kode baru." };
+  }
+  if (data.code.trim() !== enteredCode.trim()) {
+    return { valid: false, message: "Kode verifikasi salah. Periksa kembali email Anda." };
+  }
+  return { valid: true };
+}
+
+
+export async function purgeAllUserData(userId: string): Promise<void> {
+  const deleteBatch: Promise<void>[] = [];
+
+  // Helper to delete all docs in a query safely
+  const purgeQuery = async (colName: string) => {
+    try {
+      const q = query(collection(db, colName), where("userId", "==", userId));
+      const snap = await getDocs(q);
+      snap.forEach((d) => {
+        deleteBatch.push(deleteDoc(doc(db, colName, d.id)).catch(() => {}));
+      });
+    } catch {
+      // ignore collection query permission errors
+    }
+  };
+
+  // 1. Notes
+  await purgeQuery("notes");
+
+  // 2. Note Summaries
+  await purgeQuery("note_summaries");
+
+  // 3. Chat History
+  await purgeQuery("chat_history");
+
+  // 4. Tasks
+  await purgeQuery("tasks");
+
+  // 5. Notifications
+  await purgeQuery("notifications");
+
+  // 6. Pomodoro Sessions
+  await purgeQuery("pomodoro_sessions");
+
+  // 7. Daily Screen Time
+  await purgeQuery("daily_screentime");
+
+  // 8. Direct User Docs
+  deleteBatch.push(deleteDoc(doc(db, "academic_assessments", userId)).catch(() => {}));
+  deleteBatch.push(deleteDoc(doc(db, "academic_insights", userId)).catch(() => {}));
+  deleteBatch.push(deleteDoc(doc(db, "account_deletion_otps", userId)).catch(() => {}));
+  deleteBatch.push(deleteDoc(doc(db, "users", userId)).catch(() => {}));
+
+  await Promise.all(deleteBatch);
+}
+
+

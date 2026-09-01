@@ -1,9 +1,11 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { Clock, Globe, Compass, Sun, Moon } from "lucide-react";
+import { Clock, Sun, Moon } from "lucide-react";
+import { useMounted } from "@/hooks/useMounted";
 
 export function ClockBentoWidget() {
+  const mounted = useMounted();
   const [time, setTime] = useState<Date | null>(null);
 
   useEffect(() => {
@@ -14,10 +16,27 @@ export function ClockBentoWidget() {
     return () => clearInterval(interval);
   }, []);
 
-  if (!time) {
+  if (!mounted || !time) {
     return (
-      <div className="p-5 flex items-center justify-center h-full">
-        <div className="w-6 h-6 rounded-full border-2 border-primary border-t-transparent animate-spin" />
+      <div className="p-5 flex flex-col justify-between h-full bg-gradient-to-br from-white via-gray-50/50 to-primary-50/20 animate-pulse">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 rounded-xl bg-primary/10 text-primary flex items-center justify-center">
+              <Clock className="w-4 h-4" />
+            </div>
+            <div>
+              <div className="h-3 w-16 bg-gray-200 rounded" />
+              <div className="h-2 w-20 bg-gray-100 rounded mt-1" />
+            </div>
+          </div>
+        </div>
+        <div className="space-y-1 my-auto py-2">
+          <div className="h-8 w-28 bg-gray-200 rounded" />
+          <div className="h-3 w-32 bg-gray-100 rounded" />
+        </div>
+        <div className="space-y-1 pt-1 border-t border-border/50">
+          <div className="h-2 w-full bg-gray-100 rounded" />
+        </div>
       </div>
     );
   }
@@ -27,19 +46,22 @@ export function ClockBentoWidget() {
   const seconds = time.getSeconds().toString().padStart(2, "0");
   const isNight = hours < 6 || hours >= 18;
   const timeStr = `${hours.toString().padStart(2, "0")}:${minutes}`;
-  const dateStr = time.toLocaleDateString("en-US", {
+  const dateStr = time.toLocaleDateString("id-ID", {
     weekday: "long",
     month: "short",
     day: "numeric",
   });
-  const tzName = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const tzName = Intl.DateTimeFormat().resolvedOptions().timeZone || "Local";
 
   // Day progress percentage
   const totalMinutesInDay = hours * 60 + time.getMinutes();
   const dayProgress = Math.round((totalMinutesInDay / 1440) * 100);
 
   return (
-    <div className="p-5 flex flex-col justify-between h-full group bg-gradient-to-br from-white via-gray-50/50 to-primary-50/20">
+    <div
+      className="p-5 flex flex-col justify-between h-full group bg-gradient-to-br from-white via-gray-50/50 to-primary-50/20"
+      suppressHydrationWarning
+    >
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
@@ -53,21 +75,23 @@ export function ClockBentoWidget() {
         </div>
         <div className="flex items-center gap-1 text-[10px] font-bold text-gray-500 bg-gray-100 px-2 py-0.5 rounded-full">
           {isNight ? <Moon className="w-3 h-3 text-indigo-500" /> : <Sun className="w-3 h-3 text-amber-500" />}
-          <span>{isNight ? "Night" : "Day"}</span>
+          <span>{isNight ? "Malam" : "Siang"}</span>
         </div>
       </div>
 
       {/* Main Digital Clock Display */}
-      <div className="space-y-1 my-auto py-2">
-        <div className="flex items-baseline gap-1.5">
-          <span className="text-3xl font-extrabold font-mono text-gray-900 tracking-tight">
+      <div className="space-y-1 my-auto py-2" suppressHydrationWarning>
+        <div className="flex items-baseline gap-1.5" suppressHydrationWarning>
+          <span className="text-3xl font-extrabold font-mono text-gray-900 tracking-tight" suppressHydrationWarning>
             {timeStr}
           </span>
-          <span className="text-sm font-mono font-bold text-primary">
+          <span className="text-sm font-mono font-bold text-primary" suppressHydrationWarning>
             :{seconds}
           </span>
         </div>
-        <p className="text-xs font-semibold text-gray-500">{dateStr}</p>
+        <p className="text-xs font-semibold text-gray-500" suppressHydrationWarning>
+          {dateStr}
+        </p>
       </div>
 
       {/* Footer: Day Progress */}
