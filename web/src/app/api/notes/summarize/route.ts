@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
+export const maxDuration = 60;
+
 function cleanJsonText(rawText: string): string {
   let cleaned = rawText.trim();
   if (cleaned.startsWith("```json")) {
@@ -48,7 +50,7 @@ Always return the summary in structured JSON format with EXACTLY the following k
 
 Note content:
 """
-${content}
+${content.slice(0, 15000)}
 """`;
 
     // ─────────────────────────────────────────────
@@ -56,10 +58,13 @@ ${content}
     // ─────────────────────────────────────────────
     if (provider === "openrouter") {
       const model = customModel || "google/gemini-2.0-flash-001";
-      const response = await fetch(
-        "https://openrouter.ai/api/v1/chat/completions",
-        {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 25000);
+
+      try {
+        const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
           method: "POST",
+          signal: controller.signal,
           headers: {
             "Content-Type": "application/json",
             Authorization: `Bearer ${apiKey}`,
@@ -80,68 +85,94 @@ ${content}
               },
             ],
             temperature: 0.2,
-            max_tokens: 4096,
+            max_tokens: 2048,
           }),
+        });
+
+        if (!response.ok) {
+          const errText = await response.text();
+          console.error("OpenRouter API summarize error detail:", errText);
+          throw new Error(`OpenRouter API returned status ${response.status}`);
         }
-      );
 
-      if (!response.ok) {
-        const errText = await response.text();
-        console.error("OpenRouter API summarize error detail:", errText);
-        throw new Error(`OpenRouter API returned status ${response.status}`);
+        const data = await response.json();
+        const rawText = data.choices?.[0]?.message?.content;
+
+        if (!rawText) {
+          throw new Error("Empty response from OpenRouter API");
+        }
+
+        const cleaned = cleanJsonText(rawText);
+        const parsedResult = JSON.parse(cleaned);
+        return NextResponse.json(parsedResult);
+      } finally {
+        clearTimeout(timeoutId);
       }
-
-      const data = await response.json();
-      const rawText = data.choices?.[0]?.message?.content;
-
-      if (!rawText) {
-        throw new Error("Empty response from OpenRouter API");
-      }
-
-      const cleaned = cleanJsonText(rawText);
-      const parsedResult = JSON.parse(cleaned);
-      return NextResponse.json(parsedResult);
     }
 
     // ─────────────────────────────────────────────
-    // 2. Google Gemini Provider
+    // 2. Google Gemini Provider (with model fallback)
     // ─────────────────────────────────────────────
-    const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: promptInstructions }] }],
-          generationConfig: {
-            responseMimeType: "application/json",
-            temperature: 0.2,
-            maxOutputTokens: 4096,
-          },
-        }),
+    const candidateModels = customModel
+      ? [customModel]
+      : ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash"];
+
+    let lastError: Error | null = null;
+
+    for (const model of candidateModels) {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 20000);
+
+      try {
+        const response = await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
+          {
+            method: "POST",
+            signal: controller.signal,
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              contents: [{ parts: [{ text: promptInstructions }] }],
+              generationConfig: {
+                responseMimeType: "application/json",
+                temperature: 0.2,
+                maxOutputTokens: 2048,
+              },
+            }),
+          }
+        );
+
+        if (!response.ok) {
+          const errText = await response.text();
+          console.warn(`Gemini Summarize API error for model ${model}:`, errText);
+          lastError = new Error(`Gemini API returned status ${response.status}`);
+          continue;
+        }
+
+        const data = await response.json();
+        const candidate = data.candidates?.[0];
+        const rawText = candidate?.content?.parts?.[0]?.text;
+
+        if (!rawText) {
+          lastError = new Error("Empty response from Gemini API");
+          continue;
+        }
+
+        const cleaned = cleanJsonText(rawText);
+        const parsedResult = JSON.parse(cleaned);
+        return NextResponse.json(parsedResult);
+      } catch (err: unknown) {
+        lastError = err as Error;
+      } finally {
+        clearTimeout(timeoutId);
       }
-    );
-
-    if (!response.ok) {
-      const errText = await response.text();
-      console.error("Gemini API error detail:", errText);
-      throw new Error(`Gemini API returned status ${response.status}`);
     }
 
-    const data = await response.json();
-    const responseText = data.candidates?.[0]?.content?.parts?.[0]?.text;
-
-    if (!responseText) {
-      throw new Error("Empty response from Gemini API");
-    }
-
-    const cleaned = cleanJsonText(responseText);
-    const parsedResult = JSON.parse(cleaned);
-    return NextResponse.json(parsedResult);
-  } catch (error) {
-    console.error("Summarize API error:", error);
+    throw lastError || new Error("Semua model Gemini mengalami kendala.");
+  } catch (error: unknown) {
+    console.error("Notes Summarize API Error:", error);
+    const message = (error as Error).message || "Internal Server Error";
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Gagal membuat ringkasan AI." },
+      { error: message.includes("abort") ? "Proses ringkasan AI timeout. Silakan coba lagi." : message },
       { status: 500 }
     );
   }

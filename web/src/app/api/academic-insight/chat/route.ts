@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
+export const maxDuration = 60;
+
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json().catch(() => ({}));
@@ -69,97 +71,130 @@ ${question}`;
         { role: "user", content: userPrompt },
       ];
 
-      const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${apiKey}`,
-          "HTTP-Referer": "https://mindflow.ai",
-          "X-Title": "MindFlow AI",
-        },
-        body: JSON.stringify({
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 25000);
+
+      try {
+        const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+          method: "POST",
+          signal: controller.signal,
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${apiKey}`,
+            "HTTP-Referer": "https://mindflow.ai",
+            "X-Title": "MindFlow AI",
+          },
+          body: JSON.stringify({
+            model,
+            messages,
+            temperature: 0.4,
+            max_tokens: 2048,
+          }),
+        });
+
+        if (!response.ok) {
+          const errText = await response.text();
+          console.error("OpenRouter Academic Advisor error:", errText);
+          throw new Error(`OpenRouter API returned status ${response.status}`);
+        }
+
+        const data = await response.json();
+        const responseText = data.choices?.[0]?.message?.content;
+
+        if (!responseText) {
+          throw new Error("Empty response from OpenRouter API");
+        }
+
+        return NextResponse.json({
+          answer: responseText.trim(),
+          provider: "openrouter",
           model,
-          messages,
-          temperature: 0.4,
-          max_tokens: 4096,
-        }),
-      });
-
-      if (!response.ok) {
-        const errText = await response.text();
-        console.error("OpenRouter Academic Advisor error:", errText);
-        throw new Error(`OpenRouter API returned status ${response.status}`);
+        });
+      } finally {
+        clearTimeout(timeoutId);
       }
-
-      const data = await response.json();
-      const responseText = data.choices?.[0]?.message?.content;
-
-      if (!responseText) {
-        throw new Error("Empty response from OpenRouter API");
-      }
-
-      return NextResponse.json({
-        answer: responseText.trim(),
-        provider: "openrouter",
-        model,
-      });
     }
 
     // ─────────────────────────────────────────────
     // 2. Google Gemini Provider
     // ─────────────────────────────────────────────
-    const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
+    const candidateModels = customModel
+      ? [customModel]
+      : ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash"];
+
+    const historyContents = history.slice(-6).map((h: { role: string; content: string }) => ({
+      role: h.role === "user" ? "user" : "model",
+      parts: [{ text: h.content }],
+    }));
+
+    const fullContents = [
+      ...historyContents,
       {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          system_instruction: {
-            parts: [{ text: systemPrompt }],
-          },
-          contents: [
-            ...history.slice(-6).map((h: { role: string; content: string }) => ({
-              role: h.role === "user" ? "user" : "model",
-              parts: [{ text: h.content }],
-            })),
-            {
-              role: "user",
-              parts: [{ text: userPrompt }],
-            },
-          ],
-          generationConfig: {
-            temperature: 0.4,
-            maxOutputTokens: 4096,
-          },
-        }),
-      }
-    );
-
-    if (!response.ok) {
-      const err = await response.text();
-      console.error("Gemini Academic Advisor error:", err);
-      throw new Error(`Gemini API returned status ${response.status}`);
-    }
-
-    const data = await response.json();
-    const candidate = data.candidates?.[0];
-    const text = candidate?.content?.parts?.[0]?.text;
-
-    if (!text) {
-      throw new Error("Empty response from Gemini API");
-    }
-
-    return NextResponse.json({
-      answer: text.trim(),
-      provider: "gemini",
-      model: "gemini-2.5-flash",
-    });
-  } catch (error) {
-    console.error("Academic Advisor API error:", error);
-    return NextResponse.json(
-      {
-        error: error instanceof Error ? error.message : "Gagal menghubungi AI Academic Advisor.",
+        role: "user",
+        parts: [{ text: userPrompt }],
       },
+    ];
+
+    let lastError: Error | null = null;
+
+    for (const model of candidateModels) {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 20000);
+
+      try {
+        const response = await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
+          {
+            method: "POST",
+            signal: controller.signal,
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              contents: fullContents,
+              systemInstruction: {
+                parts: [{ text: systemPrompt }],
+              },
+              generationConfig: {
+                temperature: 0.4,
+                maxOutputTokens: 2048,
+              },
+            }),
+          }
+        );
+
+        if (!response.ok) {
+          const errText = await response.text();
+          console.warn(`Gemini Academic Advisor error for model ${model}:`, errText);
+          lastError = new Error(`Gemini API returned status ${response.status}`);
+          continue;
+        }
+
+        const data = await response.json();
+        const candidate = data.candidates?.[0];
+        const responseText = candidate?.content?.parts?.[0]?.text;
+
+        if (!responseText) {
+          lastError = new Error("Empty response from Gemini API");
+          continue;
+        }
+
+        return NextResponse.json({
+          answer: responseText.trim(),
+          provider: "gemini",
+          model,
+        });
+      } catch (err: unknown) {
+        lastError = err as Error;
+      } finally {
+        clearTimeout(timeoutId);
+      }
+    }
+
+    throw lastError || new Error("Semua model Gemini mengalami kendala.");
+  } catch (error: unknown) {
+    console.error("Academic Advisor Chat API Error:", error);
+    const message = (error as Error).message || "Internal Server Error";
+    return NextResponse.json(
+      { error: message.includes("abort") ? "Respon AI Advisor timeout. Silakan tanyakan kembali." : message },
       { status: 500 }
     );
   }

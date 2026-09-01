@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import fs from "fs/promises";
 import path from "path";
 
+export const maxDuration = 60;
+
 const IMGBB_API_KEY = process.env.IMGBB_API_KEY || "6b250d068d041c08e866c64ce9ad2006";
 
 export async function POST(request: NextRequest) {
