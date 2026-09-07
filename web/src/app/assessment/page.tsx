@@ -13,10 +13,16 @@ import {
   Home,
   Brain,
   Sparkles,
+  Key,
+  ExternalLink,
+  Eye,
+  EyeOff,
+  AlertCircle,
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { saveAssessment, markAssessmentComplete, getAssessment, saveAcademicInsight } from "@/lib/firestore";
 import { EmailVerificationGatekeeper } from "@/components/auth/EmailVerificationGatekeeper";
+import { getAiProvider, getCustomApiKey, setCustomApiKey, type AiProvider } from "@/lib/aiConfig";
 import { Button } from "@/components/ui/Button";
 import { Select } from "@/components/ui/Select";
 import { Slider } from "@/components/ui/Slider";
@@ -47,6 +53,7 @@ const STEPS = [
   { id: 2, title: "Kebiasaan Belajar", icon: BookOpen, description: "Rutinitas akademik dan durasi studi harian" },
   { id: 3, title: "Gaya Hidup & Kesehatan", icon: HeartPulse, description: "Pola tidur, aktivitas, dan waktu layar" },
   { id: 4, title: "Lingkungan Belajar", icon: Home, description: "Fasilitas internet, organisasi, dan kondisi mental" },
+  { id: 5, title: "Setup AI Engine", icon: Sparkles, description: "Pilih provider AI dan masukkan API key pribadi" },
 ];
 
 // ─── Progress Bar ─────────────────────────────────────────────────────────────
@@ -91,6 +98,16 @@ export default function AssessmentPage() {
   const [currentStep, setCurrentStep] = useState(1);
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+
+  // AI Provider States
+  const [selectedProvider, setSelectedProvider] = useState<AiProvider>("gemini");
+  const [geminiKey, setGeminiKey] = useState("");
+  const [openRouterKey, setOpenRouterKey] = useState("");
+  const [showGeminiKey, setShowGeminiKey] = useState(false);
+  const [showOpenRouterKey, setShowOpenRouterKey] = useState(false);
+  const [apiKeySaving, setApiKeySaving] = useState(false);
+  const [apiKeyError, setApiKeyError] = useState<string | null>(null);
+  const [apiKeySaved, setApiKeySaved] = useState(false);
 
   const [data, setData] = useState<AssessmentData>({
     age: 20,
@@ -137,6 +154,10 @@ export default function AssessmentPage() {
               mental_health_rating: existing.mental_health_rating ?? 8,
             });
           }
+
+          // Load AI provider settings
+          const provider = getAiProvider();
+          setSelectedProvider(provider);
         } catch (err) {
           console.error("Failed to load existing assessment:", err);
         }
@@ -158,6 +179,41 @@ export default function AssessmentPage() {
   const handleBack = () => {
     if (currentStep > 1) {
       setCurrentStep((s) => s - 1);
+    }
+  };
+
+  const handleSaveApiKey = async () => {
+    setApiKeyError(null);
+    setApiKeySaved(false);
+
+    const keyToSave = selectedProvider === "gemini" ? geminiKey.trim() : openRouterKey.trim();
+
+    if (!keyToSave) {
+      setApiKeyError(`Masukkan ${selectedProvider === "gemini" ? "Gemini" : "OpenRouter"} API key`);
+      return;
+    }
+
+    if (keyToSave.length < 10) {
+      setApiKeyError("API key terlalu pendek. Periksa kembali.");
+      return;
+    }
+
+    setApiKeySaving(true);
+    try {
+      setCustomApiKey(keyToSave, selectedProvider);
+      setApiKeySaved(true);
+
+      // Emit event untuk update state di komponen lain
+      window.dispatchEvent(new Event("mindflow-api-key-updated"));
+
+      setTimeout(() => {
+        setApiKeySaved(false);
+      }, 3000);
+    } catch (err) {
+      setApiKeyError("Gagal menyimpan API key. Coba lagi.");
+      console.error("API key save error:", err);
+    } finally {
+      setApiKeySaving(false);
     }
   };
 
@@ -288,6 +344,24 @@ export default function AssessmentPage() {
           {currentStep === 2 && <Step2 data={data} set={set} />}
           {currentStep === 3 && <Step3 data={data} set={set} />}
           {currentStep === 4 && <Step4 data={data} set={set} />}
+          {currentStep === 5 && (
+            <Step5
+              selectedProvider={selectedProvider}
+              setSelectedProvider={setSelectedProvider}
+              geminiKey={geminiKey}
+              setGeminiKey={setGeminiKey}
+              openRouterKey={openRouterKey}
+              setOpenRouterKey={setOpenRouterKey}
+              showGeminiKey={showGeminiKey}
+              setShowGeminiKey={setShowGeminiKey}
+              showOpenRouterKey={showOpenRouterKey}
+              setShowOpenRouterKey={setShowOpenRouterKey}
+              onSave={handleSaveApiKey}
+              saving={apiKeySaving}
+              error={apiKeyError}
+              saved={apiKeySaved}
+            />
+          )}
         </div>
 
         {/* Navigation */}
@@ -556,6 +630,207 @@ function Step4({
         />
         <p className="text-xs text-gray-500">
           1 = Sangat Tertekan / Burnout · 10 = Sangat Positif & Bersemangat
+        </p>
+      </div>
+    </div>
+  );
+}
+
+// ─── Step 5: AI Engine Setup & API Key Configuration ─────────────────────────
+interface Step5Props {
+  selectedProvider: AiProvider;
+  setSelectedProvider: (provider: AiProvider) => void;
+  geminiKey: string;
+  setGeminiKey: (key: string) => void;
+  openRouterKey: string;
+  setOpenRouterKey: (key: string) => void;
+  showGeminiKey: boolean;
+  setShowGeminiKey: (show: boolean) => void;
+  showOpenRouterKey: boolean;
+  setShowOpenRouterKey: (show: boolean) => void;
+  onSave: () => void;
+  saving: boolean;
+  error: string | null;
+  saved: boolean;
+}
+
+function Step5({
+  selectedProvider,
+  setSelectedProvider,
+  geminiKey,
+  setGeminiKey,
+  openRouterKey,
+  setOpenRouterKey,
+  showGeminiKey,
+  setShowGeminiKey,
+  showOpenRouterKey,
+  setShowOpenRouterKey,
+  onSave,
+  saving,
+  error,
+  saved,
+}: Step5Props) {
+  const isGemini = selectedProvider === "gemini";
+
+  return (
+    <div className="space-y-6">
+      {/* Info Banner */}
+      <div className="p-4 rounded-2xl bg-blue-50 border border-blue-200 text-blue-900 text-xs leading-relaxed space-y-2">
+        <p className="font-bold flex items-center gap-2 text-blue-800">
+          <AlertCircle className="w-4 h-4" /> Pilihan Provider AI
+        </p>
+        <p>
+          MindFlow AI menggunakan model bahasa terkini untuk memberikan analisis mendalam. Anda dapat menggunakan kunci API pribadi dari Google Gemini atau OpenRouter, atau menggunakan fallback server default kami.
+        </p>
+      </div>
+
+      {/* Provider Selection */}
+      <div className="space-y-3">
+        <label className="text-sm font-bold text-gray-800">Pilih AI Provider:</label>
+        <div className="grid grid-cols-2 gap-3">
+          {[
+            {
+              value: "gemini" as AiProvider,
+              label: "Google Gemini",
+              desc: "Model terbaru dari Google",
+            },
+            {
+              value: "openrouter" as AiProvider,
+              label: "OpenRouter",
+              desc: "Multi-model marketplace",
+            },
+          ].map((opt) => (
+            <button
+              key={opt.value}
+              type="button"
+              onClick={() => setSelectedProvider(opt.value)}
+              className={`p-4 rounded-2xl border-2 transition-all text-left ${
+                selectedProvider === opt.value
+                  ? "border-primary bg-primary/5 shadow-md"
+                  : "border-border bg-white hover:border-primary/40"
+              }`}
+            >
+              <div className="font-bold text-sm text-gray-800">{opt.label}</div>
+              <div className="text-xs text-gray-500 mt-1">{opt.desc}</div>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Gemini API Key Input */}
+      {isGemini && (
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <label className="text-sm font-bold text-gray-800">Google Gemini API Key</label>
+            <a
+              href="https://aistudio.google.com/app/apikey"
+              target="_blank"
+              rel="noreferrer"
+              className="text-xs text-primary hover:underline font-bold flex items-center gap-1 cursor-pointer"
+            >
+              Dapatkan Key →
+              <ExternalLink className="w-3 h-3" />
+            </a>
+          </div>
+
+          <div className="relative">
+            <input
+              type={showGeminiKey ? "text" : "password"}
+              value={geminiKey}
+              onChange={(e) => setGeminiKey(e.target.value)}
+              placeholder="AIza... (paste key dari Google AI Studio)"
+              className="w-full px-4 py-3 rounded-2xl border border-border bg-white text-sm font-mono focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary"
+            />
+            <button
+              type="button"
+              onClick={() => setShowGeminiKey(!showGeminiKey)}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 p-2 cursor-pointer"
+            >
+              {showGeminiKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+            </button>
+          </div>
+
+          <p className="text-xs text-gray-500 leading-relaxed">
+            🔐 API key disimpan aman di browser Anda. MindFlow tidak pernah mengirimkan key ke server kami.
+          </p>
+        </div>
+      )}
+
+      {/* OpenRouter API Key Input */}
+      {!isGemini && (
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <label className="text-sm font-bold text-gray-800">OpenRouter API Key</label>
+            <a
+              href="https://openrouter.ai/keys"
+              target="_blank"
+              rel="noreferrer"
+              className="text-xs text-primary hover:underline font-bold flex items-center gap-1 cursor-pointer"
+            >
+              Dapatkan Key →
+              <ExternalLink className="w-3 h-3" />
+            </a>
+          </div>
+
+          <div className="relative">
+            <input
+              type={showOpenRouterKey ? "text" : "password"}
+              value={openRouterKey}
+              onChange={(e) => setOpenRouterKey(e.target.value)}
+              placeholder="sk-or-... (paste key dari OpenRouter dashboard)"
+              className="w-full px-4 py-3 rounded-2xl border border-border bg-white text-sm font-mono focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary"
+            />
+            <button
+              type="button"
+              onClick={() => setShowOpenRouterKey(!showOpenRouterKey)}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 p-2 cursor-pointer"
+            >
+              {showOpenRouterKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+            </button>
+          </div>
+
+          <p className="text-xs text-gray-500 leading-relaxed">
+            🔐 API key disimpan aman di browser Anda. MindFlow tidak pernah mengirimkan key ke server kami.
+          </p>
+        </div>
+      )}
+
+      {/* Error Message */}
+      {error && (
+        <div className="p-3 rounded-2xl bg-rose-50 border border-rose-200 text-rose-700 text-xs font-bold flex items-start gap-2">
+          <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+          <span>{error}</span>
+        </div>
+      )}
+
+      {/* Success Message */}
+      {saved && (
+        <div className="p-3 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-bold flex items-start gap-2 animate-fade-in">
+          <CheckCircle2 className="w-4 h-4 shrink-0 mt-0.5" />
+          <span>API Key tersimpan! Siap melanjutkan...</span>
+        </div>
+      )}
+
+      {/* Save Button */}
+      <div className="pt-2">
+        <Button
+          type="button"
+          variant="primary"
+          size="md"
+          onClick={onSave}
+          loading={saving}
+          icon={<Key className="w-4 h-4" />}
+          className="w-full font-bold shadow-sm cursor-pointer"
+        >
+          Simpan API Key
+        </Button>
+      </div>
+
+      {/* Optional Notice */}
+      <div className="p-3.5 rounded-2xl bg-amber-50 border border-amber-200 text-amber-900 text-xs leading-relaxed">
+        <p className="font-bold mb-1">💡 Catatan Penting:</p>
+        <p>
+          Jika Anda tidak memiliki API key saat ini, sistem akan menggunakan fallback server default kami. Anda dapat mengonfigurasi API key kapan saja di pengaturan setelah login.
         </p>
       </div>
     </div>
