@@ -15,6 +15,7 @@ import {
   Sparkles,
   ArrowRight,
   RefreshCw,
+  ChevronLeft,
 } from "lucide-react";
 import { BrandingPanel } from "@/components/auth/BrandingPanel";
 import { GoogleButton } from "@/components/auth/GoogleButton";
@@ -227,6 +228,15 @@ export default function RegisterPage() {
       {/* Right: Register Form */}
       <div className="flex-1 flex items-center justify-center p-6 sm:p-10 bg-background overflow-y-auto">
         <div className="w-full max-w-md animate-slide-up py-4">
+          {/* Back to Landing Button */}
+          <Link
+            href="/"
+            className="inline-flex items-center gap-2 text-sm font-semibold text-gray-600 hover:text-primary hover:bg-gray-50 px-3 py-2 rounded-lg transition-all mb-6 cursor-pointer"
+          >
+            <ChevronLeft className="w-4 h-4" />
+            Kembali ke Beranda
+          </Link>
+
           {/* Mobile logo */}
           <div className="flex items-center gap-2 mb-8 lg:hidden">
             <Brain className="w-8 h-8 text-primary" />

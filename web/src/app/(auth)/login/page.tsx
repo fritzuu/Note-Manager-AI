@@ -3,7 +3,7 @@
 import React, { useState, Suspense } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Eye, EyeOff, Mail, Lock, Brain, AlertCircle, CheckCircle2, Info } from "lucide-react";
+import { Eye, EyeOff, Mail, Lock, Brain, AlertCircle, CheckCircle2, Info, ChevronLeft } from "lucide-react";
 import { BrandingPanel } from "@/components/auth/BrandingPanel";
 import { GoogleButton } from "@/components/auth/GoogleButton";
 import { Button } from "@/components/ui/Button";
@@ -103,6 +103,15 @@ function LoginForm() {
       {/* Right: Login Form */}
       <div className="flex-1 flex items-center justify-center p-6 sm:p-10 bg-background">
         <div className="w-full max-w-md animate-slide-up">
+          {/* Back to Landing Button */}
+          <Link
+            href="/"
+            className="inline-flex items-center gap-2 text-sm font-semibold text-gray-600 hover:text-primary hover:bg-gray-50 px-3 py-2 rounded-lg transition-all mb-6 cursor-pointer"
+          >
+            <ChevronLeft className="w-4 h-4" />
+            Kembali ke Beranda
+          </Link>
+
           {/* Mobile logo */}
           <div className="flex items-center gap-2 mb-8 lg:hidden">
             <Brain className="w-8 h-8 text-primary" />
