@@ -1,10 +1,11 @@
 import type { Metadata } from "next";
+import { AuthShell } from "@/components/auth/AuthShell";
 
 export const metadata: Metadata = {
-  title: "Sign In — MindFlow AI",
-  description: "Sign in to your MindFlow AI account to access your academic productivity dashboard.",
+  title: "Cogniva — Ruang belajarmu",
+  description: "Masuk atau buat akun Cogniva untuk catatan, tugas, dan fokus dalam satu ruang.",
 };
 
 export default function AuthLayout({ children }: { children: React.ReactNode }) {
-  return <>{children}</>;
+  return <AuthShell>{children}</AuthShell>;
 }

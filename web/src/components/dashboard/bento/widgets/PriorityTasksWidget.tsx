@@ -8,6 +8,7 @@ import { deadlineToDays } from "@/lib/fuzzyLogic";
 
 interface PriorityTasksWidgetProps {
   tasks: TaskDocument[];
+  subtitle?: string;
 }
 
 const PRIORITY_BADGES: Record<string, string> = {
@@ -17,7 +18,7 @@ const PRIORITY_BADGES: Record<string, string> = {
   Low: "bg-emerald-100 text-emerald-700 border-emerald-200",
 };
 
-export function PriorityTasksWidget({ tasks }: PriorityTasksWidgetProps) {
+export function PriorityTasksWidget({ tasks, subtitle = "Prioritas Cerdas MindFlow" }: PriorityTasksWidgetProps) {
   const activeTasks = tasks
     .filter((t) => t.status !== "done")
     .sort((a, b) => (b.priorityScore || 0) - (a.priorityScore || 0))
@@ -33,7 +34,7 @@ export function PriorityTasksWidget({ tasks }: PriorityTasksWidgetProps) {
           </div>
           <div>
             <h4 className="text-xs font-bold text-gray-900">Priority Tasks</h4>
-            <p className="text-[10px] text-gray-400">Prioritas Cerdas MindFlow</p>
+            <p className="text-[10px] text-gray-400">{subtitle}</p>
           </div>
         </div>
         <Link

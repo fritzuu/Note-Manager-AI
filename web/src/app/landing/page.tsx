@@ -1,799 +1,147 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
+import Link from "next/link";
+import Image from "next/image";
+import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
+import { AnimatePresence, MotionConfig, motion, useReducedMotion, useScroll, useTransform } from "framer-motion";
+import { ArrowDown, ArrowRight, ArrowUpRight, BookOpen, Check, ChevronDown, FileText, LayoutGrid, Menu, MessagesSquare, SlidersHorizontal, Timer, X, ChartNoAxesCombined } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
-import { 
-  Brain, 
-  Clock,
-  ArrowRight,
-  Play,
-  Pause,
-  RotateCcw,
-  ChevronDown,
-  Zap,
-  Target,
-  Users,
-  CheckCircle2
-} from "lucide-react";
-import { motion } from "framer-motion";
-import { Button } from "@/components/ui/Button";
+import type { FeatureId } from "@/components/landing/ProductPreviews";
+import { useLandingScroll } from "@/components/landing/useLandingScroll";
+import s from "./landing.module.css";
 
-interface FAQItem {
-  question: string;
-  answer: string;
+const CognivaWorld = dynamic(() => import("@/components/landing/CognivaWorld"), { ssr: false, loading: () => <div className={s.sceneLoading}><span />Menyiapkan ruang belajarmu…</div> });
+const FeaturePreview = dynamic(() => import("@/components/landing/ProductPreviews").then((module) => module.FeaturePreview), { loading: () => <div className={s.previewLoading}>Menyiapkan demo interaktif…</div> });
+const FEATURES = [
+  { id: "notes", icon: FileText, title: "Ide tersimpan. Intinya ditemukan.", description: "Tulis catatan, rapikan materi, lalu gunakan ringkasan AI untuk melihat hal yang paling penting.", caption: "Catatan" },
+  { id: "tasks", icon: SlidersHorizontal, title: "Satu prioritas. Langkah yang jelas.", description: "Atur tugas dengan prioritas yang mempertimbangkan deadline, kesulitan, dan progresmu.", caption: "Tugas" },
+  { id: "focus", icon: Timer, title: "Waktunya hadir, sepenuhnya.", description: "Pilih tugas dan temukan durasi fokus yang sesuai. Selalu ada ruang untuk istirahat.", caption: "Fokus" },
+  { id: "insight", icon: ChartNoAxesCombined, title: "Kenali ritmemu sendiri.", description: "Refleksikan kebiasaan belajar lewat assessment, estimasi, dan rekomendasi yang bisa ditindaklanjuti.", caption: "Insight" },
+  { id: "assistant", icon: MessagesSquare, title: "Pertanyaan kecil, pemahaman baru.", description: "Diskusikan materi bersama asisten AI dengan konteks dari catatanmu.", caption: "Asisten AI" },
+  { id: "dashboard", icon: LayoutGrid, title: "Semua punya tempatnya.", description: "Atur widget catatan, tugas, dan aktivitas dalam workspace yang mengikuti caramu belajar.", caption: "Dashboard" },
+] satisfies { id: FeatureId; icon: typeof FileText; title: string; description: string; caption: string }[];
+const CHAPTERS = [
+  { id: "notes", title: "Tangkap idenya.", short: "Catat", text: "Beri tempat untuk semua yang kamu pelajari.", icon: BookOpen },
+  { id: "tasks", title: "Temukan arahnya.", short: "Atur", text: "Ubah daftar panjang menjadi langkah yang jelas.", icon: SlidersHorizontal },
+  { id: "focus", title: "Nikmati prosesnya.", short: "Fokus", text: "Satu tugas, satu sesi, satu langkah lebih dekat.", icon: Timer },
+] as const;
+const FAQ = [
+  ["Apa yang bisa aku lakukan di Cogniva?", "Kamu bisa menulis catatan, mengatur tugas, menjalankan sesi fokus, berdiskusi dengan asisten AI, dan melihat insight kebiasaan belajar dalam satu workspace pribadi."],
+  ["Apakah sesi fokus selalu 25 menit?", "Tidak. Rekomendasi durasi menyesuaikan prioritas dan kesulitan tugas. Pilihan standar adalah 25, 40, atau 50 menit, dengan jeda 5, 10, atau 15 menit. Tugas singkat dapat menggunakan sesi micro."],
+  ["Apakah aku memerlukan API key sendiri?", "Fitur AI mendukung Gemini atau OpenRouter. Key server dapat digunakan jika tersedia; kuota dan biaya mengikuti konfigurasi serta ketentuan provider yang dipakai."],
+  ["Bagaimana cara membaca insight akademik?", "Insight adalah estimasi dan rekomendasi dari assessment untuk membantu refleksi kebiasaan belajar. Hasilnya bukan nilai resmi atau jaminan peningkatan nilai akademik."],
+] as const;
+
+function Reveal({ children, className, delay = 0 }: { children: ReactNode; className?: string; delay?: number }) {
+  const reduced = useReducedMotion();
+  return <motion.div className={className} initial={reduced ? false : { opacity: 0, y: 24 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true, amount: 0.1 }} transition={{ duration: reduced ? 0 : .65, delay, ease: [.22, 1, .36, 1] }}>{children}</motion.div>;
 }
-
-const FAQ_DATA: FAQItem[] = [
-  {
-    question: "How do I organize my notes and tasks?",
-    answer: "MindFlow helps you organize notes by subject and automatically prioritizes tasks based on deadlines and difficulty. Your tasks are ranked so you always know what to work on next."
-  },
-  {
-    question: "Can I use this with my study group?",
-    answer: "Yes, you can share notes and task lists with classmates. MindFlow makes collaboration simple while keeping your personal workspace organized."
-  },
-  {
-    question: "What about privacy - who sees my notes?",
-    answer: "Only you can see your notes unless you explicitly share them. All data is encrypted and stored securely. We never sell or share your information."
-  },
-  {
-    question: "How does the Pomodoro timer help?",
-    answer: "The Pomodoro technique breaks study sessions into 25-minute focused blocks with 5-minute breaks. This keeps you fresh and prevents burnout while maintaining productivity."
-  },
-  {
-    question: "Is there a free version?",
-    answer: "Yes, MindFlow is completely free for students. No hidden fees, no credit card required. Just sign up and start organizing your study life."
-  }
-];
 
 export default function LandingPage() {
   const { user, loading } = useAuth();
   const router = useRouter();
+  const scrollTo = useLandingScroll();
+  const reduced = useReducedMotion();
+  const heroRef = useRef<HTMLElement>(null);
+  const journeyRef = useRef<HTMLElement>(null);
+  const { scrollYProgress } = useScroll({ target: heroRef, offset: ["start start", "end end"] });
+  const { scrollYProgress: journeyProgress } = useScroll({ target: journeyRef, offset: ["start end", "end start"] });
+  const copyY = useTransform(scrollYProgress, [0, 1], [0, -45]);
+  const watermarkX = useTransform(journeyProgress, [0, 1], [100, -160]);
+  const [selected, setSelected] = useState<"notes" | "tasks" | "focus">("notes");
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [scrolled, setScrolled] = useState(false);
+  const [activeFeature, setActiveFeature] = useState(0);
+  const [openFaq, setOpenFaq] = useState<number | null>(0);
+  const featureRefs = useRef<(HTMLButtonElement | null)[]>([]);
+  const menuButton = useRef<HTMLButtonElement>(null);
+  const mobileMenu = useRef<HTMLDivElement>(null);
+  const feature = FEATURES[activeFeature];
 
-  const [openFaq, setOpenFaq] = useState<number | null>(null);
-  const [pomoTime, setPomoTime] = useState(1500);
-  const [pomoRunning, setPomoRunning] = useState(false);
-
+  useEffect(() => { if (!loading && user) router.replace("/dashboard"); }, [user, loading, router]);
   useEffect(() => {
-    if (!loading && user) {
-      router.replace("/dashboard");
-    }
-  }, [user, loading, router]);
-
+    const update = () => setScrolled(window.scrollY > 32);
+    update(); window.addEventListener("scroll", update, { passive: true });
+    return () => window.removeEventListener("scroll", update);
+  }, []);
   useEffect(() => {
-    let interval: NodeJS.Timeout | null = null;
-    if (pomoRunning && pomoTime > 0) {
-      interval = setInterval(() => setPomoTime((prev) => prev - 1), 1000);
-    } else if (pomoTime === 0) {
-      setPomoRunning(false);
-    }
-    return () => {
-      if (interval) clearInterval(interval);
-    };
-  }, [pomoRunning, pomoTime]);
+    if (!menuOpen) return;
+    mobileMenu.current?.querySelector("a")?.focus();
+    const escape = (event: globalThis.KeyboardEvent) => { if (event.key === "Escape") { setMenuOpen(false); menuButton.current?.focus(); } };
+    document.addEventListener("keydown", escape);
+    return () => document.removeEventListener("keydown", escape);
+  }, [menuOpen]);
 
-  const formatPomoTime = (seconds: number) => {
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return `${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
-  };
+  function explore(id: FeatureId) {
+    setActiveFeature(FEATURES.findIndex((item) => item.id === id));
+    const target = document.getElementById("fitur");
+    if (target) scrollTo(target, () => document.getElementById(`feature-tab-${id}`)?.focus({ preventScroll: true }));
+  }
+  function switchFeature(event: KeyboardEvent<HTMLButtonElement>, index: number) {
+    const next = ["ArrowDown", "ArrowRight"].includes(event.key) ? (index + 1) % FEATURES.length : ["ArrowUp", "ArrowLeft"].includes(event.key) ? (index + FEATURES.length - 1) % FEATURES.length : event.key === "Home" ? 0 : event.key === "End" ? FEATURES.length - 1 : null;
+    if (next !== null) { event.preventDefault(); setActiveFeature(next); featureRefs.current[next]?.focus(); }
+  }
 
-  const handleGetStarted = () => {
-    router.push("/login");
-  };
+  return <MotionConfig reducedMotion="user"><div className={s.page} lang="id">
+    <a className={s.skipLink} href="#main">Langsung ke konten</a>
+    <header className={`${s.header} ${scrolled ? s.headerScrolled : ""}`}>
+      <nav className={`${s.container} ${s.nav}`} aria-label="Navigasi utama">
+        <Link className={s.brand} href="/landing" aria-label="Cogniva beranda"><Image src="/brand/cogniva/cogniva-horizontal-color.svg" alt="Cogniva" width={160} height={46} priority /></Link>
+        <div className={s.desktopNav}><a href="#cara-kerja">Kenali Cogniva</a><a href="#fitur">Jelajahi fitur</a><a href="#faq">FAQ</a></div>
+        <div className={s.navActions}><Link className={s.loginLink} href="/login">Masuk</Link><Link className={s.smallCta} href="/register">Mulai sekarang <ArrowUpRight size={16} /></Link><button ref={menuButton} className={s.menuButton} aria-label={menuOpen ? "Tutup menu" : "Buka menu"} aria-expanded={menuOpen} aria-controls="mobile-navigation" onClick={() => setMenuOpen(!menuOpen)}>{menuOpen ? <X /> : <Menu />}</button></div>
+      </nav>
+      {menuOpen && <div ref={mobileMenu} id="mobile-navigation" className={s.mobileNav}>{[["Kenali Cogniva", "#cara-kerja"], ["Jelajahi fitur", "#fitur"], ["FAQ", "#faq"], ["Masuk", "/login"]].map(([label, href]) => <Link key={href} href={href} onClick={() => setMenuOpen(false)}>{label}<ArrowUpRight size={18} /></Link>)}</div>}
+    </header>
 
-  return (
-    <div className="min-h-screen bg-white text-gray-900 font-sans overflow-x-hidden">
-      
-      {/* NAVBAR */}
-      <motion.nav 
-        initial={{ y: -100 }}
-        animate={{ y: 0 }}
-        className="sticky top-0 z-50 bg-white/95 backdrop-blur-sm border-b border-gray-100"
-      >
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-4 flex items-center justify-between">
-          <motion.div 
-            className="flex items-center gap-2"
-            whileHover={{ scale: 1.05 }}
-          >
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#1B4D3E] to-[#2D6A4F] flex items-center justify-center shadow-md">
-              <Brain className="w-5 h-5 text-white" />
-            </div>
-            <span className="font-bold text-xl text-[#1B4D3E]">MindFlow</span>
-          </motion.div>
-
-          <div className="hidden md:flex items-center gap-8 text-sm">
-            <motion.a href="#features" whileHover={{ color: "#1B4D3E" }} className="text-gray-600 hover:text-[#1B4D3E] transition-colors">Features</motion.a>
-            <motion.a href="#how" whileHover={{ color: "#1B4D3E" }} className="text-gray-600 hover:text-[#1B4D3E] transition-colors">How It Works</motion.a>
-            <motion.a href="#faq" whileHover={{ color: "#1B4D3E" }} className="text-gray-600 hover:text-[#1B4D3E] transition-colors">FAQ</motion.a>
-          </div>
-
-          <Button
-            variant="primary"
-            size="sm"
-            onClick={handleGetStarted}
-            className="font-semibold"
-          >
-            Get Started
-          </Button>
-        </div>
-      </motion.nav>
-
-      {/* HERO */}
-      <section className="py-20 sm:py-32 px-4 sm:px-6 bg-gradient-to-b from-white via-white to-gray-50">
-        <div className="max-w-7xl mx-auto">
-          <div className="grid md:grid-cols-2 gap-12 lg:gap-16 items-center">
-            {/* Left side */}
-            <motion.div 
-              initial={{ opacity: 0, x: -30 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ duration: 0.6 }}
-              className="space-y-8"
-            >
-              <div className="space-y-4">
-                <motion.div
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: 0.1 }}
-                  className="inline-block"
-                >
-                  <span className="text-sm font-semibold text-[#2D6A4F] bg-[#8BBF9F]/10 px-4 py-2 rounded-full">For Every Student</span>
-                </motion.div>
-
-                <h1 className="text-5xl sm:text-7xl font-bold text-gray-900 leading-tight">
-                  Get stuff <span className="text-transparent bg-clip-text bg-gradient-to-r from-[#1B4D3E] to-[#2D6A4F]">done</span>
-                </h1>
-                <p className="text-lg sm:text-xl text-gray-600 leading-relaxed">
-                  Organize notes, track tasks, stay focused. Everything a student needs in one clean, simple app.
-                </p>
-              </div>
-
-              <motion.div 
-                className="flex flex-col sm:flex-row gap-4"
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.2 }}
-              >
-                <Button
-                  onClick={handleGetStarted}
-                  variant="primary"
-                  size="lg"
-                  className="px-8 font-semibold text-base shadow-lg hover:shadow-xl transition-shadow"
-                >
-                  Start Free
-                  <ArrowRight className="w-4 h-4 ml-2" />
-                </Button>
-                <Button
-                  variant="outline"
-                  size="lg"
-                  className="px-8 font-semibold text-base"
-                >
-                  See Demo
-                </Button>
-              </motion.div>
-
-              {/* Stats */}
-              <motion.div 
-                className="grid grid-cols-2 gap-6 pt-4"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                transition={{ delay: 0.3 }}
-              >
-                {[
-                  { stat: "100%", label: "Free" },
-                  { stat: "2min", label: "Setup" }
-                ].map((item, idx) => (
-                  <div key={idx} className="space-y-1">
-                    <p className="text-2xl font-bold text-[#1B4D3E]">{item.stat}</p>
-                    <p className="text-sm text-gray-600">{item.label}</p>
-                  </div>
-                ))}
-              </motion.div>
+    <main id="main">
+      <section ref={heroRef} className={s.heroTrack} aria-labelledby="hero-title">
+        <div className={s.hero}>
+          <div className={s.heroOrbit} aria-hidden="true" />
+          <div className={`${s.container} ${s.heroInner}`}>
+            <motion.div className={s.heroCopy} style={{ y: reduced ? 0 : copyY }}>
+              <Reveal><h1 id="hero-title">Ide besar.<br />Langkah <em>kecil.</em></h1></Reveal>
+              <Reveal delay={.1}><p className={s.heroDescription}>Bawa catatan, tugas, dan fokus ke satu tempat.<br className={s.desktopBreak} /> Temukan alur belajar yang terasa milikmu.</p></Reveal>
+              <Reveal delay={.2} className={s.heroActions}><Link className={s.primaryButton} href="/register">Temukan alurmu <ArrowUpRight size={20} /></Link><a className={s.textButton} href="#fitur">Lihat cara kerjanya <ArrowRight size={17} /></a></Reveal>
             </motion.div>
-
-            {/* Right side - Visual demo */}
-            <motion.div 
-              initial={{ opacity: 0, x: 30 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ duration: 0.6, delay: 0.1 }}
-              className="relative"
-            >
-              {/* Floating cards */}
-              <motion.div
-                animate={{ y: [0, -10, 0] }}
-                transition={{ duration: 4, repeat: Infinity }}
-                className="absolute -top-8 -left-4 w-56 bg-white rounded-2xl p-6 shadow-xl border border-gray-100 z-20"
-              >
-                <div className="flex items-center gap-3 mb-3">
-                  <div className="w-3 h-3 rounded-full bg-[#2D6A4F]" />
-                  <span className="text-xs font-semibold text-gray-500 uppercase">Today</span>
-                </div>
-                <div className="space-y-2">
-                  <div className="h-2 bg-gray-200 rounded w-3/4" />
-                  <div className="h-2 bg-gray-200 rounded w-5/6" />
-                </div>
-              </motion.div>
-
-              <motion.div
-                animate={{ y: [0, 10, 0] }}
-                transition={{ duration: 4, repeat: Infinity, delay: 0.5 }}
-                className="absolute top-32 -right-8 w-64 bg-gradient-to-br from-[#1B4D3E]/5 to-[#2D6A4F]/5 rounded-2xl p-6 border border-[#8BBF9F]/20 z-10"
-              >
-                <div className="space-y-3">
-                  <div className="flex items-center gap-2">
-                    <Clock className="w-4 h-4 text-[#2D6A4F]" />
-                    <span className="text-sm font-semibold text-gray-700">Focus Time</span>
-                  </div>
-                  <div className="text-3xl font-bold text-[#1B4D3E]">25:00</div>
-                </div>
-              </motion.div>
-
-              <motion.div
-                animate={{ y: [0, -10, 0] }}
-                transition={{ duration: 4, repeat: Infinity, delay: 1 }}
-                className="absolute bottom-0 left-1/4 w-52 bg-white rounded-2xl p-5 shadow-lg border border-gray-100"
-              >
-                <div className="flex gap-2 mb-3">
-                  {[1, 2, 3].map(i => (
-                    <div key={i} className={`h-2 rounded-full ${i === 1 ? 'w-8 bg-[#2D6A4F]' : 'w-2 bg-gray-300'}`} />
-                  ))}
-                </div>
-                <p className="text-xs text-gray-500">3 tasks ready</p>
-              </motion.div>
-            </motion.div>
-          </div>
-        </div>
-      </section>
-
-      {/* FEATURES */}
-      <section id="features" className="py-20 px-4 sm:px-6 bg-white">
-        <div className="max-w-7xl mx-auto">
-          <motion.div 
-            className="text-center mb-16"
-            initial={{ opacity: 0, y: 20 }}
-            whileInView={{ opacity: 1, y: 0 }}
-          >
-            <h2 className="text-4xl sm:text-5xl font-bold text-gray-900 mb-4">Made for how you study</h2>
-            <p className="text-lg text-gray-600">Simple, powerful tools that actually fit your life</p>
-          </motion.div>
-
-          <div className="grid md:grid-cols-3 gap-8">
-            {[
-              {
-                icon: Brain,
-                title: "Smart Notes",
-                desc: "Organize by subject, search instantly. Keep everything in one place without clutter.",
-                color: "from-blue-500 to-blue-600"
-              },
-              {
-                icon: Target,
-                title: "Task Priority",
-                desc: "Always know what's urgent. Never miss a deadline or get overwhelmed again.",
-                color: "from-amber-500 to-amber-600"
-              },
-              {
-                icon: Zap,
-                title: "Stay Focused",
-                desc: "Built-in Pomodoro timer. Study in bursts, rest properly, stay productive.",
-                color: "from-emerald-500 to-emerald-600"
-              }
-            ].map((item, idx) => (
-              <motion.div
-                key={idx}
-                initial={{ opacity: 0, y: 30 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                transition={{ delay: idx * 0.15 }}
-                className="group relative"
-              >
-                <div className="absolute inset-0 bg-gradient-to-r from-[#1B4D3E]/5 to-[#2D6A4F]/5 rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity" />
-                <div className="relative p-8 rounded-2xl border border-gray-100 group-hover:border-[#8BBF9F] transition-colors">
-                  <motion.div 
-                    className={`w-14 h-14 rounded-xl bg-gradient-to-br ${item.color} flex items-center justify-center mb-5 shadow-lg`}
-                    whileHover={{ scale: 1.1, rotate: 5 }}
-                  >
-                    <item.icon className="w-7 h-7 text-white" />
-                  </motion.div>
-                  <h3 className="text-xl font-bold text-gray-900 mb-3">{item.title}</h3>
-                  <p className="text-gray-600 leading-relaxed">{item.desc}</p>
-                </div>
-              </motion.div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* HOW IT WORKS */}
-      <section id="how" className="py-20 px-4 sm:px-6 bg-gradient-to-b from-gray-50 to-white">
-        <div className="max-w-7xl mx-auto">
-          <motion.div 
-            className="text-center mb-16"
-            initial={{ opacity: 0, y: 20 }}
-            whileInView={{ opacity: 1, y: 0 }}
-          >
-            <h2 className="text-4xl sm:text-5xl font-bold text-gray-900 mb-4">Three simple steps</h2>
-            <p className="text-lg text-gray-600">Get started in minutes</p>
-          </motion.div>
-
-          <div className="grid md:grid-cols-3 gap-8 lg:gap-12">
-            {[
-              { num: "01", title: "Sign up free", desc: "No credit card. Create your account in 2 minutes." },
-              { num: "02", title: "Add your stuff", desc: "Write notes, create tasks, set deadlines." },
-              { num: "03", title: "Get organized", desc: "Focus on what matters. Use Pomodoro. Succeed." }
-            ].map((item, idx) => (
-              <motion.div
-                key={idx}
-                initial={{ opacity: 0, y: 30 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                transition={{ delay: idx * 0.15 }}
-                className="relative"
-              >
-                {/* Connector line */}
-                {idx < 2 && (
-                  <div className="hidden md:block absolute top-8 left-1/2 w-full h-1 bg-gradient-to-r from-[#8BBF9F] to-[#8BBF9F]/20 -z-10" />
-                )}
-
-                <div className="relative">
-                  <motion.div 
-                    className="w-16 h-16 rounded-full bg-gradient-to-br from-[#1B4D3E] to-[#2D6A4F] text-white flex items-center justify-center font-bold text-xl mb-6 mx-auto shadow-lg"
-                    whileHover={{ scale: 1.15, rotate: 360 }}
-                    transition={{ duration: 0.5 }}
-                  >
-                    {item.num}
-                  </motion.div>
-
-                  <div className="text-center space-y-2">
-                    <h3 className="text-xl font-bold text-gray-900">{item.title}</h3>
-                    <p className="text-gray-600">{item.desc}</p>
-                  </div>
-                </div>
-              </motion.div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* POMODORO DEMO */}
-      <section className="py-20 px-4 sm:px-6 bg-white">
-        <div className="max-w-3xl mx-auto">
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            className="text-center mb-12"
-          >
-            <h2 className="text-3xl sm:text-4xl font-bold text-gray-900 mb-2">Study smarter</h2>
-            <p className="text-gray-600">Try our built-in Pomodoro timer</p>
-          </motion.div>
-
-          <motion.div
-            initial={{ scale: 0.9, opacity: 0 }}
-            whileInView={{ scale: 1, opacity: 1 }}
-            className="bg-gradient-to-br from-[#1B4D3E]/5 to-[#2D6A4F]/5 rounded-3xl p-12 border border-[#8BBF9F]/20 backdrop-blur-sm"
-          >
-            <div className="text-7xl font-mono font-bold text-[#1B4D3E] mb-8 text-center font-extrabold">
-              {formatPomoTime(pomoTime)}
+            <div className={s.worldWrap}>
+              <CognivaWorld progress={scrollYProgress} onSelect={setSelected} />
             </div>
-
-            <div className="flex gap-4 justify-center flex-wrap">
-              <Button
-                variant={pomoRunning ? "outline" : "primary"}
-                onClick={() => setPomoRunning(!pomoRunning)}
-                size="lg"
-                className="font-semibold"
-              >
-                {pomoRunning ? <Pause className="w-5 h-5" /> : <Play className="w-5 h-5" />}
-                {pomoRunning ? "Pause" : "Start"}
-              </Button>
-              <Button
-                variant="outline"
-                onClick={() => { setPomoTime(1500); setPomoRunning(false); }}
-                size="lg"
-                className="font-semibold"
-              >
-                <RotateCcw className="w-5 h-5" /> Reset
-              </Button>
+            <div className={s.heroBottom}>
+              <a className={s.scrollCue} href="#cara-kerja" aria-label="Jelajahi alur belajar"><span><ArrowDown size={18} /></span></a>
+              <div className={s.sceneChoices} aria-label="Jelajahi objek ruang belajar">{CHAPTERS.map((item) => <button key={item.id} aria-pressed={selected === item.id} onClick={() => { setSelected(item.id); explore(item.id); }}>{item.short}<ArrowUpRight size={14} /></button>)}</div>
             </div>
-
-            <p className="text-sm text-gray-600 text-center mt-6">25 minutes focused, 5 minutes break</p>
-          </motion.div>
-        </div>
-      </section>
-
-      {/* FAQ */}
-      <section id="faq" className="py-20 px-4 sm:px-6 bg-gray-50">
-        <div className="max-w-3xl mx-auto">
-          <motion.h2 
-            className="text-3xl sm:text-4xl font-bold text-gray-900 mb-12 text-center"
-            initial={{ opacity: 0, y: 20 }}
-            whileInView={{ opacity: 1, y: 0 }}
-          >
-            Frequently Asked
-          </motion.h2>
-
-          <div className="space-y-3">
-            {FAQ_DATA.map((faq, idx) => {
-              const isOpen = openFaq === idx;
-              return (
-                <motion.div 
-                  key={idx}
-                  initial={{ opacity: 0, y: 10 }}
-                  whileInView={{ opacity: 1, y: 0 }}
-                  transition={{ delay: idx * 0.05 }}
-                  className="bg-white border border-gray-100 rounded-xl overflow-hidden hover:border-[#8BBF9F] transition-colors"
-                >
-                  <button
-                    onClick={() => setOpenFaq(isOpen ? null : idx)}
-                    className="w-full p-6 text-left font-semibold flex items-center justify-between hover:bg-gray-50 transition-colors"
-                  >
-                    <span className="text-gray-900">{faq.question}</span>
-                    <motion.div animate={{ rotate: isOpen ? 180 : 0 }} transition={{ duration: 0.3 }}>
-                      <ChevronDown className="w-5 h-5 text-[#2D6A4F]" />
-                    </motion.div>
-                  </button>
-                  <motion.div
-                    initial={{ opacity: 0, height: 0 }}
-                    animate={{ opacity: isOpen ? 1 : 0, height: isOpen ? "auto" : 0 }}
-                    transition={{ duration: 0.2 }}
-                    className="overflow-hidden"
-                  >
-                    <div className="px-6 pb-6 text-gray-600 border-t border-gray-100 pt-4">
-                      {faq.answer}
-                    </div>
-                  </motion.div>
-                </motion.div>
-              );
-            })}
           </div>
+          <motion.div className={s.heroProgress} style={{ scaleX: scrollYProgress }} />
         </div>
       </section>
 
-      {/* CTA */}
-      <section className="py-20 px-4 sm:px-6 bg-gradient-to-r from-[#1B4D3E] via-[#2D6A4F] to-[#1B4D3E] text-white relative overflow-hidden">
-        {/* Animated background elements */}
-        <motion.div
-          animate={{ opacity: [0.3, 0.6, 0.3] }}
-          transition={{ duration: 6, repeat: Infinity }}
-          className="absolute top-0 right-0 w-96 h-96 bg-[#8BBF9F]/20 rounded-full blur-3xl"
-        />
-        <motion.div
-          animate={{ opacity: [0.2, 0.5, 0.2] }}
-          transition={{ duration: 8, repeat: Infinity }}
-          className="absolute bottom-0 left-0 w-96 h-96 bg-white/10 rounded-full blur-3xl"
-        />
-
-        <div className="max-w-3xl mx-auto text-center space-y-6 relative z-10">
-          <motion.h2 
-            className="text-3xl sm:text-5xl font-bold"
-            initial={{ opacity: 0, y: 20 }}
-            whileInView={{ opacity: 1, y: 0 }}
-          >
-            Ready to get stuff done?
-          </motion.h2>
-          <motion.p 
-            className="text-lg text-white/80"
-            initial={{ opacity: 0 }}
-            whileInView={{ opacity: 1 }}
-            transition={{ delay: 0.1 }}
-          >
-            Join thousands of students already using MindFlow. Free forever.
-          </motion.p>
-          
-          <motion.div
-            initial={{ opacity: 0, scale: 0.9 }}
-            whileInView={{ opacity: 1, scale: 1 }}
-            transition={{ delay: 0.2 }}
-          >
-            <Button
-              onClick={handleGetStarted}
-              variant="primary"
-              size="lg"
-              className="bg-white text-[#1B4D3E] hover:bg-gray-100 font-semibold text-lg px-10 shadow-xl"
-            >
-              Get Started Free
-              <ArrowRight className="w-5 h-5 ml-2" />
-            </Button>
-          </motion.div>
+      <section id="cara-kerja" ref={journeyRef} className={s.journey} aria-labelledby="journey-title">
+        <motion.div className={s.journeyWatermark} style={{ x: reduced ? 0 : watermarkX }} aria-hidden="true">find your flow.</motion.div>
+        <div className={s.container}>
+          <Reveal className={s.journeyHeading}><h2 id="journey-title">Bukan semakin sibuk.<br /><span>Semakin terarah.</span></h2><p>Keluarkan semuanya dari kepala.<br />Beri setiap ide, tugas, dan waktumu tempatnya.</p></Reveal>
+          <div className={s.chapters}>{CHAPTERS.map((item, index) => <Reveal key={item.id} delay={index * .1} className={s.chapter}>
+            <div className={s.chapterTop}><div className={`${s.chapterGlyph} ${s[`glyph${index}`]}`} aria-hidden="true">{index === 0 ? <><i /><i /><i /></> : index === 1 ? <><i><Check size={17} /></i><i /><i /></> : <><span>40</span></>}</div></div>
+            <h3>{item.title}</h3><p>{item.text}</p><button onClick={() => explore(item.id)}>Jelajahi {item.short.toLowerCase()} <ArrowUpRight size={18} /></button>
+          </Reveal>)}</div>
         </div>
       </section>
 
-      {/* STATS SECTION */}
-      <section className="py-20 px-4 sm:px-6 bg-white">
-        <div className="max-w-7xl mx-auto">
-          <motion.div
-            className="text-center mb-16"
-            initial={{ opacity: 0, y: 20 }}
-            whileInView={{ opacity: 1, y: 0 }}
-          >
-            <h2 className="text-4xl sm:text-5xl font-bold text-gray-900 mb-4">Trusted by students worldwide</h2>
-            <p className="text-lg text-gray-600">Growing every day</p>
-          </motion.div>
-
-          <div className="grid md:grid-cols-4 gap-6">
-            {[
-              { stat: "50K+", label: "Active Students" },
-              { stat: "2M+", label: "Tasks Completed" },
-              { stat: "100%", label: "Free Forever" },
-              { stat: "24/7", label: "Support Available" }
-            ].map((item, idx) => (
-              <motion.div
-                key={idx}
-                initial={{ opacity: 0, y: 20 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                transition={{ delay: idx * 0.1 }}
-                className="bg-gradient-to-br from-gray-50 to-white p-8 rounded-2xl border border-gray-100 text-center"
-              >
-                <p className="text-4xl sm:text-5xl font-bold text-[#1B4D3E] mb-2">{item.stat}</p>
-                <p className="text-gray-600">{item.label}</p>
-              </motion.div>
-            ))}
-          </div>
+      <section id="fitur" className={`${s.container} ${s.features}`} aria-labelledby="features-title">
+        <Reveal className={s.featureHeading}><div><h2 id="features-title">Rasakan sendiri<br /><em>bedanya.</em></h2></div><p>Kenali alat-alat kecil yang membantu<br />hari belajarmu berjalan lebih baik.</p></Reveal>
+        <div className={s.featureTabs} role="tablist" aria-label="Jelajahi fitur Cogniva" aria-orientation="horizontal">{FEATURES.map((item, index) => <button key={item.id} ref={(node) => { featureRefs.current[index] = node; }} id={`feature-tab-${item.id}`} role="tab" aria-selected={activeFeature === index} aria-controls={`feature-panel-${item.id}`} tabIndex={activeFeature === index ? 0 : -1} className={`${s.featureTab} ${activeFeature === index ? s.featureTabActive : ""}`} onClick={() => setActiveFeature(index)} onKeyDown={(event) => switchFeature(event, index)}><item.icon size={17} strokeWidth={1.7} /><span>{item.caption}</span></button>)}</div>
+        <div id={`feature-panel-${feature.id}`} role="tabpanel" aria-labelledby={`feature-tab-${feature.id}`} tabIndex={0} className={s.featurePanel}>
+          <div className={s.featureInfo}><h3>{feature.title}</h3><p>{feature.description}</p></div>
+          <div className={s.featureVisual}><AnimatePresence mode="wait" initial={false}><motion.div key={feature.id} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} transition={{ duration: reduced ? 0 : .18 }}><FeaturePreview id={feature.id} onNavigate={(id) => setActiveFeature(FEATURES.findIndex((item) => item.id === id))} /></motion.div></AnimatePresence></div>
         </div>
       </section>
 
-      {/* BENEFITS SECTION */}
-      <section className="py-20 px-4 sm:px-6 bg-gradient-to-b from-gray-50 to-white">
-        <div className="max-w-7xl mx-auto">
-          <motion.div
-            className="text-center mb-16"
-            initial={{ opacity: 0, y: 20 }}
-            whileInView={{ opacity: 1, y: 0 }}
-          >
-            <h2 className="text-4xl sm:text-5xl font-bold text-gray-900 mb-4">Why students love MindFlow</h2>
-            <p className="text-lg text-gray-600">Real benefits for real studying</p>
-          </motion.div>
+      <section className={s.manifesto} aria-label="Belajar sesuai ritmemu"><div className={`${s.container} ${s.manifestoInner}`}><Reveal><div className={s.asterisk} aria-hidden="true">✳</div><p>Setiap orang punya ritme.</p><h2>Temukan yang<br /><em>milikmu.</em></h2><span>Cogniva membantumu mengenali kebiasaan,<br />memilih prioritas, dan memberi ruang untuk fokus.</span><button className={s.textButton} onClick={() => explore("insight")}>Kenali kebiasaan belajarmu <ArrowUpRight size={18} /></button></Reveal><div className={s.rhythmArt} aria-hidden="true"><div /><div /><div /><div /><div /><div /></div></div></section>
 
-          <div className="grid md:grid-cols-2 gap-8">
-            {[
-              {
-                title: "Save Hours Every Week",
-                desc: "Stop searching through notebooks and scattered notes. Find what you need in seconds.",
-                icon: Clock
-              },
-              {
-                title: "Never Miss a Deadline",
-                desc: "Automatic task prioritization keeps you focused on what's urgent right now.",
-                icon: Target
-              },
-              {
-                title: "Study Like a Pro",
-                desc: "Pomodoro timer built-in. Proven technique to study effectively without burnout.",
-                icon: Zap
-              },
-              {
-                title: "Collaborate Easily",
-                desc: "Share notes with study groups. Keep everyone on the same page.",
-                icon: Users
-              }
-            ].map((item, idx) => (
-              <motion.div
-                key={idx}
-                initial={{ opacity: 0, x: idx % 2 === 0 ? -30 : 30 }}
-                whileInView={{ opacity: 1, x: 0 }}
-                transition={{ delay: idx * 0.1 }}
-                className="flex gap-6 p-8 bg-white rounded-2xl border border-gray-100 hover:border-[#8BBF9F] transition-colors"
-              >
-                <div className="flex-shrink-0">
-                  <div className="w-12 h-12 rounded-lg bg-[#1B4D3E]/10 text-[#1B4D3E] flex items-center justify-center">
-                    <item.icon className="w-6 h-6" />
-                  </div>
-                </div>
-                <div>
-                  <h3 className="text-xl font-bold text-gray-900 mb-2">{item.title}</h3>
-                  <p className="text-gray-600">{item.desc}</p>
-                </div>
-              </motion.div>
-            ))}
-          </div>
-        </div>
-      </section>
+      <section id="faq" className={`${s.container} ${s.faq}`} aria-labelledby="faq-title"><Reveal className={s.faqIntro}><h2 id="faq-title">Sedikit tanya.<br />Lebih jelas.</h2></Reveal><div className={s.faqList}>{FAQ.map(([question, answer], index) => <div key={question} className={s.faqItem}><h3><button aria-expanded={openFaq === index} aria-controls={`faq-answer-${index}`} id={`faq-question-${index}`} onClick={() => setOpenFaq(openFaq === index ? null : index)}>{question}<ChevronDown size={19} className={openFaq === index ? s.chevronOpen : ""} /></button></h3><motion.div id={`faq-answer-${index}`} role="region" aria-labelledby={`faq-question-${index}`} inert={openFaq !== index} initial={false} animate={{ height: openFaq === index ? "auto" : 0, opacity: openFaq === index ? 1 : 0 }} transition={{ duration: reduced ? 0 : .22 }} className={s.faqAnswer}><p>{answer}</p></motion.div></div>)}</div></section>
 
-      {/* TESTIMONIALS */}
-      <section className="py-20 px-4 sm:px-6 bg-white">
-        <div className="max-w-7xl mx-auto">
-          <motion.div
-            className="text-center mb-16"
-            initial={{ opacity: 0, y: 20 }}
-            whileInView={{ opacity: 1, y: 0 }}
-          >
-            <h2 className="text-4xl sm:text-5xl font-bold text-gray-900 mb-4">What students say</h2>
-            <p className="text-lg text-gray-600">See why they switched</p>
-          </motion.div>
-
-          <div className="grid md:grid-cols-3 gap-8">
-            {[
-              {
-                quote: "Finally organized my messy notes. My GPA went up 0.5 points just from staying on top of everything.",
-                author: "Sarah M.",
-                role: "Pre-Med Student"
-              },
-              {
-                quote: "The Pomodoro timer is a game changer. I actually focus now instead of scrolling for hours.",
-                author: "Alex K.",
-                role: "Engineering Major"
-              },
-              {
-                quote: "Sharing notes with my study group became so easy. We're all using it now.",
-                author: "Jordan P.",
-                role: "Business School"
-              }
-            ].map((item, idx) => (
-              <motion.div
-                key={idx}
-                initial={{ opacity: 0, y: 20 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                transition={{ delay: idx * 0.1 }}
-                className="bg-gradient-to-br from-gray-50 to-white p-8 rounded-2xl border border-gray-100"
-              >
-                <div className="flex gap-1 mb-4">
-                  {[1, 2, 3, 4, 5].map(i => (
-                    <span key={i} className="text-amber-400">★</span>
-                  ))}
-                </div>
-                <p className="text-gray-700 mb-6 italic">"{item.quote}"</p>
-                <div>
-                  <p className="font-semibold text-gray-900">{item.author}</p>
-                  <p className="text-sm text-gray-600">{item.role}</p>
-                </div>
-              </motion.div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* FEATURES DEEP DIVE */}
-      <section className="py-20 px-4 sm:px-6 bg-gradient-to-b from-gray-50 to-white">
-        <div className="max-w-7xl mx-auto">
-          <motion.div
-            className="text-center mb-16"
-            initial={{ opacity: 0, y: 20 }}
-            whileInView={{ opacity: 1, y: 0 }}
-          >
-            <h2 className="text-4xl sm:text-5xl font-bold text-gray-900 mb-4">Every feature you need</h2>
-            <p className="text-lg text-gray-600">And nothing you don't</p>
-          </motion.div>
-
-          <div className="space-y-12">
-            {[
-              {
-                title: "Rich Note Editor",
-                desc: "Write with formatting. Add links, images, and code snippets. Search across all notes instantly.",
-                image: "📝",
-                align: "left"
-              },
-              {
-                title: "Smart Task Management",
-                desc: "Create tasks with deadlines. MindFlow automatically prioritizes by urgency. Never feel overwhelmed.",
-                image: "✓",
-                align: "right"
-              },
-              {
-                title: "Built-in Pomodoro Timer",
-                desc: "Study in focused 25-minute blocks. Take 5-minute breaks. Track your study sessions over time.",
-                image: "⏱",
-                align: "left"
-              }
-            ].map((feature, idx) => (
-              <motion.div
-                key={idx}
-                initial={{ opacity: 0, y: 30 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                transition={{ delay: idx * 0.1 }}
-                className="grid md:grid-cols-2 gap-12 items-center"
-              >
-                {feature.align === "left" ? (
-                  <>
-                    <div className="text-6xl text-center md:text-right text-[#1B4D3E]">{feature.image}</div>
-                    <div>
-                      <h3 className="text-3xl font-bold text-gray-900 mb-4">{feature.title}</h3>
-                      <p className="text-lg text-gray-600 leading-relaxed">{feature.desc}</p>
-                    </div>
-                  </>
-                ) : (
-                  <>
-                    <div>
-                      <h3 className="text-3xl font-bold text-gray-900 mb-4">{feature.title}</h3>
-                      <p className="text-lg text-gray-600 leading-relaxed">{feature.desc}</p>
-                    </div>
-                    <div className="text-6xl text-center text-[#1B4D3E]">{feature.image}</div>
-                  </>
-                )}
-              </motion.div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* PRICING PREVIEW */}
-      <section className="py-20 px-4 sm:px-6 bg-white">
-        <div className="max-w-7xl mx-auto">
-          <motion.div
-            className="text-center mb-16"
-            initial={{ opacity: 0, y: 20 }}
-            whileInView={{ opacity: 1, y: 0 }}
-          >
-            <h2 className="text-4xl sm:text-5xl font-bold text-gray-900 mb-4">Simple pricing</h2>
-            <p className="text-lg text-gray-600">One plan. Forever free.</p>
-          </motion.div>
-
-          <motion.div
-            initial={{ opacity: 0, scale: 0.95 }}
-            whileInView={{ opacity: 1, scale: 1 }}
-            className="max-w-2xl mx-auto bg-gradient-to-br from-[#1B4D3E] to-[#2D6A4F] text-white p-12 rounded-3xl"
-          >
-            <h3 className="text-3xl font-bold mb-2">Student Plan</h3>
-            <p className="text-white/80 mb-8">Everything you need to succeed</p>
-
-            <div className="mb-8">
-              <div className="text-5xl font-bold mb-2">$0</div>
-              <p className="text-white/80">Forever free. No credit card required.</p>
-            </div>
-
-            <div className="space-y-4 mb-8">
-              {[
-                "Unlimited notes",
-                "Unlimited tasks",
-                "Pomodoro timer",
-                "Note sharing",
-                "24/7 email support"
-              ].map((feature, idx) => (
-                <div key={idx} className="flex items-center gap-3">
-                  <CheckCircle2 className="w-6 h-6 text-[#8BBF9F]" />
-                  <span>{feature}</span>
-                </div>
-              ))}
-            </div>
-
-            <Button
-              onClick={handleGetStarted}
-              variant="primary"
-              size="lg"
-              className="w-full bg-white text-[#1B4D3E] hover:bg-gray-100 font-semibold"
-            >
-              Get Started Now
-            </Button>
-          </motion.div>
-        </div>
-      </section>
-
-      {/* FOOTER */}
-      <footer className="bg-gray-900 text-gray-300 px-4 sm:px-6 py-12">
-        <div className="max-w-7xl mx-auto">
-          <div className="grid md:grid-cols-4 gap-8 mb-8">
-            <div className="space-y-2">
-              <div className="flex items-center gap-2 mb-4">
-                <div className="w-8 h-8 rounded-lg bg-[#1B4D3E] flex items-center justify-center">
-                  <Brain className="w-5 h-5 text-white" />
-                </div>
-                <span className="font-bold text-white">MindFlow</span>
-              </div>
-              <p className="text-sm">Study smarter, not harder.</p>
-            </div>
-
-            {[
-              { title: "Product", links: ["Features", "Pricing", "Download"] },
-              { title: "Company", links: ["About", "Blog", "Careers"] },
-              { title: "Legal", links: ["Privacy", "Terms", "Contact"] }
-            ].map((col, idx) => (
-              <div key={idx}>
-                <p className="font-semibold text-white mb-4">{col.title}</p>
-                <ul className="space-y-2">
-                  {col.links.map(link => (
-                    <li key={link}>
-                      <a href="#" className="text-sm hover:text-white transition-colors">{link}</a>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            ))}
-          </div>
-
-          <div className="border-t border-gray-700 pt-8 flex items-center justify-between text-sm">
-            <p>© 2026 MindFlow. All rights reserved.</p>
-            <p>Made for students 🎓</p>
-          </div>
-        </div>
-      </footer>
-
-    </div>
-  );
+      <section className={s.closing} aria-labelledby="cta-title"><div className={s.closingOrbit} aria-hidden="true" /><div className={s.container}><Reveal className={s.closingContent}><h2 id="cta-title">Beri ruang.<br /><em>Mulai bertumbuh.</em></h2><Link className={s.lightButton} href="/register">Buat ruang belajarmu <ArrowUpRight size={21} /></Link><Link className={s.closingLogin} href="/login">Sudah punya akun? Masuk <ArrowRight size={15} /></Link></Reveal><footer className={s.footer}><Link className={s.brand} href="/landing"><Image src="/brand/cogniva/cogniva-horizontal-color.svg" alt="Cogniva" width={160} height={46} /></Link><nav aria-label="Navigasi footer"><a href="#cara-kerja">Kenali Cogniva</a><a href="#fitur">Fitur</a><a href="#faq">FAQ</a></nav><span>© 2026 Cogniva</span></footer></div></section>
+    </main>
+  </div></MotionConfig>;
 }

@@ -1,0 +1,82 @@
+.stage { position: relative; height: 640px; perspective: 1100px; isolation: isolate; }
+.scene { position: absolute; inset: 0; transform-style: preserve-3d; pointer-events: none; }
+.shadow { position: absolute; left: 17%; right: 0; bottom: 15%; height: 70px; border-radius: 50%; background: #173f3615; filter: blur(24px); transform: rotate(-12deg); }
+.papers { position: absolute; width: 245px; height: 310px; top: 9%; left: 12%; transform-style: preserve-3d; }
+.paper { position: absolute; inset: 0; border-radius: 13px 13px 28px 13px; border: 1px solid #e0e1d6; background: #fdfdf6; box-shadow: 0 5px 0 #e2e3d8, 0 10px 0 #d4d6c8, 0 25px 35px #173f3612; transform-style: preserve-3d; }
+.paperBack { transform: translate3d(-45px, 18px, -35px) rotate(-19deg) rotateY(-12deg); background: #ecedde; }
+.paperMiddle { transform: translate3d(24px, -12px, -15px) rotate(8deg) rotateY(-12deg); background: #f3f4e9; }
+.paperFront { transform: rotate(-12deg) rotateY(-12deg); padding: 29px 25px; animation: paperFloat 7s ease-in-out infinite; }
+.paperTitle { display: block; color: #173f36; font-size: 17px; font-weight: 600; letter-spacing: -.4px; }
+.lines { display: grid; gap: 17px; margin-top: 29px; }
+.lines i { height: 5px; background: #d9dccf; border-radius: 3px; }
+.lines i:nth-child(2), .lines i:last-child { width: 75%; }
+.lines mark { width: 61%; height: 17px; border-radius: 3px; background: #9baf9199; }
+.paperCorner { position: absolute; width: 33px; height: 33px; right: 0; bottom: 0; background: #e8eadb; border-radius: 8px 0 26px 0; box-shadow: -2px -2px 4px #173f3608; }
+.task { position: absolute; left: 32%; top: 47%; width: 310px; padding: 24px; background: #fffef7; border: 1px solid #e0e3d8; border-radius: 18px; box-shadow: 0 6px 0 #d9ddcf, 0 30px 45px #173f3615; transform: translateZ(65px) rotate(9deg) rotateY(-12deg); z-index: 3; }
+.taskTop { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; }
+.check { width: 20px; height: 20px; border: 2px solid #9baf91; border-radius: 50%; }
+.badge { background: #f3dfd3; color: #914d32; font-size: 12px; border-radius: 5px; padding: 5px 8px; }
+.task strong { color: #173f36; font-size: 23px; font-weight: 600; letter-spacing: -.7px; }
+.track { margin-top: 23px; border-radius: 6px; height: 9px; background: #e7e9de; overflow: hidden; }
+.track span { height: 100%; display: block; background: #9baf91; border-radius: inherit; }
+.focus { position: absolute; width: 245px; height: 245px; right: 3%; top: 65%; transform-style: preserve-3d; transform: rotate(-12deg); }
+.ring, .ringDepth { position: absolute; inset: 0; border-radius: 50%; border: 29px solid #9baf91; }
+.ringDepth { transform: translate3d(10px, 9px, -20px); border-color: #71876b; box-shadow: 0 24px 30px #173f3615; }
+.ring { border-color: #9baf91 #9baf91 #173f36 #173f36; background: #f6f7ef; box-shadow: inset 4px 5px 10px #173f3609, 0 0 0 1px #9baf91; }
+.ringFace { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; color: #173f36; }
+.ringFace strong { font-size: 45px; font-weight: 650; letter-spacing: -2px; font-variant-numeric: tabular-nums; }
+.ringFace span { font-size: 15px; margin-top: 5px; }
+.ringCap { width: 32px; height: 32px; position: absolute; top: 0; left: 100px; border-radius: 50%; background: #9baf91; box-shadow: inset 0 0 0 2px #dce4d380, 0 3px 3px #173f3620; transform: translateZ(4px); }
+.symbol { position: absolute; bottom: 14%; left: 11%; opacity: .85; transform: rotate(-15deg) rotateY(15deg); }
+.workspace { position: absolute; top: 7%; left: 0; right: 0; z-index: 4; }
+.stage[data-running="false"] * { animation-play-state: paused !important; }
+@keyframes paperFloat { 50% { transform: translateY(-5px) rotate(-11deg) rotateY(-12deg); } }
+@media (max-width: 1100px) { .stage { height: 550px; } .papers { width: 210px; height: 270px; left: 8%; } .task { width: 275px; left: 25%; } .focus { width: 210px; height: 210px; top: 65%; right: 0; } .ringFace strong { font-size: 38px; } .ringCap { left: 85px; } }
+@media (max-width: 760px) { .stage { height: 580px; max-width: 600px; margin-inline: auto; } .papers { top: 5%; left: 17%; } .task { top: 43%; left: 33%; } .focus { top: 65%; right: 9%; } .symbol { left: 20%; bottom: 16%; } .workspace { display: none; } }
+@media (max-width: 480px) { .stage { height: 460px; } .papers { width: 155px; height: 210px; top: 7%; left: 12%; } .paperFront { padding: 20px; } .paperBack { transform: translate3d(-22px, 15px, -35px) rotate(-19deg); } .paperTitle { font-size: 13px; } .lines { gap: 12px; margin-top: 20px; } .lines i { height: 4px; } .task { width: 220px; left: 24%; padding: 17px; top: 44%; } .task strong { font-size: 18px; } .badge { font-size: 10px; } .taskTop { margin-bottom: 10px; } .track { margin-top: 15px; } .focus { width: 175px; height: 175px; top: 64%; right: 4%; } .ring, .ringDepth { border-width: 22px; } .ringCap { left: 71px; width: 25px; height: 25px; } .ringFace strong { font-size: 32px; } .ringFace span { font-size: 12px; } .symbol { left: 10%; bottom: 14%; } .symbol img { width: 53px; height: 53px; } }
+@media (prefers-reduced-motion: reduce) { .stage * { animation: none !important; } }
+.stage { height: 960px; }
+.visual { position: sticky; top: 100px; height: 640px; perspective: 1100px; }
+@media (max-width: 1100px) { .stage { height: 880px; } .visual { height: 550px; } }
+@media (max-width: 760px) { .stage { height: 580px; } .visual { position: relative; top: 0; height: 580px; } }
+@media (max-width: 480px) { .stage, .visual { height: 460px; } }
+
+/* A compact CSS scene: no canvas, model downloads, or scroll interception. */
+.stage { height: auto; padding: 12px 0 0; }
+.visual { position: relative; top: 0; height: 565px; }
+.scene { pointer-events: auto; }
+.sceneLabel { display: flex; align-items: center; gap: 8px; color: #355443; font-size: 11px; }
+.sceneLabel > span:last-child { margin-left: auto; color: #768270; font-size: 10px; }
+.liveDot { width: 6px; height: 6px; border-radius: 50%; background: #78966a; }
+.desk { position: absolute; inset: 29% -2% 8% 0; border: 1px solid #cdd8c2; border-radius: 35px; background: linear-gradient(145deg, #edf1e4, #dce6ce); transform: rotateX(48deg) rotateZ(-12deg); box-shadow: 0 9px 0 #c2cfb4, 0 35px 50px #173f3610; }
+.object { cursor: pointer; text-align: left; font-family: inherit; color: inherit; -webkit-tap-highlight-color: transparent; }
+.object:focus-visible { outline: 3px solid #24543e; outline-offset: 8px; }
+.object[aria-pressed="true"] { outline: 2px solid #799466; outline-offset: 5px; }
+.object:hover { filter: brightness(1.025); }
+.objectNumber { display: block; font-size: 9px; letter-spacing: 1.3px; color: #7a866e; margin-bottom: 18px; }
+.paperFront { animation: none; background: linear-gradient(145deg, #fffef8, #f2f2e6); }
+.paperTitle { line-height: 1.4; }
+.lines { display: grid; }
+.lines mark { display: block; }
+.papers { top: 12%; left: 14%; }
+.task { top: 48%; left: 27%; display: block; background: linear-gradient(145deg, #fffef7, #f5f2e7); }
+.taskTop, .track { display: flex; }
+.focus { top: 66%; right: 5%; width: 180px; height: 180px; border: 0; padding: 0; background: transparent; border-radius: 50%; }
+.ring, .ringDepth { border-width: 22px; }
+.ringFace strong { font-size: 34px; }
+.ringFace span { font-size: 10px; }
+.ringCap { left: 74px; width: 25px; height: 25px; }
+.exploreCard { position: relative; display: flex; align-items: center; gap: 16px; border-top: 1px solid #d6dfca; padding: 20px 0; }
+.exploreLabel { color: #264a34; font-size: 12px; font-weight: 600; }
+.exploreCard p { margin: 7px 0 0; color: #6d7863; font-size: 12px; line-height: 1.7; max-width: 300px; }
+.exploreCard button { flex-shrink: 0; margin-left: auto; display: flex; gap: 12px; align-items: center; min-height: 44px; padding: 8px 13px; border: 1px solid #c7d4bb; border-radius: 7px; background: #edf1e5; color: #264a34; font-size: 11px; cursor: pointer; }
+.exploreCard button:focus-visible { outline: 2px solid #24543e; outline-offset: 4px; }
+@media (max-width: 1100px) { .visual { height: 510px; } .task { left: 19%; width: 265px; } .papers { left: 13%; } .focus { right: 1%; } }
+@media (max-width: 760px) { .stage { height: auto; } .visual { height: 510px; } .papers { left: 21%; } .task { left: 32%; } .focus { right: 10%; } .sceneLabel > span:last-child { font-size: 9px; } }
+@media (max-width: 480px) { .visual { height: 420px; } .papers { left: 18%; top: 10%; } .task { width: 220px; left: 21%; top: 47%; } .focus { width: 150px; height: 150px; right: 5%; top: 67%; } .ring, .ringDepth { border-width: 18px; } .ringFace strong { font-size: 27px; } .ringCap { left: 62px; width: 22px; height: 22px; } .objectNumber { font-size: 8px; margin-bottom: 12px; } .paperTitle { font-size: 12px; } .lines { gap: 10px; margin-top: 18px; } .sceneLabel { font-size: 10px; } .exploreCard { align-items: flex-start; } .exploreCard p { font-size: 11px; } .desk { inset-inline: 3%; } }
+.desk { transform: translateZ(-100px) rotateX(48deg) rotateZ(-12deg); pointer-events: none; }
+.shadow { transform: translateZ(-110px) rotate(-12deg); pointer-events: none; }
+.focus { transform-style: flat; z-index: 4; }
+.desk { transform: translateZ(-120px) rotateZ(-12deg) scaleY(.78); }
+.task { top: 55%; }
+@media (max-width: 480px) { .task { top: 51%; } }
