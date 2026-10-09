@@ -13,7 +13,7 @@ export default function RootPage() {
     if (loading) return;
 
     if (!user) {
-      router.replace("/login");
+      router.replace("/landing");
       return;
     }
 
@@ -28,7 +28,7 @@ export default function RootPage() {
     <div className="min-h-screen w-full flex items-center justify-center bg-background" suppressHydrationWarning>
       <LoadingScreen
         label="Membuka MindFlow AI..."
-        subtext="Menghubungkan profil belajar Anda"
+        subtext="Mengalihkan ke landing page"
         fullHeight
       />
     </div>

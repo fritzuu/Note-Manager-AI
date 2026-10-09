@@ -107,7 +107,7 @@ export function EmailVerificationGatekeeper({
     await signOut();
     document.cookie = "auth-token=; path=/; max-age=0";
     document.cookie = "__session=; path=/; max-age=0";
-    router.replace("/login");
+    router.replace("/");
   };
 
   // If still loading auth or user is already verified (or using Google Sign-In), render children

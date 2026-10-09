@@ -75,7 +75,7 @@ export function DashboardShell({ children, fullWidth = false }: DashboardShellPr
   const handleSignOut = async () => {
     await signOut();
     document.cookie = "auth-token=; path=/; max-age=0";
-    router.push("/login");
+    router.push("/");
   };
 
   // Main navigation items (Settings is in User Profile Menu)
