@@ -233,7 +233,7 @@ export function PomodoroProvider({ children }: { children: React.ReactNode }) {
         return;
       }
       if (latest.progress !== prompt.before) {
-        commit({ prompt: { ...prompt, before: latest.progress, adjusted: latest.progress, done: latest.status === "done" } });
+        commit({ prompt: { ...prompt, before: latest.progress, adjusted: latest.progress, done: false } });
         throw new Error("Progres tugas berubah. Nilai terbaru sudah ditampilkan; periksa sebelum menyimpan.");
       }
       const progress = prompt.done ? 100 : clamp(prompt.adjusted, 0, 99);
