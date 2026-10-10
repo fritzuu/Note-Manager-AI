@@ -1,538 +1,78 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
-import {
-  Key,
-  Sparkles,
-  ExternalLink,
-  CheckCircle2,
-  AlertCircle,
-  Eye,
-  EyeOff,
-  Trash2,
-  Check,
-  X,
-  HelpCircle,
-  ShieldCheck,
-  Zap,
-  Globe,
-  Sliders,
-} from "lucide-react";
-import { Button } from "@/components/ui/Button";
-import {
-  getAiProvider,
-  setAiProvider,
-  getCustomApiKey,
-  setCustomApiKey,
-  removeCustomApiKey,
-  getOpenRouterModel,
-  setOpenRouterModel,
-  testAiApiKey,
-  type AiProvider,
-} from "@/lib/aiConfig";
-import { cn } from "@/lib/utils";
+import { createPortal } from "react-dom";
 
-interface AiApiKeyModalProps {
-  isOpen: boolean;
-  onClose: () => void;
-}
+import { useState, useEffect, useRef } from "react";
+import { X, Eye, EyeOff, ExternalLink, Check, Loader2 } from "lucide-react";
+import { getAiProvider, setAiProvider, getCustomApiKey, setCustomApiKey, removeCustomApiKey, getOpenRouterModel, setOpenRouterModel, testAiApiKey, DEFAULT_OPENROUTER_MODEL, type AiProvider } from "@/lib/aiConfig";
+import { useModalDialog } from "./useModalDialog";
+import s from "./cogniva-modal.module.css";
 
-const POPULAR_OPENROUTER_MODELS = [
-  { id: "google/gemini-2.0-flash-001", label: "Gemini 2.0 Flash (Rekomendasi - Super Cepat & Cerdas)" },
-  { id: "anthropic/claude-3.5-sonnet", label: "Claude 3.5 Sonnet (Analitik & Penalaran Mendalam)" },
-  { id: "openai/gpt-4o-mini", label: "GPT-4o Mini (Hemat & Responsif)" },
-  { id: "deepseek/deepseek-chat", label: "DeepSeek V3 (Sangat Cerdas & Efisien)" },
-  { id: "deepseek/deepseek-r1", label: "DeepSeek R1 (Advanced Reasoning & Problem Solving)" },
-  { id: "meta-llama/llama-3.3-70b-instruct", label: "Llama 3.3 70B (Meta Open-Source Flagship)" },
-  { id: "qwen/qwen-2.5-72b-instruct", label: "Qwen 2.5 72B (Alibaba Flagship)" },
-  { id: "mistralai/mistral-small-24b-instruct-2501", label: "Mistral Small 24B" },
-];
+interface AiApiKeyModalProps { isOpen: boolean; onClose: () => void }
+type ConnectionResult = { success?: boolean; message?: string; latencyMs?: number };
 
 export function AiApiKeyModal({ isOpen, onClose }: AiApiKeyModalProps) {
-  const [selectedProvider, setSelectedProvider] = useState<AiProvider>("openrouter");
-  const [geminiKeyInput, setGeminiKeyInput] = useState("");
-  const [openRouterKeyInput, setOpenRouterKeyInput] = useState("");
-  const [openRouterModelInput, setOpenRouterModelInput] = useState("google/gemini-2.0-flash-001");
-  const [activeProvider, setActiveProviderState] = useState<AiProvider>("gemini");
-
-  const [showPassword, setShowPassword] = useState(false);
-  const [savedSuccess, setSavedSuccess] = useState(false);
-  const [isTesting, setIsTesting] = useState(false);
-  const [testResult, setTestResult] = useState<{
-    success?: boolean;
-    message?: string;
-    latencyMs?: number;
-  } | null>(null);
-
-  const [activeTab, setActiveTab] = useState<"config" | "tutorial">("config");
+  const dialogRef = useModalDialog(isOpen, onClose);
+  const [provider, setProvider] = useState<AiProvider>("gemini");
+  const [keys, setKeys] = useState<Record<AiProvider, string>>({ gemini: "", openrouter: "" });
+  const [model, setModel] = useState(DEFAULT_OPENROUTER_MODEL);
+  const [showKey, setShowKey] = useState(false);
+  const [guide, setGuide] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [testing, setTesting] = useState(false);
+  const [result, setResult] = useState<ConnectionResult | null>(null);
+  const [error, setError] = useState("");
+  const request = useRef(0);
 
   useEffect(() => {
-    if (isOpen) {
-      const currProvider = getAiProvider();
-      setSelectedProvider(currProvider);
-      setActiveProviderState(currProvider);
-
-      const gemKey = getCustomApiKey("gemini");
-      const orKey = getCustomApiKey("openrouter");
-      setGeminiKeyInput(gemKey);
-      setOpenRouterKeyInput(orKey);
-      setOpenRouterModelInput(getOpenRouterModel());
-
-      setSavedSuccess(false);
-      setTestResult(null);
-      setShowPassword(false);
-    }
+    request.current++;
+    if (!isOpen) return;
+    setProvider(getAiProvider());
+    setKeys({ gemini: getCustomApiKey("gemini"), openrouter: getCustomApiKey("openrouter") });
+    setModel(getOpenRouterModel());
+    setShowKey(false); setSaved(false); setGuide(false); setTesting(false); setResult(null); setError("");
   }, [isOpen]);
 
-  if (!isOpen) return null;
-
-  const currentKeyInput = selectedProvider === "openrouter" ? openRouterKeyInput : geminiKeyInput;
-  const hasExistingKeyForSelected =
-    selectedProvider === "openrouter" ? !!getCustomApiKey("openrouter") : !!getCustomApiKey("gemini");
-
-  const handleSave = () => {
-    // 1. Save keys for both providers
-    setCustomApiKey(geminiKeyInput.trim(), "gemini");
-    setCustomApiKey(openRouterKeyInput.trim(), "openrouter");
-    if (selectedProvider === "openrouter") {
-      setOpenRouterModel(openRouterModelInput);
-    }
-
-    // 2. Set active provider
-    setAiProvider(selectedProvider);
-    setActiveProviderState(selectedProvider);
-
-    setSavedSuccess(true);
-    setTimeout(() => {
-      setSavedSuccess(false);
-      onClose();
-    }, 1200);
+  if (!isOpen || typeof document === "undefined") return null;
+  const key = keys[provider];
+  const keyLink = provider === "gemini" ? "https://aistudio.google.com/app/apikey" : "https://openrouter.ai/keys";
+  const invalidate = () => { request.current++; setTesting(false); setResult(null); setSaved(false); setError(""); };
+  const save = () => {
+    if (provider === "openrouter" && !model.trim()) { setError("Isi ID model yang ingin digunakan."); return; }
+    setCustomApiKey(keys.gemini.trim(), "gemini");
+    setCustomApiKey(keys.openrouter.trim(), "openrouter");
+    setOpenRouterModel(model.trim());
+    setAiProvider(provider);
+    const stored = getAiProvider() === provider && getCustomApiKey("gemini") === keys.gemini.trim() && getCustomApiKey("openrouter") === keys.openrouter.trim() && getOpenRouterModel() === (model.trim() || DEFAULT_OPENROUTER_MODEL);
+    setSaved(stored);
+    setError(stored ? "" : "Pengaturan belum bisa disimpan. Periksa izin penyimpanan browser, lalu coba lagi.");
   };
-
-  const handleRemoveCurrent = () => {
-    removeCustomApiKey(selectedProvider);
-    if (selectedProvider === "openrouter") {
-      setOpenRouterKeyInput("");
-    } else {
-      setGeminiKeyInput("");
-    }
-    setTestResult(null);
+  const test = async () => {
+    if (testing || !key.trim()) return;
+    if (provider === "openrouter" && !model.trim()) { setError("Isi ID model sebelum memeriksa koneksi."); return; }
+    const id = ++request.current;
+    setTesting(true); setResult(null); setError("");
+    try {
+      const response = await testAiApiKey(key.trim(), provider, provider === "openrouter" ? model.trim() : undefined);
+      if (id === request.current) setResult(response);
+    } catch { if (id === request.current) setResult({ success: false, message: "Koneksi belum bisa diperiksa. Coba lagi." }); }
+    finally { if (id === request.current) setTesting(false); }
   };
-
-  const handleTest = async () => {
-    if (!currentKeyInput.trim()) {
-      setTestResult({
-        success: false,
-        message: `Silakan masukkan API key ${selectedProvider === "openrouter" ? "OpenRouter" : "Gemini"} terlebih dahulu sebelum mengetes.`,
-      });
-      return;
-    }
-    setIsTesting(true);
-    setTestResult(null);
-    const res = await testAiApiKey(
-      currentKeyInput,
-      selectedProvider,
-      selectedProvider === "openrouter" ? openRouterModelInput : undefined
-    );
-    setIsTesting(false);
-    setTestResult(res);
-  };
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-fade-in">
-      <div
-        className="bg-white rounded-3xl border border-border shadow-2xl w-full max-w-xl overflow-hidden animate-scale-in flex flex-col max-h-[90vh]"
-        onClick={(e) => e.stopPropagation()}
-      >
-        {/* Modal Header */}
-        <div className="p-6 bg-gradient-to-br from-primary/5 via-primary/10 to-transparent border-b border-border/60 flex items-start justify-between">
-          <div className="flex items-center gap-3.5">
-            <div className="w-12 h-12 rounded-2xl bg-primary text-white flex items-center justify-center shadow-md shadow-primary/20 shrink-0">
-              <Sparkles className="w-6 h-6 animate-pulse" />
-            </div>
-            <div>
-              <h2 className="text-xl font-extrabold text-gray-900 tracking-tight flex items-center gap-2">
-                Setup AI API Key
-                <span className="text-[11px] font-bold uppercase tracking-wider bg-primary-100 text-primary-800 px-2.5 py-0.5 rounded-full">
-                  OpenRouter & Gemini
-                </span>
-              </h2>
-              <p className="text-xs text-gray-500 mt-0.5">
-                Gunakan API key <strong>OpenRouter</strong> (Claude, GPT-4o, DeepSeek, Gemini, Llama) atau <strong>Google Gemini</strong> langsung.
-              </p>
-            </div>
-          </div>
-          <button
-            onClick={onClose}
-            className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-xl transition-colors cursor-pointer"
-          >
-            <X className="w-5 h-5" />
-          </button>
-        </div>
-
-        {/* Tab Navigation */}
-        <div className="flex border-b border-border px-6 bg-gray-50/50">
-          <button
-            onClick={() => setActiveTab("config")}
-            className={cn(
-              "py-3.5 px-4 text-xs font-bold border-b-2 transition-all cursor-pointer flex items-center gap-2",
-              activeTab === "config"
-                ? "border-primary text-primary"
-                : "border-transparent text-gray-500 hover:text-gray-800"
-            )}
-          >
-            <Key className="w-4 h-4" />
-            Konfigurasi & Model
-          </button>
-          <button
-            onClick={() => setActiveTab("tutorial")}
-            className={cn(
-              "py-3.5 px-4 text-xs font-bold border-b-2 transition-all cursor-pointer flex items-center gap-2",
-              activeTab === "tutorial"
-                ? "border-primary text-primary"
-                : "border-transparent text-gray-500 hover:text-gray-800"
-            )}
-          >
-            <HelpCircle className="w-4 h-4" />
-            Panduan Mendapatkan API Key
-          </button>
-        </div>
-
-        {/* Modal Body */}
-        <div className="p-6 overflow-y-auto space-y-5 custom-scrollbar flex-1">
-          {activeTab === "config" ? (
-            <>
-              {/* Provider Selection Tabs */}
-              <div className="space-y-2">
-                <label className="text-xs font-bold text-gray-500 uppercase tracking-wider flex items-center gap-1.5">
-                  <Globe className="w-3.5 h-3.5 text-primary" />
-                  Pilih AI Provider
-                </label>
-                <div className="grid grid-cols-2 gap-3">
-                  {/* OpenRouter Provider Button */}
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setSelectedProvider("openrouter");
-                      setTestResult(null);
-                    }}
-                    className={cn(
-                      "p-3.5 rounded-2xl border text-left transition-all cursor-pointer flex flex-col gap-1.5 relative",
-                      selectedProvider === "openrouter"
-                        ? "border-primary bg-primary-50/50 shadow-xs ring-2 ring-primary/20"
-                        : "border-border bg-white hover:bg-gray-50"
-                    )}
-                  >
-                    {activeProvider === "openrouter" && (
-                      <span className="absolute top-2.5 right-2.5 text-[9px] font-bold bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full">
-                        Aktif
-                      </span>
-                    )}
-                    <div className="flex items-center gap-2">
-                      <div className="w-6 h-6 rounded-lg bg-purple-100 text-purple-700 flex items-center justify-center font-bold text-xs">
-                        <Zap className="w-3.5 h-3.5" />
-                      </div>
-                      <span className="text-xs font-bold text-gray-900">OpenRouter AI</span>
-                    </div>
-                    <p className="text-[11px] text-gray-500 leading-snug">
-                      Claude 3.5, DeepSeek R1, GPT-4o, Llama 3.3 via openrouter.ai
-                    </p>
-                  </button>
-
-                  {/* Gemini Provider Button */}
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setSelectedProvider("gemini");
-                      setTestResult(null);
-                    }}
-                    className={cn(
-                      "p-3.5 rounded-2xl border text-left transition-all cursor-pointer flex flex-col gap-1.5 relative",
-                      selectedProvider === "gemini"
-                        ? "border-primary bg-primary-50/50 shadow-xs ring-2 ring-primary/20"
-                        : "border-border bg-white hover:bg-gray-50"
-                    )}
-                  >
-                    {activeProvider === "gemini" && (
-                      <span className="absolute top-2.5 right-2.5 text-[9px] font-bold bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full">
-                        Aktif
-                      </span>
-                    )}
-                    <div className="flex items-center gap-2">
-                      <div className="w-6 h-6 rounded-lg bg-primary/10 text-primary flex items-center justify-center font-bold text-xs">
-                        <Sparkles className="w-3.5 h-3.5" />
-                      </div>
-                      <span className="text-xs font-bold text-gray-900">Google Gemini</span>
-                    </div>
-                    <p className="text-[11px] text-gray-500 leading-snug">
-                      Gemini 2.5 Flash dari Google AI Studio langsung
-                    </p>
-                  </button>
-                </div>
-              </div>
-
-              {/* OpenRouter Model Selection (Shown only when OpenRouter is selected) */}
-              {selectedProvider === "openrouter" && (
-                <div className="space-y-2 animate-fade-in">
-                  <div className="flex items-center justify-between">
-                    <label className="text-xs font-bold text-gray-500 uppercase tracking-wider flex items-center gap-1.5">
-                      <Sliders className="w-3.5 h-3.5 text-primary" />
-                      Pilih Model OpenRouter
-                    </label>
-                    <span className="text-[10px] font-bold text-primary bg-primary-50 border border-primary-200/60 px-2 py-0.5 rounded-md font-mono truncate max-w-[200px]">
-                      {openRouterModelInput}
-                    </span>
-                  </div>
-                  <select
-                    value={
-                      POPULAR_OPENROUTER_MODELS.some((m) => m.id === openRouterModelInput)
-                        ? openRouterModelInput
-                        : "custom"
-                    }
-                    onChange={(e) => {
-                      if (e.target.value !== "custom") {
-                        setOpenRouterModelInput(e.target.value);
-                      }
-                    }}
-                    className="w-full h-11 px-3.5 rounded-xl border border-border bg-white text-xs font-bold text-gray-800 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary cursor-pointer shadow-2xs"
-                  >
-                    {POPULAR_OPENROUTER_MODELS.map((model) => (
-                      <option key={model.id} value={model.id}>
-                        {model.label}
-                      </option>
-                    ))}
-                    <option value="custom">Model Kustom Lainnya (Ketik di bawah)...</option>
-                  </select>
-
-                  {/* Custom Model String Input */}
-                  {(!POPULAR_OPENROUTER_MODELS.some((m) => m.id === openRouterModelInput) ||
-                    openRouterModelInput === "custom") && (
-                    <div className="pt-1">
-                      <input
-                        type="text"
-                        placeholder="Contoh: anthropic/claude-3-haiku atau deepseek/deepseek-r1"
-                        value={openRouterModelInput === "custom" ? "" : openRouterModelInput}
-                        onChange={(e) => setOpenRouterModelInput(e.target.value)}
-                        className="w-full h-10 px-3.5 rounded-xl border border-border bg-white text-xs font-mono text-gray-800 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary shadow-2xs"
-                      />
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* API Key Input Container */}
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <label className="text-xs font-bold text-gray-700 uppercase tracking-wider flex items-center gap-1.5">
-                    <Key className="w-3.5 h-3.5 text-primary" />
-                    {selectedProvider === "openrouter" ? "OpenRouter API Key" : "Google Gemini API Key"}
-                  </label>
-                  {hasExistingKeyForSelected && (
-                    <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200">
-                      Tersimpan di Browser
-                    </span>
-                  )}
-                </div>
-
-                <div className="relative">
-                  <input
-                    type={showPassword ? "text" : "password"}
-                    placeholder={
-                      selectedProvider === "openrouter"
-                        ? "Masukkan OpenRouter API key (sk-or-v1-...)"
-                        : "Masukkan Gemini API key (AIzaSy...)"
-                    }
-                    value={selectedProvider === "openrouter" ? openRouterKeyInput : geminiKeyInput}
-                    onChange={(e) => {
-                      if (selectedProvider === "openrouter") {
-                        setOpenRouterKeyInput(e.target.value);
-                      } else {
-                        setGeminiKeyInput(e.target.value);
-                      }
-                      setTestResult(null);
-                    }}
-                    className="w-full h-12 pl-4 pr-24 rounded-2xl border border-border bg-gray-50/60 font-mono text-xs text-gray-900 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary focus:bg-white transition-all shadow-2xs"
-                  />
-                  <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
-                    <button
-                      type="button"
-                      onClick={() => setShowPassword(!showPassword)}
-                      className="p-2 text-gray-400 hover:text-gray-600 rounded-lg transition-colors cursor-pointer"
-                      title={showPassword ? "Sembunyikan" : "Tampilkan"}
-                    >
-                      {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                    </button>
-                    {hasExistingKeyForSelected && (
-                      <button
-                        type="button"
-                        onClick={handleRemoveCurrent}
-                        className="p-2 text-gray-400 hover:text-rose-600 rounded-lg transition-colors cursor-pointer"
-                        title="Hapus API key ini"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    )}
-                  </div>
-                </div>
-                <p className="text-[11px] text-gray-400">
-                  {selectedProvider === "openrouter"
-                    ? "Dapatkan API Key di openrouter.ai/keys. Key disimpan lokal di browser Anda."
-                    : "Dapatkan API Key gratis di aistudio.google.com. Key disimpan lokal di browser Anda."}
-                </p>
-              </div>
-
-              {/* Test Diagnostics Result Box */}
-              {testResult && (
-                <div
-                  className={cn(
-                    "p-4 rounded-2xl border text-xs flex items-start gap-3 animate-fade-in",
-                    testResult.success
-                      ? "bg-emerald-50/80 border-emerald-200 text-emerald-900"
-                      : "bg-rose-50/80 border-rose-200 text-rose-900"
-                  )}
-                >
-                  {testResult.success ? (
-                    <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0 mt-0.5" />
-                  ) : (
-                    <AlertCircle className="w-5 h-5 text-rose-600 shrink-0 mt-0.5" />
-                  )}
-                  <div className="space-y-1 flex-1">
-                    <p className="font-bold">
-                      {testResult.success ? "Koneksi Berhasil!" : "Gagal Terhubung"}
-                    </p>
-                    <p className="text-[11px] leading-relaxed opacity-90">{testResult.message}</p>
-                    {testResult.latencyMs && (
-                      <p className="text-[10px] font-mono font-bold mt-1 text-gray-500">
-                        Waktu Respons: {testResult.latencyMs}ms
-                      </p>
-                    )}
-                  </div>
-                </div>
-              )}
-
-              {/* Security Privacy Notice */}
-              <div className="bg-gray-50 rounded-2xl p-4 border border-border/70 flex items-start gap-3">
-                <ShieldCheck className="w-5 h-5 text-primary shrink-0 mt-0.5" />
-                <div className="text-[11px] text-gray-500 leading-relaxed space-y-1">
-                  <p className="font-bold text-gray-700">Privasi & Keamanan Terjamin</p>
-                  <p>
-                    API key Anda disimpan di <code>localStorage</code> browser dan dikirim langsung ke gateway OpenRouter / Gemini tanpa disimpan permanen di database backend.
-                  </p>
-                </div>
-              </div>
-            </>
-          ) : (
-            /* ════════════════════════════════════════════
-                TUTORIAL TAB: HOW TO GET KEYS
-            ════════════════════════════════════════════ */
-            <div className="space-y-6 text-xs text-gray-600 leading-relaxed">
-              {/* OpenRouter Guide */}
-              <div className="p-4 rounded-2xl border border-purple-200 bg-purple-50/40 space-y-3">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <Zap className="w-4 h-4 text-purple-600" />
-                    <h4 className="font-bold text-gray-900 text-sm">Cara Mendapatkan OpenRouter API Key</h4>
-                  </div>
-                  <a
-                    href="https://openrouter.ai/keys"
-                    target="_blank"
-                    rel="noreferrer"
-                    className="text-xs font-bold text-purple-600 hover:underline flex items-center gap-1"
-                  >
-                    openrouter.ai/keys <ExternalLink className="w-3 h-3" />
-                  </a>
-                </div>
-
-                <ol className="list-decimal list-inside space-y-1.5 text-[11px] text-gray-700 pl-1">
-                  <li>Buka website <strong>openrouter.ai/keys</strong>.</li>
-                  <li>Login atau daftar menggunakan akun Google/GitHub Anda.</li>
-                  <li>Klik tombol <strong>Create Key</strong>.</li>
-                  <li>Beri nama key (misal: <code>MindFlow AI</code>) dan klik <strong>Create</strong>.</li>
-                  <li>Salin API key (berawalan <code>sk-or-v1-...</code>) dan tempelkan ke form di atas.</li>
-                </ol>
-              </div>
-
-              {/* Google Gemini Guide */}
-              <div className="p-4 rounded-2xl border border-primary/30 bg-primary-50/30 space-y-3">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <Sparkles className="w-4 h-4 text-primary" />
-                    <h4 className="font-bold text-gray-900 text-sm">Cara Mendapatkan Google Gemini API Key</h4>
-                  </div>
-                  <a
-                    href="https://aistudio.google.com/app/apikey"
-                    target="_blank"
-                    rel="noreferrer"
-                    className="text-xs font-bold text-primary hover:underline flex items-center gap-1"
-                  >
-                    aistudio.google.com <ExternalLink className="w-3 h-3" />
-                  </a>
-                </div>
-
-                <ol className="list-decimal list-inside space-y-1.5 text-[11px] text-gray-700 pl-1">
-                  <li>Buka portal <strong>Google AI Studio</strong>.</li>
-                  <li>Klik tombol <strong>Create API Key</strong>.</li>
-                  <li>Salin API Key (berawalan <code>AIzaSy...</code>) dan tempelkan ke form Gemini di atas.</li>
-                </ol>
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* Modal Footer Controls */}
-        <div className="p-5 bg-gray-50 border-t border-border flex items-center justify-between gap-3">
-          {activeTab === "config" ? (
-            <>
-              <Button
-                variant="outline"
-                size="md"
-                onClick={handleTest}
-                disabled={isTesting || !currentKeyInput.trim()}
-                loading={isTesting}
-                icon={<Zap className="w-4 h-4 text-primary" />}
-                className="rounded-xl font-bold text-xs"
-              >
-                Tes Koneksi
-              </Button>
-
-              <div className="flex items-center gap-2">
-                <Button
-                  variant="outline"
-                  size="md"
-                  onClick={onClose}
-                  className="rounded-xl text-xs font-semibold"
-                >
-                  Batal
-                </Button>
-
-                <Button
-                  variant="primary"
-                  size="md"
-                  onClick={handleSave}
-                  icon={savedSuccess ? <Check className="w-4 h-4" /> : <ShieldCheck className="w-4 h-4" />}
-                  className={cn(
-                    "rounded-xl text-xs font-bold px-5 shadow-sm",
-                    savedSuccess && "bg-emerald-600 hover:bg-emerald-700"
-                  )}
-                >
-                  {savedSuccess
-                    ? "Tersimpan!"
-                    : `Simpan & Aktifkan ${selectedProvider === "openrouter" ? "OpenRouter" : "Gemini"}`}
-                </Button>
-              </div>
-            </>
-          ) : (
-            <Button
-              variant="primary"
-              size="md"
-              onClick={() => setActiveTab("config")}
-              className="ml-auto rounded-xl text-xs font-bold"
-            >
-              Kembali ke Konfigurasi
-            </Button>
-          )}
-        </div>
+  return createPortal(<div className={s.backdrop} onClick={event => { if (event.target === event.currentTarget) onClose(); }}>
+    <div ref={dialogRef} tabIndex={-1} role="dialog" aria-modal="true" aria-labelledby="assistant-connection-title" className={s.modal}>
+      <header className={s.header}><div><span className={s.overline}>Pengaturan</span><h2 id="assistant-connection-title">Koneksi asisten</h2><p>Pilih layanan untuk ringkasan dan percakapanmu.</p></div><button className={s.iconButton} onClick={onClose} aria-label="Tutup pengaturan koneksi"><X size={20} /></button></header>
+      <div className={s.body}>
+        <fieldset className={s.providers}><legend>Layanan</legend>{([{ id: "gemini", name: "Gemini", detail: "Terhubung langsung ke Google." }, { id: "openrouter", name: "OpenRouter", detail: "Pilih model lewat satu layanan." }] as const).map(item => <label key={item.id} className={s.provider} data-selected={provider === item.id}><input type="radio" name="assistant-provider" value={item.id} checked={provider === item.id} onChange={() => { invalidate(); setProvider(item.id); setShowKey(false); }} /><span><strong>{item.name}</strong><span>{item.detail}</span></span><Check size={17} aria-hidden="true" /></label>)}</fieldset>
+        {provider === "openrouter" && <div className={s.field}><label htmlFor="assistant-model">ID model</label><input id="assistant-model" value={model} placeholder="provider/nama-model" autoComplete="off" spellCheck={false} onChange={event => { invalidate(); setModel(event.target.value); }} /><p>Gunakan ID dari <a href="https://openrouter.ai/models" target="_blank" rel="noreferrer">daftar model OpenRouter<ExternalLink size={13} /></a>.</p></div>}
+        <div className={s.field}><label htmlFor="assistant-api-key">API key {provider === "gemini" ? "Gemini" : "OpenRouter"}</label><div className={s.keyInput}><input id="assistant-api-key" type={showKey ? "text" : "password"} autoComplete="off" autoCapitalize="none" spellCheck={false} value={key} placeholder="Tempel API key di sini" onChange={event => { invalidate(); setKeys(previous => ({ ...previous, [provider]: event.target.value })); }} /><button className={s.iconButton} type="button" aria-label={showKey ? "Sembunyikan API key" : "Tampilkan API key"} aria-pressed={showKey} onClick={() => setShowKey(!showKey)}>{showKey ? <EyeOff size={17} /> : <Eye size={17} />}</button></div><div className={s.fieldLinks}><a href={keyLink} target="_blank" rel="noreferrer">Buka halaman API key<ExternalLink size={14} /></a><button type="button" className={s.textButton} disabled={!key} onClick={() => { invalidate(); removeCustomApiKey(provider); setKeys(previous => ({ ...previous, [provider]: "" })); }}>Hapus key</button></div></div>
+        <p className={s.storageNote}>Key tersimpan di browser ini. Saat digunakan, key dikirim melalui server Cogniva ke layanan yang kamu pilih. Tanpa key pribadi, aplikasi memakai konfigurasi server jika tersedia.</p>
+        <button className={s.guideToggle} onClick={() => setGuide(!guide)} aria-expanded={guide} aria-controls="api-key-guide">{guide ? "Tutup panduan" : "Belum punya API key?"}<span>{guide ? "−" : "+"}</span></button>
+        {guide && <div className={s.guide} id="api-key-guide"><p>Buka halaman API key layanan pilihanmu, buat key, lalu salin dan tempel ke kolom di atas.</p><p>Ketersediaan model, kuota, dan biaya mengikuti akun serta ketentuan layanan tersebut.</p></div>}
+        {result && <div className={s.result} data-success={!!result.success} role={result.success ? "status" : "alert"}><strong>{result.success ? "Koneksi tersedia" : "Belum terhubung"}</strong><p>{result.message}</p>{result.latencyMs !== undefined && <span>Waktu respons {result.latencyMs} ms</span>}</div>}
+        {error && <p className={s.error} role="alert">{error}</p>}
+        {saved && <p className={s.saved} role="status"><Check size={16} />Pengaturan tersimpan di browser ini.</p>}
       </div>
+      <footer className={s.footer}><button className={s.secondary} disabled={testing || !key.trim()} onClick={test}>{testing && <Loader2 size={16} className={s.spinner} />}{testing ? "Memeriksa…" : "Cek koneksi"}</button><button className={s.primary} disabled={testing} onClick={saved ? onClose : save}>{saved ? "Selesai" : "Simpan pengaturan"}</button></footer>
     </div>
-  );
+  </div>, document.body);
 }
