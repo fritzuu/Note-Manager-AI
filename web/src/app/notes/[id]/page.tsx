@@ -28,6 +28,7 @@ import {
   FileDown,
   Paperclip,
   Bookmark,
+  BookOpen,
   AlertTriangle,
   MoreHorizontal,
 } from "lucide-react";
@@ -52,6 +53,7 @@ import { ErrorState } from "@/components/ui/ErrorState";
 import { MarkdownRenderer } from "@/components/ui/MarkdownRenderer";
 import { WarningModal } from "@/components/ui/WarningModal";
 import { TiptapEditor } from "@/components/notes/TiptapEditor";
+import ns from "@/components/notes/notes-workspace.module.css";
 // Firebase Storage imports removed - local upload endpoint is used instead
 
 interface ParsedSummary {
@@ -60,6 +62,19 @@ interface ParsedSummary {
   summaryText: string;
   conclusionText: string;
   suggestedQuestions: string[];
+  sourceFingerprint?: string;
+}
+
+const NOTE_FORMATS = [
+  { name: "Rangkuman kuliah", title: "Rangkuman kuliah", tags: "kuliah, rangkuman", content: "<h2>Topik pembahasan</h2><p></p><h2>Poin utama</h2><ul><li><p></p></li></ul><h2>Contoh</h2><p></p><h2>Kesimpulan</h2><p></p>" },
+  { name: "Ide dan konsep", title: "Ide dan konsep", tags: "ide, konsep", content: "<h2>Latar belakang</h2><p></p><h2>Solusi</h2><p></p><h2>Kelebihan dan tantangan</h2><ul><li><p></p></li></ul><h2>Langkah berikutnya</h2><ol><li><p></p></li></ol>" },
+  { name: "Notulensi diskusi", title: "Notulensi diskusi", tags: "diskusi", content: "<h2>Peserta</h2><ul><li><p></p></li></ul><h2>Agenda</h2><ol><li><p></p></li></ol><h2>Hasil diskusi</h2><p></p><h2>Pembagian tugas</h2><ul><li><p></p></li></ul>" },
+];
+
+function fingerprint(html: string) {
+  let hash = 2166136261;
+  for (let index = 0; index < html.length; index++) hash = Math.imul(hash ^ html.charCodeAt(index), 16777619);
+  return `${html.length}:${hash >>> 0}`;
 }
 
 export default function NoteDetailPage() {
@@ -70,6 +85,14 @@ export default function NoteDetailPage() {
 
   const [noteError, setNoteError] = useState<string | null>(null);
   const [summary, setSummary] = useState<ParsedSummary | null>(null);
+  const [summaryError, setSummaryError] = useState("");
+  const creatingRef = useRef(false);
+  const [creatingNote, setCreatingNote] = useState(false);
+  const currentNoteRef = useRef(noteId);
+  currentNoteRef.current = noteId;
+  const summaryRequestRef = useRef(0);
+  const editRevision = useRef(0);
+  const saveQueue = useRef<Promise<void>>(Promise.resolve());
 
   // Note Document state
   const [title, setTitle] = useState("");
@@ -86,12 +109,13 @@ export default function NoteDetailPage() {
   const [sidebarFilter, setSidebarFilter] = useState<"all" | "pinned" | "archived" | "trashed">("all");
 
   // Layout states
-  const [leftSidebarOpen, setLeftSidebarOpen] = useState(true);
-  const [rightSidebarOpen, setRightSidebarOpen] = useState(true);
+  const [leftSidebarOpen, setLeftSidebarOpen] = useState(false);
+  const [rightSidebarOpen, setRightSidebarOpen] = useState(false);
   const [moreMenuOpen, setMoreMenuOpen] = useState(false);
   const [permanentDeleteModalOpen, setPermanentDeleteModalOpen] = useState(false);
   const [isPermanentlyDeleting, setIsPermanentlyDeleting] = useState(false);
   const moreMenuRef = useRef<HTMLDivElement>(null);
+  const summaryPanelRef = useRef<HTMLElement>(null);
 
   // Close more menu on click outside
   useEffect(() => {
@@ -106,6 +130,25 @@ export default function NoteDetailPage() {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [moreMenuOpen]);
 
+  useEffect(() => {
+    if (!rightSidebarOpen) return;
+    const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const overlay = window.matchMedia("(max-width: 1100px)").matches;
+    const overflow = document.body.style.overflow;
+    if (overlay) { document.body.style.overflow = "hidden"; summaryPanelRef.current?.querySelector<HTMLButtonElement>("button")?.focus(); }
+    const keydown = (event: KeyboardEvent) => {
+      if (event.defaultPrevented) return;
+      if (event.key === "Escape") { setRightSidebarOpen(false); return; }
+      if (!overlay || event.key !== "Tab") return;
+      const elements = Array.from(summaryPanelRef.current?.querySelectorAll<HTMLElement>('button:not(:disabled), a[href], [tabindex="0"]') || []);
+      const first = elements[0], last = elements[elements.length - 1];
+      if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
+      else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
+    };
+    document.addEventListener("keydown", keydown);
+    return () => { document.removeEventListener("keydown", keydown); if (overlay) { document.body.style.overflow = overflow; previous?.focus(); } };
+  }, [rightSidebarOpen]);
+
   // Adjust default sidebar visibility based on screen width on mount
   useEffect(() => {
     if (typeof window !== "undefined" && window.innerWidth < 1280) {
@@ -115,7 +158,7 @@ export default function NoteDetailPage() {
 
   // Loaders & Save statuses
   const [loading, setLoading] = useState(true);
-  const [saveStatus, setSaveStatus] = useState<"saved" | "unsaved" | "saving">("saved");
+  const [saveStatus, setSaveStatus] = useState<"saved" | "unsaved" | "saving" | "error">("saved");
   const [summarizing, setSummarizing] = useState(false);
   const [fileUploading, setFileUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
@@ -157,15 +200,22 @@ export default function NoteDetailPage() {
     const loadWorkspace = async (nId: string) => {
       setLoading(true);
       setNoteError(null);
+      setSummaryError("");
+      setSummarizing(false);
+      summaryRequestRef.current++;
+      if (debounceTimer.current) clearTimeout(debounceTimer.current);
+      editRevision.current = 0;
+      setSaveStatus("saved");
       try {
         // Fetch active note
         const noteDoc = await getNote(nId);
+        if (currentNoteRef.current !== nId) return;
         if (!noteDoc) {
           setNoteError("Catatan ini tidak dapat ditemukan atau telah dihapus.");
           return;
         }
 
-        setTitle(noteDoc.title || "Untitled Note");
+        setTitle(noteDoc.title || "");
         setContent(noteDoc.content || "");
         setTagsStr(Array.isArray(noteDoc.tags) ? noteDoc.tags.join(", ") : "");
         setIsPinned(Boolean(noteDoc.isPinned));
@@ -175,6 +225,7 @@ export default function NoteDetailPage() {
 
         // Load summaries
         const summaryDoc = await getNoteSummary(nId).catch(() => null);
+        if (currentNoteRef.current !== nId) return;
         if (summaryDoc) {
           try {
             const parsed = JSON.parse(summaryDoc.summary);
@@ -194,9 +245,10 @@ export default function NoteDetailPage() {
 
         // Fetch sidebar notes safely
         const notesList = await getUserNotes(user.uid).catch(() => []);
+        if (currentNoteRef.current !== nId) return;
         const sanitizedList = (notesList || []).map((n) => ({
           ...n,
-          title: n.title || "Untitled Note",
+          title: n.title || "Judul catatan",
           content: n.content || "",
           tags: Array.isArray(n.tags) ? n.tags : [],
           isPinned: Boolean(n.isPinned),
@@ -208,7 +260,7 @@ export default function NoteDetailPage() {
         console.error("Failed to load note detail workspace:", err);
         setNoteError("Terjadi kesalahan saat memuat catatan. Periksa koneksi internet Anda.");
       } finally {
-        setLoading(false);
+        if (currentNoteRef.current === nId) setLoading(false);
       }
     };
 
@@ -223,7 +275,9 @@ export default function NoteDetailPage() {
     updatedContent = content,
     updatedTagsStr = tagsStr
   ) => {
-    if (!noteId) return;
+    if (!noteId || isTrashed) return false;
+    const targetId = noteId;
+    const revision = editRevision.current;
     setSaveStatus("saving");
     try {
       const tags = updatedTagsStr
@@ -231,13 +285,12 @@ export default function NoteDetailPage() {
         .map((t) => t.trim())
         .filter((t) => t.length > 0);
 
-      const cleanTitle = updatedTitle.trim().slice(0, 199) || "Untitled Note";
+      const cleanTitle = updatedTitle.trim().slice(0, 199) || "Tanpa judul";
 
-      await updateNote(noteId, {
-        title: cleanTitle,
-        content: updatedContent,
-        tags: tags,
-      });
+      const request = saveQueue.current.catch(() => {}).then(() => updateNote(targetId, { title: cleanTitle, content: updatedContent, tags }));
+      saveQueue.current = request;
+      await request;
+      if (currentNoteRef.current !== targetId) return false;
 
       // Local state updates for sidebar sync
       setAllNotes((prev) =>
@@ -254,16 +307,31 @@ export default function NoteDetailPage() {
         )
       );
 
-      setSaveStatus("saved");
+      setSaveStatus(editRevision.current === revision ? "saved" : "unsaved");
+      return editRevision.current === revision;
     } catch (err) {
       console.error("Failed to save note update:", err);
-      setSaveStatus("unsaved");
-      showToast("Auto-save failed", "error");
+      if (currentNoteRef.current !== targetId) return;
+      setSaveStatus("error");
+      showToast("Catatan belum tersimpan. Coba simpan lagi.", "error");
+      return false;
     }
+  };
+
+  const emptyContent = !content.replace(/<[^>]*>/g, " ").replace(/&nbsp;/g, " ").trim() && !/<(img|iframe|table)\b/i.test(content);
+  const applyFormat = (format: typeof NOTE_FORMATS[number]) => {
+    if (!emptyContent || isTrashed) return;
+    if (debounceTimer.current) clearTimeout(debounceTimer.current);
+    editRevision.current++;
+    const nextTitle = title.trim() || format.title;
+    const nextTags = [...new Set([...tagsStr.split(","), ...format.tags.split(",")].map(tag => tag.trim()).filter(Boolean))].join(", ");
+    setTitle(nextTitle); setContent(format.content); setTagsStr(nextTags);
+    void handleSave(nextTitle, format.content, nextTags);
   };
 
   // Input changes with debounce auto-save
   const triggerInputChange = (field: "title" | "tags", value: string) => {
+    editRevision.current++;
     setSaveStatus("unsaved");
     let currentTitle = title;
     let currentTagsStr = tagsStr;
@@ -287,6 +355,7 @@ export default function NoteDetailPage() {
 
   // Editor content updates (called by Tiptap)
   const handleEditorChange = (newHtml: string) => {
+    editRevision.current++;
     setContent(newHtml);
     setSaveStatus("unsaved");
 
@@ -301,15 +370,26 @@ export default function NoteDetailPage() {
 
   // Quick create note from Sidebar
   const handleCreateNoteFromSidebar = async () => {
-    if (!user) return;
+    if (!user || creatingRef.current) return;
+    creatingRef.current = true; setCreatingNote(true);
     try {
-      const newId = await createNote(user.uid, "Untitled Note", "", []);
-      showToast("New note created");
+      if (saveStatus !== "saved" && !await handleSave()) throw new Error("Save incomplete");
+      if (debounceTimer.current) clearTimeout(debounceTimer.current);
+      const newId = await createNote(user.uid, "", "", []);
+      showToast("Catatan baru dibuka");
       router.push(`/notes/${newId}`);
     } catch (err) {
       console.error("Failed to create note:", err);
-      showToast("Create failed", "error");
-    }
+      showToast("Catatan belum bisa dibuat. Coba lagi.", "error");
+    } finally { creatingRef.current = false; setCreatingNote(false); }
+  };
+
+  const navigateFromNote = async (event: React.MouseEvent<HTMLAnchorElement>, href: string) => {
+    if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+    event.preventDefault();
+    if (!isTrashed && saveStatus !== "saved" && !await handleSave()) return;
+    if (debounceTimer.current) clearTimeout(debounceTimer.current);
+    router.push(href);
   };
 
   // Pin toggle
@@ -339,7 +419,7 @@ export default function NoteDetailPage() {
     setIsTrashed(nextVal);
     setAllNotes((prev) => prev.map((n) => (n.id === noteId ? { ...n, isTrashed: nextVal } : n)));
     await updateNote(noteId, { isTrashed: nextVal });
-    showToast(nextVal ? "Note moved to Trash" : "Note restored from Trash");
+    showToast(nextVal ? "Note moved to Trash" : "Catatan dipulihkan from Trash");
     if (nextVal) {
       router.push("/notes");
     }
@@ -386,7 +466,7 @@ export default function NoteDetailPage() {
       };
 
       const newId = await duplicateNote(activeDoc);
-      showToast("Note duplicated successfully");
+      showToast("Catatan disalin successfully");
       router.push(`/notes/${newId}`);
     } catch (err) {
       console.error("Duplicate note error:", err);
@@ -472,13 +552,16 @@ export default function NoteDetailPage() {
 
   // AI Summary Generation
   const handleGenerateSummary = async () => {
-    if (!noteId || !user) return;
-    if (!content.trim()) {
-      showToast("Note content is empty", "error");
+    if (!noteId || !user || summarizing || isTrashed) return;
+    if (!content.replace(/<[^>]*>/g, " ").replace(/&nbsp;/g, " ").trim()) {
+      showToast("Tulis isi catatan sebelum membuat rangkuman.", "error");
       return;
     }
 
-    setSummarizing(true);
+    const targetId = noteId;
+    const sourceFingerprint = fingerprint(content);
+    const requestId = ++summaryRequestRef.current;
+    setSummarizing(true); setSummaryError("");
     try {
       const customKey = getCustomApiKey();
       const provider = getAiProvider();
@@ -503,16 +586,17 @@ export default function NoteDetailPage() {
         throw new Error("Failed to summarize");
       }
 
-      const parsed = await res.json();
+      const result = await res.json();
+      const parsed: ParsedSummary = { ...result, sourceFingerprint };
+      await saveNoteSummary(targetId, user.uid, JSON.stringify(parsed));
+      if (currentNoteRef.current !== targetId || summaryRequestRef.current !== requestId) return;
       setSummary(parsed);
-
-      await saveNoteSummary(noteId, user.uid, JSON.stringify(parsed));
-      showToast("AI Summary generated");
+      showToast("Rangkuman tersimpan");
     } catch (err) {
       console.error("Generate summary error:", err);
-      showToast("Failed to generate summary", "error");
+      if (currentNoteRef.current === targetId && summaryRequestRef.current === requestId) setSummaryError("Rangkuman belum bisa dibuat. Coba lagi; hasil sebelumnya tetap tersimpan.");
     } finally {
-      setSummarizing(false);
+      if (currentNoteRef.current === targetId && summaryRequestRef.current === requestId) setSummarizing(false);
     }
   };
 
@@ -522,7 +606,7 @@ export default function NoteDetailPage() {
   };
 
   const handleExportMarkdown = () => {
-    let md = `# ${title || "Untitled Note"}\n\n`;
+    let md = `# ${title || "Judul catatan"}\n\n`;
     if (tagsStr) {
       md += `Tags: ${tagsStr}\n\n`;
     }
@@ -555,7 +639,7 @@ export default function NoteDetailPage() {
     const htmlDoc = `
       <html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
       <head>
-        <title>${title || "Untitled Note"}</title>
+        <title>${title || "Judul catatan"}</title>
         <style>
           body { font-family: 'Arial', sans-serif; line-height: 1.6; padding: 20px; }
           h1 { color: #059669; }
@@ -567,7 +651,7 @@ export default function NoteDetailPage() {
         </style>
       </head>
       <body>
-        <h1>${title || "Untitled Note"}</h1>
+        <h1>${title || "Judul catatan"}</h1>
         ${content}
       </body>
       </html>
@@ -578,7 +662,7 @@ export default function NoteDetailPage() {
     link.href = URL.createObjectURL(blob);
     link.download = `${(title || "untitled").toLowerCase().replace(/\s+/g, "-")}.doc`;
     link.click();
-    showToast("Word document exported");
+    showToast("Dokumen Word disimpan");
   };
 
   // Import Markdown
@@ -689,21 +773,19 @@ export default function NoteDetailPage() {
   return (
     <DashboardShell fullWidth={true}>
       {/* Note Workspace Split Container */}
-      <div className="flex h-[calc(100vh-140px)] md:h-[calc(100vh-80px)] border border-border bg-white rounded-2xl overflow-hidden shadow-card relative">
+      <div className={ns.workspace}>
         {/* Left Sidebar: Note list */}
         <div
-          className={`flex flex-col bg-gray-50/50 border-r border-border h-full transition-all duration-300 overflow-hidden shrink-0 ${
-            leftSidebarOpen ? "w-64 lg:w-72" : "w-0 border-r-0"
-          }`}
+          className={ns.library} data-open={leftSidebarOpen} inert={!leftSidebarOpen}
         >
           {/* Sidebar Header */}
           <div className="p-4 border-b border-border space-y-3.5 bg-white">
             <div className="flex items-center justify-between">
-              <h2 className="font-extrabold text-gray-800 text-sm tracking-tight">Note Library</h2>
+              <h2 className="font-extrabold text-gray-800 text-sm tracking-tight">Catatanmu</h2>
               <button
                 onClick={handleCreateNoteFromSidebar}
                 className="p-1.5 bg-primary/5 hover:bg-primary/15 text-primary rounded-lg transition-all cursor-pointer"
-                title="Add New Note"
+                title="Catatan baru" disabled={creatingNote}
               >
                 <Plus className="w-4 h-4" />
               </button>
@@ -714,7 +796,7 @@ export default function NoteDetailPage() {
               <Search className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
               <input
                 type="text"
-                placeholder="Search notes..."
+                placeholder="Cari catatan…"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="w-full pl-9 pr-3 py-1.5 text-xs rounded-xl border border-border bg-gray-50 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:bg-white transition-all font-medium text-gray-700"
@@ -725,7 +807,7 @@ export default function NoteDetailPage() {
             <div className="grid grid-cols-4 gap-1 p-1 bg-gray-100 rounded-xl">
               {(["all", "pinned", "archived", "trashed"] as const).map((filter) => (
                 <button
-                  key={filter}
+                  key={{ all: "Semua", pinned: "Pin", archived: "Arsip", trashed: "Sampah" }[filter]}
                   onClick={() => setSidebarFilter(filter)}
                   className={`text-[10px] font-bold py-1.5 rounded-lg capitalize transition-all cursor-pointer ${
                     sidebarFilter === filter
@@ -733,7 +815,7 @@ export default function NoteDetailPage() {
                       : "text-gray-500 hover:text-gray-800"
                   }`}
                 >
-                  {filter}
+                  {{ all: "Semua", pinned: "Pin", archived: "Arsip", trashed: "Sampah" }[filter]}
                 </button>
               ))}
             </div>
@@ -744,7 +826,7 @@ export default function NoteDetailPage() {
             {filteredSidebarNotes.length === 0 ? (
               <div className="text-center py-12 text-gray-400">
                 <FileText className="w-8 h-8 mx-auto opacity-40 mb-2" />
-                <p className="text-xs font-medium">No notes found</p>
+                <p className="text-xs font-medium">Catatan tidak ditemukan</p>
               </div>
             ) : (
               filteredSidebarNotes.map((note) => {
@@ -753,6 +835,8 @@ export default function NoteDetailPage() {
                   <Link
                     key={note.id}
                     href={`/notes/${note.id}`}
+                    onClick={event => void navigateFromNote(event, `/notes/${note.id}`)}
+                    aria-current={isActive ? "page" : undefined}
                     className={`block p-3.5 rounded-xl border transition-all relative group ${
                       isActive
                         ? "bg-primary border-primary text-white shadow-sm"
@@ -765,7 +849,7 @@ export default function NoteDetailPage() {
                           isActive ? "text-white" : "text-gray-800 group-hover:text-primary"
                         }`}
                       >
-                        {note.title || "Untitled Note"}
+                        {note.title || "Judul catatan"}
                       </h4>
                       <div className="flex items-center gap-1 shrink-0">
                         {note.isPinned && (
@@ -782,7 +866,7 @@ export default function NoteDetailPage() {
                         isActive ? "text-white/80" : "text-gray-500"
                       }`}
                     >
-                      {note.content?.replace(/<[^>]+>/g, "").trim() || "Empty note content..."}
+                      {note.content?.replace(/<[^>]+>/g, "").trim() || "Belum ada isi"}
                     </p>
 
                     {note.tags && note.tags.length > 0 && (
@@ -807,26 +891,26 @@ export default function NoteDetailPage() {
         </div>
 
         {/* Center Panel: Focused Rich-Text Editor */}
-        <div id="print-editor-area" className="flex-1 flex flex-col h-full bg-white overflow-hidden">
+        <div id="print-editor-area" className={ns.canvas}>
           {/* Note Status / Warning Banners */}
           {isTrashed && (
             <div className="bg-red-50 border-b border-red-100 px-6 py-3 flex items-center justify-between text-xs text-red-800 font-semibold select-none animate-slide-down print:hidden">
               <div className="flex items-center gap-2">
                 <AlertTriangle className="w-4 h-4 text-red-600" />
-                <span>This note is in the Trash. Editing is disabled.</span>
+                <span>Catatan ada di sampah. Pulihkan untuk mengedit.</span>
               </div>
               <div className="flex gap-2">
                 <button
                   onClick={handleToggleTrash}
                   className="px-3 py-1 bg-red-100 text-red-800 rounded-lg hover:bg-red-200 transition-colors cursor-pointer"
                 >
-                  Restore Note
+                  Pulihkan catatan
                 </button>
                 <button
                   onClick={handlePermanentDelete}
                   className="px-3 py-1 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors cursor-pointer"
                 >
-                  Delete Permanently
+                  Hapus permanen
                 </button>
               </div>
             </div>
@@ -836,19 +920,19 @@ export default function NoteDetailPage() {
             <div className="bg-blue-50 border-b border-blue-100 px-6 py-3 flex items-center justify-between text-xs text-blue-800 font-semibold select-none animate-slide-down print:hidden">
               <div className="flex items-center gap-2">
                 <Archive className="w-4 h-4 text-blue-600" />
-                <span>This note is archived.</span>
+                <span>Catatan ini diarsipkan.</span>
               </div>
               <button
                 onClick={handleToggleArchive}
                 className="px-3 py-1 bg-blue-100 text-blue-800 rounded-lg hover:bg-blue-200 transition-colors cursor-pointer"
               >
-                Unarchive Note
+                Keluarkan dari arsip
               </button>
             </div>
           )}
 
           {/* Workspace Controls Header */}
-          <div className="flex items-center justify-between px-3 md:px-5 h-14 border-b border-border bg-white print:hidden gap-2 min-w-0 shrink-0">
+          <div className={`${ns.workspaceHeader} print:hidden`}>
             {/* Sidebar toggle & Back button */}
             <div className="flex items-center gap-1.5 shrink-0">
               <button
@@ -860,10 +944,11 @@ export default function NoteDetailPage() {
               </button>
               <Link
                 href="/notes"
+                onClick={event => void navigateFromNote(event, "/notes")}
                 className="flex items-center gap-1 px-2 py-1.5 text-xs font-bold text-gray-600 hover:text-primary hover:bg-primary-50 rounded-xl transition-colors shrink-0"
               >
                 <ArrowLeft className="w-3.5 h-3.5" />
-                <span className="hidden sm:inline">All Notes</span>
+                <span className="hidden sm:inline">Catatan</span>
               </Link>
             </div>
 
@@ -877,7 +962,7 @@ export default function NoteDetailPage() {
                     ? "bg-amber-50 border-amber-200 text-amber-500 hover:bg-amber-100"
                     : "border-border text-gray-400 hover:text-amber-500 hover:bg-gray-50"
                 }`}
-                title={isPinned ? "Unstar Note" : "Favorite / Pin Note"}
+                title={isPinned ? "Lepas sematan" : "Sematkan catatan"}
               >
                 <Star className={`w-4 h-4 ${isPinned ? "fill-current" : ""}`} />
               </button>
@@ -890,7 +975,7 @@ export default function NoteDetailPage() {
                     ? "bg-blue-50 border-blue-200 text-blue-500 hover:bg-blue-100"
                     : "border-border text-gray-400 hover:text-blue-500 hover:bg-gray-50"
                 }`}
-                title={isArchived ? "Unarchive Note" : "Archive Note"}
+                title={isArchived ? "Keluarkan dari arsip" : "Arsipkan catatan"}
               >
                 <Archive className="w-4 h-4" />
               </button>
@@ -1003,7 +1088,7 @@ export default function NoteDetailPage() {
 
               <div className="w-[1px] h-5 bg-border mx-0.5" />
 
-              {/* AI Assistant Toggle Button in Header */}
+              {/* Rangkuman Toggle Button in Header */}
               <button
                 type="button"
                 onClick={() => setRightSidebarOpen(!rightSidebarOpen)}
@@ -1012,28 +1097,28 @@ export default function NoteDetailPage() {
                     ? "bg-primary text-white shadow-xs"
                     : "bg-primary/10 text-primary hover:bg-primary/20 border border-primary/30"
                 }`}
-                title={rightSidebarOpen ? "Tutup AI Assistant" : "Buka AI Assistant"}
+                title={rightSidebarOpen ? "Tutup rangkuman" : "Buka rangkuman"} aria-expanded={rightSidebarOpen}
               >
-                <Brain className="w-3.5 h-3.5 animate-pulse" />
-                <span>AI Assistant</span>
+                <BookOpen className="w-3.5 h-3.5" />
+                <span>Rangkuman</span>
               </button>
             </div>
           </div>
 
           {/* Core Writing Layout Area */}
-          <div className="flex-1 overflow-y-auto px-6 py-8 md:px-12 md:py-10 space-y-6">
+          <div className={ns.writingArea}>
             {/* Title borderless input */}
             <input
               type="text"
               value={title}
               disabled={isTrashed}
               onChange={(e) => triggerInputChange("title", e.target.value)}
-              className="w-full text-3xl md:text-4xl font-extrabold text-[#1F2937] placeholder:text-gray-300 focus:outline-none bg-transparent"
-              placeholder="Untitled Note"
+              className={ns.title} aria-label="Judul catatan" autoFocus={!title && !content} maxLength={199}
+              placeholder="Judul catatan"
             />
 
             {/* Tag Badges & inline tag editor */}
-            <div className="flex flex-wrap items-center gap-2 pb-4 border-b border-border/40 print:hidden">
+            <div className={`${ns.metadata} print:hidden`}>
               <Tag className="w-4 h-4 text-gray-400 shrink-0" />
               <div className="flex flex-wrap items-center gap-1.5 flex-1">
                 {tagsStr
@@ -1065,7 +1150,7 @@ export default function NoteDetailPage() {
                 {!isTrashed && (
                   <input
                     type="text"
-                    placeholder="Add tags... (separated by comma)"
+                    placeholder="Tag, pisahkan dengan koma"
                     value={tagsStr}
                     onChange={(e) => triggerInputChange("tags", e.target.value)}
                     className="text-xs font-semibold text-gray-500 placeholder:text-gray-300 focus:outline-none bg-transparent flex-1 min-w-[150px]"
@@ -1074,6 +1159,8 @@ export default function NoteDetailPage() {
               </div>
             </div>
 
+            {!isTrashed && <details className={ns.templatePicker}><summary>Format awal</summary><div className={ns.templateMenu}><p>{emptyContent ? "Mulai dengan kerangka tulisan." : "Format awal tersedia untuk catatan kosong."}</p>{NOTE_FORMATS.map(format => <button type="button" key={format.name} disabled={!emptyContent} onClick={event => { applyFormat(format); event.currentTarget.closest("details")?.removeAttribute("open"); }}>{format.name}</button>)}</div></details>}
+
             {/* Note text editor component */}
             <div className={isTrashed ? "pointer-events-none opacity-85 select-none" : ""}>
               <TiptapEditor
@@ -1081,6 +1168,7 @@ export default function NoteDetailPage() {
                 onChange={handleEditorChange}
                 userId={user?.uid || ""}
                 onStatsChange={setStats}
+                editable={!isTrashed}
               />
             </div>
 
@@ -1088,7 +1176,7 @@ export default function NoteDetailPage() {
             <div className="pt-6 border-t border-border/60 print:hidden">
               <h3 className="text-xs font-bold uppercase tracking-wider text-gray-400 flex items-center gap-1.5 mb-3.5">
                 <Paperclip className="w-3.5 h-3.5" />
-                Attachments ({attachments.length})
+                Lampiran ({attachments.length})
               </h3>
 
               {/* File list */}
@@ -1111,7 +1199,7 @@ export default function NoteDetailPage() {
                         target="_blank"
                         rel="noreferrer"
                         className="p-1.5 text-gray-500 hover:text-primary hover:bg-white rounded-lg transition-colors border border-transparent hover:border-border cursor-pointer"
-                        title="Download Attachment"
+                        title="Unduh lampiran"
                       >
                         <Download className="w-3.5 h-3.5" />
                       </a>
@@ -1119,7 +1207,7 @@ export default function NoteDetailPage() {
                         <button
                           onClick={() => handleDeleteAttachment(idx)}
                           className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-white rounded-lg transition-colors border border-transparent hover:border-border cursor-pointer"
-                          title="Delete Attachment"
+                          title="Hapus lampiran"
                         >
                           <X className="w-3.5 h-3.5" />
                         </button>
@@ -1133,7 +1221,7 @@ export default function NoteDetailPage() {
                   <div className="flex items-center gap-3 mt-4">
                     <label className="flex items-center gap-2 px-4 py-2 border border-border border-dashed hover:border-primary/50 text-xs font-bold text-gray-500 hover:text-primary rounded-xl cursor-pointer transition-all hover:bg-primary-50/10 shrink-0">
                       <Plus className="w-3.5 h-3.5" />
-                      Add Attachment
+                      Tambah lampiran
                       <input
                         type="file"
                         onChange={handleFileUpload}
@@ -1144,7 +1232,7 @@ export default function NoteDetailPage() {
                     {fileUploading && (
                       <div className="flex items-center gap-2.5 text-xs text-gray-400 font-semibold animate-fade-in flex-1">
                         <Loader2 className="w-3.5 h-3.5 animate-spin text-primary shrink-0" />
-                        <span className="truncate">Uploading ({uploadProgress}%)</span>
+                        <span className="truncate">Mengunggah ({uploadProgress}%)</span>
                         <div className="flex-1 h-1 bg-gray-100 rounded-full overflow-hidden">
                           <div
                             className="h-full bg-primary transition-all duration-300"
@@ -1160,7 +1248,7 @@ export default function NoteDetailPage() {
           </div>
 
           {/* Footer Status & Stats */}
-          <div className="border-t border-border px-6 py-2.5 bg-gray-50 flex items-center justify-between text-xs text-gray-400 font-semibold print:hidden">
+          <div className={`${ns.statusBar} print:hidden`}>
             {/* Left: Save status dot */}
             <div className="flex items-center gap-2 select-none">
               <span
@@ -1173,175 +1261,39 @@ export default function NoteDetailPage() {
                 }`}
               />
               <span>
-                {saveStatus === "saving" && "Saving Note Draft..."}
-                {saveStatus === "saved" && "Changes saved to Firestore"}
-                {saveStatus === "unsaved" && "Unsaved changes"}
+                {saveStatus === "saving" && "Menyimpan…"}
+                {saveStatus === "saved" && "Tersimpan"}
+                {saveStatus === "unsaved" && "Belum tersimpan"}
+                {saveStatus === "error" && <button type="button" onClick={() => handleSave()}>Gagal menyimpan · Coba lagi</button>}
               </span>
             </div>
 
             {/* Right: Word count, character counts, reading time */}
             <div className="flex items-center gap-4">
-              <span>{stats.words} words</span>
-              <span>{stats.characters} characters</span>
-              <span>~{stats.readingTime} min read</span>
+              <span>{stats.words} kata</span>
+              <span>{stats.characters} karakter</span>
+              <span>~{stats.readingTime} menit baca</span>
             </div>
           </div>
         </div>
 
-        {/* Right Panel: Collapsible AI Academic Summary Assistance */}
-        <div
-          className={`flex flex-col bg-gray-50/50 border-l border-border h-full transition-all duration-300 overflow-hidden print:hidden shrink-0 ${
-            rightSidebarOpen ? "w-72 lg:w-80 xl:w-96" : "w-0 border-l-0"
-          }`}
-        >
-          {/* Header */}
-          <div className="bg-gradient-to-r from-primary to-primary-600 px-4 h-14 text-white flex items-center justify-between shrink-0">
-            <div className="flex items-center gap-2 min-w-0">
-              <Sparkles className="w-4 h-4 animate-pulse shrink-0" />
-              <h3 className="font-extrabold text-xs sm:text-sm tracking-tight truncate">AI Academic Assistant</h3>
-            </div>
-            <div className="flex items-center gap-1 shrink-0">
-              {summary && (
-                <button
-                  onClick={handleGenerateSummary}
-                  disabled={summarizing}
-                  title="Regenerate summary"
-                  className="p-1.5 hover:bg-white/20 rounded-lg transition-colors cursor-pointer text-white"
-                >
-                  <RefreshCw className={`w-3.5 h-3.5 ${summarizing ? "animate-spin" : ""}`} />
-                </button>
-              )}
-              <button
-                onClick={() => setRightSidebarOpen(false)}
-                className="p-1.5 hover:bg-white/20 rounded-lg transition-colors cursor-pointer text-white"
-                title="Collapse Assistant"
-              >
-                <ChevronRight className="w-4 h-4" />
-              </button>
-            </div>
+        {rightSidebarOpen && <button type="button" className={ns.panelBackdrop} aria-label="Tutup rangkuman" onClick={() => setRightSidebarOpen(false)} />}
+        <aside ref={summaryPanelRef} className={ns.summaryPanel} data-open={rightSidebarOpen} aria-label="Rangkuman catatan" inert={!rightSidebarOpen}>
+          <header className={ns.summaryHeader}><div><p>Catatanmu, diringkas</p><h2>Rangkuman</h2></div><button type="button" onClick={() => setRightSidebarOpen(false)} aria-label="Tutup rangkuman"><X size={18} /></button></header>
+          <div className={ns.summaryBody}>
+            {summary?.sourceFingerprint && summary.sourceFingerprint !== fingerprint(content) && <p className={ns.summaryNotice}>Isi catatan sudah berubah sejak rangkuman ini dibuat.</p>}
+            {summarizing && <div className={ns.summaryLoading} role="status"><Loader2 size={17} className="animate-spin" /><span>{summary ? "Memperbarui rangkuman…" : "Menyusun rangkuman…"}</span></div>}
+            {summaryError && <p className={ns.error} role="alert">{summaryError}</p>}
+            {!summary ? <div className={ns.summaryEmpty}><BookOpen size={30} strokeWidth={1.3} /><h3>Belum ada rangkuman</h3><p>Tulis isi catatan, lalu buat rangkuman saat kamu membutuhkannya.</p><button type="button" className={ns.primary} disabled={summarizing || isTrashed || !stats.words} onClick={handleGenerateSummary}>{summarizing ? "Menyiapkan…" : "Buat rangkuman"}</button></div> : <>
+              <button type="button" className={ns.regenerate} disabled={summarizing || isTrashed || !stats.words} onClick={handleGenerateSummary}><RefreshCw size={15} />Buat ulang</button>
+              {summary.summaryText && <section className={ns.summarySection}><h3>Gambaran singkat</h3><MarkdownRenderer content={summary.summaryText} /></section>}
+              {!!summary.importantPoints?.length && <section className={ns.summarySection}><h3>Poin utama</h3><ul>{summary.importantPoints.map((point, index) => <li key={index}>{point}</li>)}</ul></section>}
+              {!!summary.keyConcepts?.length && <section className={ns.summarySection}><h3>Konsep penting</h3><div className={ns.concepts}>{summary.keyConcepts.map((concept, index) => <span key={index}>{concept}</span>)}</div></section>}
+              {summary.conclusionText && <section className={`${ns.summarySection} ${ns.conclusion}`}><h3>Kesimpulan</h3><MarkdownRenderer content={summary.conclusionText} /></section>}
+              {!!summary.suggestedQuestions?.length && <section className={ns.summarySection}><h3>Pertanyaan lanjutan</h3>{summary.suggestedQuestions.map((question, index) => <Link className={ns.question} key={index} href={`/assistant?noteId=${noteId}&question=${encodeURIComponent(question)}`}><span>{question}</span><ChevronRight size={16} /></Link>)}</section>}
+            </>}
           </div>
-
-          {/* AI Content Viewport */}
-          <div className="flex-1 overflow-y-auto p-5 space-y-6">
-            {!summary && !summarizing ? (
-              <div className="text-center py-16 space-y-4">
-                <div className="w-12 h-12 rounded-2xl bg-primary/5 flex items-center justify-center mx-auto text-primary">
-                  <Brain className="w-6 h-6 animate-pulse" />
-                </div>
-                <div>
-                  <h4 className="font-bold text-gray-700 text-sm">Ringkasan & Wawasan AI</h4>
-                  <p className="text-[11px] text-gray-400 mt-1 max-w-[220px] mx-auto leading-relaxed">
-                    Biarkan MindFlow AI menganalisis poin penting, definisi konsep, dan pertanyaan latihan dari catatan ini.
-                  </p>
-                </div>
-                <Button
-                  variant="primary"
-                  size="sm"
-                  onClick={handleGenerateSummary}
-                  icon={<Sparkles className="w-3.5 h-3.5" />}
-                >
-                  Analisis Catatan
-                </Button>
-              </div>
-            ) : summarizing ? (
-              <div className="text-center py-20 space-y-4">
-                <div className="relative inline-block">
-                  <div className="w-12 h-12 rounded-xl bg-primary flex items-center justify-center text-white shadow-float">
-                    <Brain className="w-6 h-6 animate-pulse" />
-                  </div>
-                  <div className="absolute -top-1 -right-1 w-3.5 h-3.5 rounded-full bg-amber-400 animate-ping" />
-                </div>
-                <div>
-                  <h4 className="font-bold text-gray-700 text-xs animate-pulse">MindFlow AI Menganalisis...</h4>
-                  <p className="text-[10px] text-gray-400 mt-1">Menyusun poin penting dan rangkuman materi</p>
-                </div>
-              </div>
-            ) : (
-              <div className="space-y-6 text-xs leading-relaxed animate-fade-in">
-                {/* Key Concepts */}
-                {summary?.keyConcepts && summary.keyConcepts.length > 0 && (
-                  <div className="space-y-2">
-                    <h4 className="font-bold text-[10px] text-gray-400 uppercase tracking-wider flex items-center gap-1.5">
-                      <Bookmark className="w-3.5 h-3.5" />
-                      Key Definitions
-                    </h4>
-                    <div className="flex flex-wrap gap-1.5">
-                      {summary.keyConcepts.map((concept) => (
-                        <span
-                          key={concept}
-                          className="text-[10px] font-bold bg-primary-50 text-primary-700 px-2.5 py-1 rounded-lg border border-primary-100"
-                        >
-                          {concept}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {/* Important Points */}
-                {summary?.importantPoints && summary.importantPoints.length > 0 && (
-                  <div className="space-y-2">
-                    <h4 className="font-bold text-[10px] text-gray-400 uppercase tracking-wider flex items-center gap-1.5">
-                      <ListPlus className="w-3.5 h-3.5" />
-                      Summary Points
-                    </h4>
-                    <ul className="list-disc pl-4 space-y-1.5 text-gray-600 font-medium">
-                      {summary.importantPoints.map((point, i) => (
-                        <li key={i}>{point}</li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
-
-                {/* Summary text */}
-                {summary?.summaryText && (
-                  <div className="space-y-1.5">
-                    <h4 className="font-bold text-[10px] text-gray-400 uppercase tracking-wider">
-                      Ringkasan Catatan
-                    </h4>
-                    <div className="bg-white p-3.5 rounded-2xl border border-border">
-                      <MarkdownRenderer content={summary.summaryText} />
-                    </div>
-                  </div>
-                )}
-
-                {/* Conclusion */}
-                {summary?.conclusionText && (
-                  <div className="border-l-4 border-primary bg-primary-50/40 p-3.5 rounded-r-2xl">
-                    <h4 className="font-bold text-[10px] text-primary uppercase tracking-wider mb-1">
-                      Kesimpulan Penting
-                    </h4>
-                    <div className="text-gray-700 italic font-medium">
-                      <MarkdownRenderer content={summary.conclusionText} />
-                    </div>
-                  </div>
-                )}
-
-                {/* Suggested Questions */}
-                {summary?.suggestedQuestions && summary.suggestedQuestions.length > 0 && (
-                  <div className="pt-4 border-t border-border/60 space-y-3">
-                    <h4 className="font-bold text-[10px] text-gray-400 uppercase tracking-wider flex items-center gap-1.5">
-                      <MessageSquare className="w-3.5 h-3.5" />
-                      Suggested Ask Topics
-                    </h4>
-                    <div className="space-y-2">
-                      {summary.suggestedQuestions.map((q, idx) => (
-                        <Link
-                          key={idx}
-                          href={`/assistant?noteId=${noteId}&question=${encodeURIComponent(q)}`}
-                          className="flex items-center justify-between text-[11px] text-gray-600 bg-white border border-border rounded-xl px-3 py-2.5 hover:border-primary/50 hover:bg-primary-50/10 transition-all cursor-pointer text-left group"
-                        >
-                          <span className="font-semibold flex-1 pr-2 leading-relaxed">{q}</span>
-                          <ChevronRight className="w-3.5 h-3.5 text-gray-400 group-hover:text-primary transition-colors shrink-0" />
-                        </Link>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-        </div>
+        </aside>
       </div>
 
       {/* Permanent Delete Warning Modal */}
