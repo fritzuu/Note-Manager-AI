@@ -1,296 +1,49 @@
 "use client";
 
-import React, { useEffect, useState, useCallback, useMemo } from "react";
+import React, { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import {
-  Plus,
-  CheckSquare,
-  Flame,
-  Pencil,
-  Trash2,
-  GripVertical,
-  Timer,
-  ShieldAlert,
-  Search,
-  Filter,
-  CircleDot,
-  PlayCircle,
-  CheckCircle2,
-  Calendar,
-  Layers,
-  BookOpen,
-  Briefcase,
-  FolderPlus,
-} from "lucide-react";
+import { Plus, Pencil, Trash2, GripVertical, Timer, Search, CheckCircle2, Circle, Calendar, FolderPlus, List, Columns3, MoreHorizontal, ArrowUpRight } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
-import {
-  getUserTasks,
-  updateTask,
-  deleteTask,
-  createNotification,
-  getAcademicInsight,
-  getEffectiveWorkspaces,
-  type TaskDocument,
-} from "@/lib/firestore";
+import { getUserTasks, updateTask, deleteTask, createNotification, getAcademicInsight, getEffectiveWorkspaces, type TaskDocument } from "@/lib/firestore";
 import { deadlineToDays, computePriorityDetailed, deriveAcademicRiskFromInsight } from "@/lib/fuzzyLogic";
 import { DashboardShell } from "@/components/layout/DashboardShell";
-import { Button } from "@/components/ui/Button";
 import { LoadingScreen } from "@/components/ui/LoadingScreen";
 import { ErrorState } from "@/components/ui/ErrorState";
-import { Input } from "@/components/ui/Input";
+import { Dropdown } from "@/components/ui/Dropdown";
 import { WarningModal } from "@/components/ui/WarningModal";
+import { priorityLabels, riskLabels } from "@/components/tasks/taskPresentation";
+import s from "@/components/tasks/tasks.module.css";
 
 type KanbanColumn = "todo" | "doing" | "done";
-
-const COLUMNS: {
-  id: KanbanColumn;
-  label: string;
-  sub: string;
-  icon: React.ComponentType<{ className?: string }>;
-  color: string;
-  badgeBg: string;
-  columnBg: string;
-  borderCol: string;
-}[] = [
-  {
-    id: "todo",
-    label: "To Do",
-    sub: "Tugas yang akan dikerjakan",
-    icon: CircleDot,
-    color: "text-gray-700",
-    badgeBg: "bg-gray-100 text-gray-700 border-gray-200",
-    columnBg: "bg-slate-50/70",
-    borderCol: "border-slate-200/80",
-  },
-  {
-    id: "doing",
-    label: "Sedang Dikerjakan",
-    sub: "Fokus aktif saat ini",
-    icon: PlayCircle,
-    color: "text-blue-700",
-    badgeBg: "bg-blue-100 text-blue-800 border-blue-200",
-    columnBg: "bg-blue-50/30",
-    borderCol: "border-blue-200/60",
-  },
-  {
-    id: "done",
-    label: "Selesai",
-    sub: "Target yang telah tuntas",
-    icon: CheckCircle2,
-    color: "text-emerald-700",
-    badgeBg: "bg-emerald-100 text-emerald-800 border-emerald-200",
-    columnBg: "bg-emerald-50/30",
-    borderCol: "border-emerald-200/60",
-  },
-];
-
-const PRIORITY_BADGE_STYLE: Record<string, { bg: string; text: string; border: string; dot: string }> = {
-  Critical: {
-    bg: "bg-rose-50",
-    text: "text-rose-700",
-    border: "border-rose-200",
-    dot: "bg-rose-500",
-  },
-  High: {
-    bg: "bg-orange-50",
-    text: "text-orange-700",
-    border: "border-orange-200",
-    dot: "bg-orange-500",
-  },
-  Medium: {
-    bg: "bg-amber-50",
-    text: "text-amber-700",
-    border: "border-amber-200",
-    dot: "bg-amber-500",
-  },
-  Low: {
-    bg: "bg-emerald-50",
-    text: "text-emerald-700",
-    border: "border-emerald-200",
-    dot: "bg-emerald-500",
-  },
-};
-
-const WORKSPACE_COLORS: Record<string, { bg: string; text: string; border: string }> = {
-  "Kecerdasan Buatan": { bg: "bg-purple-50", text: "text-purple-700", border: "border-purple-200" },
-  "Basis Data": { bg: "bg-blue-50", text: "text-blue-700", border: "border-blue-200" },
-  "Pemrograman Web": { bg: "bg-indigo-50", text: "text-indigo-700", border: "border-indigo-200" },
-  "Jaringan Komputer": { bg: "bg-cyan-50", text: "text-cyan-700", border: "border-cyan-200" },
-  "Proyek Akhir": { bg: "bg-amber-50", text: "text-amber-700", border: "border-amber-200" },
-  "Organisasi": { bg: "bg-emerald-50", text: "text-emerald-700", border: "border-emerald-200" },
-  "Personal": { bg: "bg-pink-50", text: "text-pink-700", border: "border-pink-200" },
-  "Umum": { bg: "bg-gray-50", text: "text-gray-700", border: "border-gray-200" },
-};
-
-function getWorkspaceBadgeStyle(name: string) {
-  return (
-    WORKSPACE_COLORS[name] || {
-      bg: "bg-primary/5",
-      text: "text-primary",
-      border: "border-primary/20",
-    }
-  );
+const COLUMNS: { id: KanbanColumn; label: string }[] = [{ id: "todo", label: "Belum mulai" }, { id: "doing", label: "Dikerjakan" }, { id: "done", label: "Selesai" }];
+function formatDeadlineIndo(task: TaskDocument) {
+  const date = task.deadline?.toDate?.();
+  if (!date) return { text: "Tanpa tenggat", isUrgent: false, isOverdue: false };
+  const days = Math.round(deadlineToDays(date));
+  return { text: days < 0 ? `Lewat ${Math.abs(days)} hari` : days === 0 ? "Hari ini" : days === 1 ? "Besok" : date.toLocaleDateString("id-ID", { day: "numeric", month: "short" }), isUrgent: days <= 3, isOverdue: days < 0 };
 }
-
-function formatDeadlineIndo(task: TaskDocument): { text: string; isUrgent: boolean; isOverdue: boolean } {
-  const deadline = task.deadline?.toDate ? task.deadline.toDate() : null;
-  if (!deadline) return { text: "Tanpa batas waktu", isUrgent: false, isOverdue: false };
-  const days = Math.round(deadlineToDays(deadline));
-  if (days < 0) return { text: `Terlambat ${Math.abs(days)} hr`, isUrgent: true, isOverdue: true };
-  if (days === 0) return { text: "Hari ini", isUrgent: true, isOverdue: false };
-  if (days === 1) return { text: "Besok", isUrgent: true, isOverdue: false };
-  return { text: `${days} hari lagi`, isUrgent: days <= 3, isOverdue: false };
-}
-
-interface TaskCardProps {
-  task: TaskDocument;
-  onDeleteRequest: (task: TaskDocument) => void;
-  onDragStart: (e: React.DragEvent, task: TaskDocument) => void;
-}
-
-function TaskCard({ task, onDeleteRequest, onDragStart }: TaskCardProps) {
-  const deadlineInfo = formatDeadlineIndo(task);
-  const priorityStyle = PRIORITY_BADGE_STYLE[task.priorityLevel] || PRIORITY_BADGE_STYLE.Medium;
-  const workspaceName = task.workspace || task.course || "Umum";
-  const wsStyle = getWorkspaceBadgeStyle(workspaceName);
-
-  return (
-    <div
-      draggable
-      onDragStart={(e) => onDragStart(e, task)}
-      className="bg-white rounded-2xl border border-border p-4 shadow-xs hover:shadow-card-hover hover:border-primary/40 transition-all duration-300 cursor-grab active:cursor-grabbing group relative flex flex-col justify-between gap-3"
-    >
-      {/* Top Details */}
-      <div className="space-y-2.5">
-        {/* Top Badges Row */}
-        <div className="flex items-center justify-between gap-1.5">
-          <div className="flex items-center gap-1.5 flex-wrap">
-            {/* Priority Badge */}
-            <span
-              className={`inline-flex items-center gap-1 text-[10px] font-bold px-2.5 py-0.5 rounded-full border ${priorityStyle.bg} ${priorityStyle.text} ${priorityStyle.border}`}
-            >
-              <span className={`w-1.5 h-1.5 rounded-full ${priorityStyle.dot}`} />
-              {task.priorityLevel} ({task.priorityScore})
-            </span>
-
-            {/* Workspace Badge */}
-            <span
-              className={`inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-md border ${wsStyle.bg} ${wsStyle.text} ${wsStyle.border}`}
-            >
-              <Briefcase className="w-3 h-3" />
-              {workspaceName}
-            </span>
-
-            {/* Academic Risk if any */}
-            {task.riskLevel && task.riskLevel !== "Low" && (
-              <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-rose-600 bg-rose-50 px-2 py-0.5 rounded-full border border-rose-100">
-                <ShieldAlert className="w-3 h-3" />
-                Risiko {task.riskLevel}
-              </span>
-            )}
-          </div>
-
-          <GripVertical className="w-4 h-4 text-gray-300 group-hover:text-gray-400 transition-colors shrink-0" />
-        </div>
-
-        {/* Task Title */}
-        <h4 className="font-bold text-gray-900 text-sm leading-snug group-hover:text-primary transition-colors line-clamp-2">
-          {task.title}
-        </h4>
-
-        {/* Task Description snippet if available */}
-        {task.description && (
-          <p className="text-xs text-gray-500 line-clamp-2 leading-relaxed">
-            {task.description}
-          </p>
-        )}
-      </div>
-
-      {/* Middle Progress Bar */}
-      <div className="space-y-1.5 bg-gray-50/70 p-2.5 rounded-xl border border-gray-100">
-        <div className="flex items-center justify-between text-[11px]">
-          <span className="text-gray-500 font-medium">Progres Pengerjaan</span>
-          <span className="font-bold text-gray-800 font-mono">{task.progress || 0}%</span>
-        </div>
-        <div className="h-2 bg-gray-200/80 rounded-full overflow-hidden">
-          <div
-            className="h-full rounded-full transition-all duration-500"
-            style={{
-              width: `${task.progress || 0}%`,
-              background:
-                task.progress >= 80
-                  ? "linear-gradient(90deg, #10b981, #059669)"
-                  : task.progress >= 40
-                  ? "linear-gradient(90deg, #f59e0b, #d97706)"
-                  : "linear-gradient(90deg, #ef4444, #dc2626)",
-            }}
-          />
-        </div>
-      </div>
-
-      {/* Footer Info & Deadline */}
-      <div className="flex items-center justify-between text-[11px] pt-1 text-gray-500 font-medium">
-        {/* Deadline */}
-        <div
-          className={`flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold ${
-            deadlineInfo.isOverdue
-              ? "bg-rose-50 text-rose-600 border border-rose-200"
-              : deadlineInfo.isUrgent
-              ? "bg-amber-50 text-amber-700 border border-amber-200"
-              : "text-gray-500"
-          }`}
-        >
-          <Calendar className="w-3 h-3" />
-          <span>{deadlineInfo.text}</span>
-        </div>
-
-        {/* Estimated Duration */}
-        <div className="flex items-center gap-1 text-[10px] text-gray-400">
-          <Timer className="w-3 h-3" />
-          <span>{task.estimatedTotalMinutes || 25}m</span>
-        </div>
-      </div>
-
-      {/* Action Buttons Row */}
-      <div className="flex items-center gap-1.5 pt-2 border-t border-border/60">
-        {/* Quick Focus Button */}
-        <Link
-          href={`/pomodoro?taskId=${task.id}`}
-          className="flex-1 h-8 flex items-center justify-center gap-1.5 text-xs font-bold text-primary hover:text-white bg-primary-50 hover:bg-primary rounded-xl border border-primary/20 hover:border-primary transition-all cursor-pointer shadow-2xs"
-          title="Mulai Fokus Belajar dengan Pomodoro"
-        >
-          <Flame className="w-3.5 h-3.5" />
-          <span>Fokus</span>
-        </Link>
-
-        {/* Edit Button */}
-        <Link
-          href={`/tasks/${task.id}/edit`}
-          className="h-8 px-2.5 flex items-center justify-center gap-1 text-xs font-semibold text-gray-600 hover:text-primary bg-gray-50 hover:bg-primary-50 rounded-xl border border-border hover:border-primary/30 transition-all cursor-pointer"
-          title="Edit Tugas"
-        >
-          <Pencil className="w-3.5 h-3.5" />
-        </Link>
-
-        {/* Delete Button (Triggers WarningModal) */}
-        <button
-          type="button"
-          onClick={() => onDeleteRequest(task)}
-          className="h-8 px-2.5 flex items-center justify-center text-gray-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl border border-border hover:border-rose-200 transition-all cursor-pointer"
-          title="Hapus Tugas"
-        >
-          <Trash2 className="w-3.5 h-3.5" />
-        </button>
-      </div>
-    </div>
-  );
+function TaskCard({ task, pending, onStatus, onDeleteRequest, onDragStart, onDragEnd }: { task: TaskDocument; pending: boolean; onStatus: (status: KanbanColumn) => void; onDeleteRequest: (task: TaskDocument) => void; onDragStart: (event: React.DragEvent, task: TaskDocument) => void; onDragEnd: () => void }) {
+  const due = formatDeadlineIndo(task);
+  const progress = Math.max(0, Math.min(100, task.progress || 0));
+  return <article className={s.taskRow} data-done={task.status === "done"} draggable={!pending} onDragStart={event => onDragStart(event, task)} onDragEnd={onDragEnd}>
+    <button type="button" className={s.checkButton} disabled={pending} aria-label={task.status === "done" ? `Buka kembali ${task.title}` : `Tandai ${task.title} selesai`} onClick={() => onStatus(task.status === "done" ? "todo" : "done")}>{task.status === "done" ? <CheckCircle2 size={21} /> : <Circle size={21} />}</button>
+    <div className={s.taskMain}><Link href={`/tasks/${task.id}/edit`} className={s.taskTitle}>{task.title}</Link>{task.description && <p className={s.taskDescription}>{task.description}</p>}<div className={s.taskMeta}><span>{task.workspace || task.course || "Umum"}</span><span data-urgent={due.isUrgent && task.status !== "done"}><Calendar size={13} />{due.text}</span>{task.estimatedTotalMinutes > 0 && <span><Timer size={13} />{task.estimatedTotalMinutes} menit</span>}{task.status !== "done" && <span className={s.priorityBadge} data-priority={task.priorityLevel}>{priorityLabels[task.priorityLevel]} · {task.priorityScore}/100</span>}</div></div>
+    <div className={s.taskControls}><div className={s.progressSmall}><span>{progress}%</span><div><i style={{ width: `${progress}%` }} /></div></div><Link href={`/pomodoro?taskId=${task.id}`} className={s.focusLink} aria-label={`Mulai fokus untuk ${task.title}`}><Timer size={16} /><span>Fokus</span></Link><details className={s.taskMenu}><summary aria-label={`Tindakan untuk ${task.title}`}><MoreHorizontal size={19} /></summary><div>{task.riskLevel && <p>{riskLabels[task.riskLevel]}</p>}<Link href={`/tasks/${task.id}/edit`}><Pencil size={15} />Edit tugas</Link><Link href={`/pomodoro?taskId=${task.id}`}><ArrowUpRight size={15} />Mulai fokus</Link><button type="button" disabled={pending} onClick={event => { event.currentTarget.closest("details")?.removeAttribute("open"); onDeleteRequest(task); }}><Trash2 size={15} />Hapus tugas</button></div></details><GripVertical className={s.taskGrip} size={16} aria-hidden="true" /></div>
+  </article>;
 }
 
 export default function KanbanPage() {
   const { user, loading: authLoading } = useAuth();
   const router = useRouter();
 
+  const pageRef = useRef<HTMLDivElement>(null);
+  const [view, setView] = useState<"list" | "board">("board");
+  const [pocket, setPocket] = useState<"active" | "doing" | "done" | "all">("active");
+  const [sortBy, setSortBy] = useState("priority");
+  const [actionError, setActionError] = useState("");
+  const [pendingIds, setPendingIds] = useState<string[]>([]);
+  const pendingRef = useRef(new Set<string>());
   const [tasks, setTasks] = useState<TaskDocument[]>([]);
   const [loading, setLoading] = useState(true);
   const [draggedTask, setDraggedTask] = useState<TaskDocument | null>(null);
@@ -298,6 +51,20 @@ export default function KanbanPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedPriority, setSelectedPriority] = useState<string>("all");
   const [selectedWorkspace, setSelectedWorkspace] = useState<string>("all");
+
+  useEffect(() => {
+    const closeMenus = (event: PointerEvent | KeyboardEvent) => {
+      if (event instanceof KeyboardEvent && event.key !== "Escape") return;
+      pageRef.current?.querySelectorAll<HTMLDetailsElement>("details[open]").forEach(menu => {
+        if (event instanceof PointerEvent && event.target instanceof Node && menu.contains(event.target)) return;
+        menu.removeAttribute("open");
+        if (event instanceof KeyboardEvent && menu.contains(document.activeElement)) menu.querySelector<HTMLElement>("summary")?.focus();
+      });
+    };
+    document.addEventListener("pointerdown", closeMenus);
+    document.addEventListener("keydown", closeMenus);
+    return () => { document.removeEventListener("pointerdown", closeMenus); document.removeEventListener("keydown", closeMenus); };
+  }, []);
 
   // Warning Modal State for Task Deletion
   const [deleteTarget, setDeleteTarget] = useState<TaskDocument | null>(null);
@@ -386,15 +153,15 @@ export default function KanbanPage() {
 
           if (deadlineDays < 3 && deadlineDays >= 0 && (task.progress || 0) < 30) {
             await createNotification(user.uid, {
-              title: "High Risk Task",
-              message: `"${task.title}" is due in ${Math.round(deadlineDays)}d with only ${task.progress || 0}% progress.`,
+              title: "Tenggat tugas mendekat",
+              message: `"${task.title}" jatuh tempo ${Math.round(deadlineDays)} hari lagi. Progresnya ${task.progress || 0}%.`,
               type: "high_risk",
             });
           }
           if (deadlineDays >= 0 && deadlineDays < 1 && (task.progress || 0) < 50) {
             await createNotification(user.uid, {
-              title: "Critical Alert",
-              message: `"${task.title}" is due TODAY with ${task.progress || 0}% progress. Act now!`,
+              title: "Tenggat hari ini",
+              message: `"${task.title}" jatuh tempo hari ini. Progresnya ${task.progress || 0}%.`,
               type: "critical_alert",
             });
           }
@@ -427,28 +194,29 @@ export default function KanbanPage() {
     e.dataTransfer.effectAllowed = "move";
   };
 
-  const handleDrop = async (e: React.DragEvent, col: KanbanColumn) => {
-    e.preventDefault();
-    if (!draggedTask || draggedTask.status === col) {
-      setDraggedTask(null);
-      setDragOverCol(null);
-      return;
-    }
+  const changeStatus = async (task: TaskDocument, status: KanbanColumn) => {
+    if (pendingRef.current.has(task.id) || task.status === status) return;
+    pendingRef.current.add(task.id);
+    setPendingIds(previous => [...previous, task.id]);
+    setActionError("");
     try {
-      await updateTask(draggedTask.id, { status: col });
-      setTasks((prev) =>
-        prev.map((t) => (t.id === draggedTask.id ? { ...t, status: col } : t))
-      );
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setDraggedTask(null);
-      setDragOverCol(null);
-    }
+      await updateTask(task.id, { status });
+      const result = computePriorityDetailed({ deadlineDays: task.deadline?.toDate ? deadlineToDays(task.deadline.toDate()) : 7, importance: task.importance, difficulty: task.difficulty, progress: task.progress, academicRisk: task.academicRisk ?? 40 });
+      setTasks(previous => previous.map(item => item.id === task.id ? { ...item, status, priorityScore: status === "done" ? 0 : result.priorityScore, priorityLevel: status === "done" ? "Low" : result.priorityLevel } : item));
+    } catch { setActionError("Status belum tersimpan. Coba lagi."); }
+    finally { pendingRef.current.delete(task.id); setPendingIds(previous => previous.filter(id => id !== task.id)); }
+  };
+  const handleDrop = async (event: React.DragEvent, status: KanbanColumn) => {
+    event.preventDefault();
+    const task = draggedTask;
+    setDraggedTask(null);
+    setDragOverCol(null);
+    if (task) await changeStatus(task, status);
   };
 
   const confirmDeleteTask = async () => {
-    if (!deleteTarget) return;
+    if (!deleteTarget || isDeleting) return;
+    setActionError("");
     setIsDeleting(true);
     try {
       await deleteTask(deleteTarget.id);
@@ -456,13 +224,15 @@ export default function KanbanPage() {
       setDeleteTarget(null);
     } catch (err) {
       console.error("Failed to delete task:", err);
+      setActionError("Tugas belum terhapus. Coba lagi.");
     } finally {
       setIsDeleting(false);
     }
   };
 
   const confirmDeleteWorkspace = async () => {
-    if (!workspaceToDelete || !user) return;
+    if (!workspaceToDelete || !user || isDeletingWorkspace) return;
+    setActionError("");
     setIsDeletingWorkspace(true);
     try {
       const { deleteWorkspaceTasks } = await import("@/lib/firestore");
@@ -485,6 +255,7 @@ export default function KanbanPage() {
       await loadTasks();
     } catch (err) {
       console.error("Failed to delete workspace:", err);
+      setActionError("Workspace belum terhapus. Coba lagi.");
     } finally {
       setIsDeletingWorkspace(false);
     }
@@ -515,24 +286,15 @@ export default function KanbanPage() {
     });
   }, [tasks, selectedWorkspace, searchQuery, selectedPriority]);
 
-  const columnTasks = (col: KanbanColumn) =>
-    filteredTasks
-      .filter((t) => t.status === col)
-      .sort((a, b) => b.priorityScore - a.priorityScore);
-
-  const stats = useMemo(() => {
-    const total = filteredTasks.length;
-    const todo = filteredTasks.filter((t) => t.status === "todo").length;
-    const doing = filteredTasks.filter((t) => t.status === "doing").length;
-    const done = filteredTasks.filter((t) => t.status === "done").length;
-    const critical = filteredTasks.filter((t) => t.priorityLevel === "Critical" && t.status !== "done").length;
-    return { total, todo, doing, done, critical };
-  }, [filteredTasks]);
+  const sortTasks = (items: TaskDocument[]) => [...items].sort((a, b) => sortBy === "title" ? a.title.localeCompare(b.title, "id") : sortBy === "deadline" ? (a.deadline?.toDate?.().getTime() || Infinity) - (b.deadline?.toDate?.().getTime() || Infinity) : b.priorityScore - a.priorityScore);
+  const listTasks = sortTasks(filteredTasks.filter(task => pocket === "all" || (pocket === "active" ? task.status !== "done" : task.status === pocket)));
+  const createHref = selectedWorkspace === "all" ? "/tasks/create" : `/tasks/create?workspace=${encodeURIComponent(selectedWorkspace)}`;
+  const card = (task: TaskDocument) => <TaskCard key={task.id} task={task} pending={pendingIds.includes(task.id)} onStatus={status => changeStatus(task, status)} onDeleteRequest={setDeleteTarget} onDragStart={handleDragStart} onDragEnd={() => { setDraggedTask(null); setDragOverCol(null); }} />;
 
   if (authLoading || loading) {
     return (
       <DashboardShell fullWidth>
-        <LoadingScreen label="Memuat Task Board..." subtext="Mengalkulasi prioritas & deadline tugas per workspace" />
+        <LoadingScreen label="Memuat tugas…" />
       </DashboardShell>
     );
   }
@@ -541,7 +303,7 @@ export default function KanbanPage() {
     return (
       <DashboardShell fullWidth>
         <ErrorState
-          title="Gagal Memuat Task Board"
+          title="Tugas belum bisa dimuat"
           message={error}
           onRetry={loadTasks}
         />
@@ -549,16 +311,16 @@ export default function KanbanPage() {
     );
   }
 
-  return (
-    <DashboardShell fullWidth>
+  return <DashboardShell fullWidth>
+      {actionError && (deleteTarget || workspaceToDelete) && <div className={s.modalError} role="alert">{actionError}</div>}
       {/* Warning Modal for Task Deletion */}
       <WarningModal
         isOpen={!!deleteTarget}
         onClose={() => setDeleteTarget(null)}
         onConfirm={confirmDeleteTask}
-        title="Hapus Tugas Akademik"
-        description={`Apakah Anda yakin ingin menghapus tugas "${deleteTarget?.title}"? Tindakan ini akan menghapus data progres dan fuzzy score secara permanen.`}
-        confirmText="Ya, Hapus Tugas"
+        title="Hapus tugas"
+        description={`Hapus tugas "${deleteTarget?.title}"? Tugas dan progresnya akan dihapus permanen.`}
+        confirmText="Hapus tugas"
         cancelText="Batal"
         variant="danger"
         isLoading={isDeleting}
@@ -573,8 +335,8 @@ export default function KanbanPage() {
           title={`Hapus Workspace "${workspaceToDelete.name}"`}
           description={
             workspaceToDelete.taskCount > 0
-              ? `Workspace ini memiliki ${workspaceToDelete.taskCount} tugas aktif. Pilih tindakan yang ingin Anda lakukan terhadap tugas-tugas di dalamnya:`
-              : `Apakah Anda yakin ingin menghapus workspace "${workspaceToDelete.name}" dari daftar?`
+              ? `Workspace ini memiliki ${workspaceToDelete.taskCount} tugas. Pilih tindakan untuk tugas di dalamnya:`
+              : `Apakah kamu yakin ingin menghapus workspace "${workspaceToDelete.name}" dari daftar?`
           }
           confirmText={
             workspaceToDelete.taskCount > 0 && workspaceDeleteAction === "delete_all"
@@ -603,9 +365,9 @@ export default function KanbanPage() {
                   className="mt-0.5 accent-primary"
                 />
                 <div className="text-xs">
-                  <p className="font-bold text-gray-900">Pindahkan semua tugas ke Workspace "Umum" (Aman)</p>
+                  <p className="font-bold text-gray-900">Pindahkan semua tugas ke Workspace "Umum" </p>
                   <p className="text-[11px] text-gray-500 font-normal mt-0.5">
-                    Tugas tetap tersimpan dan tidak akan terhapus, hanya kategori workspace-nya yang diubah.
+                    Tugas tetap tersimpan dan tidak akan terhapus, hanya workspace-nya yang berubah.
                   </p>
                 </div>
               </label>
@@ -628,7 +390,7 @@ export default function KanbanPage() {
                 <div className="text-xs">
                   <p className="font-bold text-rose-900">Hapus seluruh {workspaceToDelete.taskCount} tugas secara permanen</p>
                   <p className="text-[11px] text-rose-600/80 font-normal mt-0.5">
-                    Semua tugas di workspace ini akan dihapus secara total dari database.
+                    Tugas dan progresnya tidak bisa dikembalikan.
                   </p>
                 </div>
               </label>
@@ -637,291 +399,15 @@ export default function KanbanPage() {
         </WarningModal>
       )}
 
-      <div className="max-w-7xl mx-auto p-4 md:p-8 space-y-6">
-        {/* Header Row */}
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 animate-slide-up">
-          <div>
-            <h1 className="text-2xl font-extrabold text-[#1F2937] tracking-tight flex items-center gap-2.5">
-              <div className="w-9 h-9 rounded-2xl bg-primary/10 text-primary flex items-center justify-center font-bold shadow-2xs">
-                <CheckSquare className="w-5 h-5" />
-              </div>
-              Papan Tugas Akademik
-            </h1>
-            <p className="text-sm text-gray-500 mt-1">
-              Kelola tugas per workspace & mata kuliah · Diurutkan otomatis menggunakan Fuzzy Priority AI
-            </p>
-          </div>
-          <div className="flex items-center gap-3">
-            <Button
-              variant="primary"
-              size="md"
-              href={selectedWorkspace === "all" ? "/tasks/create" : `/tasks/create?workspace=${encodeURIComponent(selectedWorkspace)}`}
-              icon={<Plus className="w-4 h-4" />}
-              className="font-bold shadow-sm cursor-pointer"
-            >
-              Tambah Tugas
-            </Button>
-          </div>
-        </div>
-
-        {/* ── WORKSPACE SELECTOR TABS ── */}
-        <div className="bg-white rounded-3xl border border-border p-4 shadow-xs space-y-3 animate-fade-in">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Briefcase className="w-4 h-4 text-primary" />
-              <h3 className="text-xs font-extrabold text-gray-800 uppercase tracking-wider">
-                Workspace / Mata Kuliah
-              </h3>
-            </div>
-            <span className="text-[11px] text-gray-400 font-semibold">
-              {workspacesList.length} Workspace Aktif
-            </span>
-          </div>
-
-          {/* Horizontal Scrollable Workspace Pills */}
-          <div className="flex items-center gap-2 overflow-x-auto pb-1.5 no-scrollbar">
-            {/* All Workspaces Tab */}
-            <button
-              type="button"
-              onClick={() => setSelectedWorkspace("all")}
-              className={`flex items-center gap-2 px-4 py-2 rounded-2xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap shrink-0 border ${
-                selectedWorkspace === "all"
-                  ? "bg-primary text-white border-primary shadow-sm ring-2 ring-primary/20"
-                  : "bg-gray-50 text-gray-600 border-border hover:bg-gray-100 hover:border-gray-300"
-              }`}
-            >
-              <Layers className="w-3.5 h-3.5" />
-              <span>Semua Workspace</span>
-              <span
-                className={`text-[10px] px-1.5 py-0.2 rounded-full font-black ${
-                  selectedWorkspace === "all" ? "bg-white/20 text-white" : "bg-gray-200 text-gray-600"
-                }`}
-              >
-                {tasks.length}
-              </span>
-            </button>
-
-            {/* Individual Workspace Pills with Delete Button */}
-            {workspacesList.map((ws) => {
-              const isSelected = selectedWorkspace.toLowerCase() === ws.toLowerCase();
-              const wsTasks = tasks.filter(
-                (t) => (t.workspace || t.course || "Umum").toLowerCase() === ws.toLowerCase()
-              );
-              const wsActiveCount = wsTasks.filter((t) => t.status !== "done").length;
-
-              return (
-                <div
-                  key={ws}
-                  className={`group flex items-center gap-1 pl-3.5 pr-2 py-1.5 rounded-2xl text-xs font-bold transition-all whitespace-nowrap shrink-0 border ${
-                    isSelected
-                      ? "bg-primary text-white border-primary shadow-sm ring-2 ring-primary/20"
-                      : "bg-white text-gray-700 border-border hover:border-primary/40 hover:bg-primary-50/20"
-                  }`}
-                >
-                  <button
-                    type="button"
-                    onClick={() => setSelectedWorkspace(isSelected ? "all" : ws)}
-                    className="flex items-center gap-2 cursor-pointer focus:outline-none"
-                  >
-                    <BookOpen className="w-3.5 h-3.5" />
-                    <span>{ws}</span>
-                    {wsTasks.length > 0 && (
-                      <span
-                        className={`text-[10px] px-1.5 py-0.2 rounded-full font-extrabold ${
-                          isSelected
-                            ? "bg-white/20 text-white"
-                            : wsActiveCount > 0
-                            ? "bg-primary/10 text-primary border border-primary/20"
-                            : "bg-gray-100 text-gray-500"
-                        }`}
-                      >
-                        {wsTasks.length}
-                      </span>
-                    )}
-                  </button>
-
-                  {/* Delete Workspace Button */}
-                  {ws !== "Umum" && (
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setWorkspaceDeleteAction("relocate");
-                        setWorkspaceToDelete({ name: ws, taskCount: wsTasks.length });
-                      }}
-                      className={`ml-1 p-1 rounded-lg transition-all cursor-pointer opacity-70 group-hover:opacity-100 ${
-                        isSelected
-                          ? "hover:bg-white/20 text-white"
-                          : "hover:bg-rose-50 text-gray-400 hover:text-rose-600"
-                      }`}
-                      title={`Hapus Workspace ${ws}`}
-                    >
-                      <Trash2 className="w-3 h-3" />
-                    </button>
-                  )}
-                </div>
-              );
-            })}
-
-            {/* Create Task in New Workspace */}
-            <Link
-              href="/tasks/create"
-              className="flex items-center gap-1.5 px-3 py-2 rounded-2xl text-xs font-bold text-gray-500 hover:text-primary bg-gray-50 hover:bg-primary-50 border border-dashed border-gray-300 hover:border-primary/40 transition-all whitespace-nowrap shrink-0 cursor-pointer"
-            >
-              <FolderPlus className="w-3.5 h-3.5" />
-              <span>Workspace Baru</span>
-            </Link>
-          </div>
-        </div>
-
-        {/* 5 Quick Stat Badges */}
-        <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 animate-scale-in">
-          <div className="bg-white rounded-2xl border border-border p-3.5 text-center shadow-xs">
-            <p className="text-xl font-black text-gray-800 font-mono">{stats.total}</p>
-            <p className="text-[11px] text-gray-400 font-bold mt-0.5">Total Tugas</p>
-          </div>
-          <div className="bg-white rounded-2xl border border-border p-3.5 text-center shadow-xs">
-            <p className="text-xl font-black text-gray-700 font-mono">{stats.todo}</p>
-            <p className="text-[11px] text-gray-400 font-bold mt-0.5">To Do</p>
-          </div>
-          <div className="bg-white rounded-2xl border border-blue-100 bg-blue-50/30 p-3.5 text-center shadow-xs">
-            <p className="text-xl font-black text-blue-600 font-mono">{stats.doing}</p>
-            <p className="text-[11px] text-blue-600/80 font-bold mt-0.5">Sedang Dikerjakan</p>
-          </div>
-          <div className="bg-white rounded-2xl border border-emerald-100 bg-emerald-50/30 p-3.5 text-center shadow-xs">
-            <p className="text-xl font-black text-emerald-600 font-mono">{stats.done}</p>
-            <p className="text-[11px] text-emerald-600/80 font-bold mt-0.5">Selesai</p>
-          </div>
-          <div className="bg-white rounded-2xl border border-rose-100 bg-rose-50/30 p-3.5 text-center shadow-xs col-span-2 sm:col-span-1">
-            <p className="text-xl font-black text-rose-600 font-mono">{stats.critical}</p>
-            <p className="text-[11px] text-rose-600/80 font-bold mt-0.5">Prioritas Kritis</p>
-          </div>
-        </div>
-
-        {/* Search & Filter Bar */}
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-white p-3 rounded-2xl border border-border shadow-xs animate-scale-in">
-          {/* Search */}
-          <div className="flex-1">
-            <Input
-              placeholder="Cari tugas, catatan, atau workspace..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              leftIcon={<Search className="w-4 h-4" />}
-            />
-          </div>
-
-          {/* Priority Quick Filter */}
-          <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0">
-            <span className="text-xs font-bold text-gray-400 flex items-center gap-1 pl-1">
-              <Filter className="w-3.5 h-3.5" />
-              Prioritas:
-            </span>
-            {["all", "Critical", "High", "Medium", "Low"].map((lvl) => (
-              <button
-                key={lvl}
-                type="button"
-                onClick={() => setSelectedPriority(lvl)}
-                className={`text-xs px-3 py-1.5 rounded-xl font-bold transition-all cursor-pointer whitespace-nowrap ${
-                  selectedPriority === lvl
-                    ? "bg-primary text-white shadow-xs"
-                    : "bg-gray-50 text-gray-600 hover:bg-gray-100 border border-border"
-                }`}
-              >
-                {lvl === "all" ? "Semua" : lvl}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* 3 Kanban Columns */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 animate-scale-in">
-          {COLUMNS.map((col) => {
-            const ColumnIcon = col.icon;
-            const tasksInCol = columnTasks(col.id);
-
-            return (
-              <div
-                key={col.id}
-                onDragOver={(e) => {
-                  e.preventDefault();
-                  setDragOverCol(col.id);
-                }}
-                onDragLeave={() => setDragOverCol(null)}
-                onDrop={(e) => handleDrop(e, col.id)}
-                className={`rounded-3xl border p-4 sm:p-5 min-h-[560px] flex flex-col gap-4 transition-all duration-300 ${
-                  col.columnBg
-                } ${col.borderCol} ${
-                  dragOverCol === col.id
-                    ? "ring-2 ring-primary ring-offset-2 scale-[1.01] bg-primary-50/30"
-                    : "shadow-xs"
-                }`}
-              >
-                {/* Column Header */}
-                <div className="flex items-center justify-between pb-3 border-b border-border/60">
-                  <div className="flex items-center gap-2.5">
-                    <div className={`p-1.5 rounded-xl bg-white border border-border shadow-2xs ${col.color}`}>
-                      <ColumnIcon className="w-4 h-4" />
-                    </div>
-                    <div>
-                      <h3 className={`text-sm font-extrabold tracking-tight ${col.color}`}>{col.label}</h3>
-                      <p className="text-[10px] text-gray-400 font-semibold">{col.sub}</p>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center gap-2">
-                    <span className={`text-xs font-black px-2.5 py-0.5 rounded-full border ${col.badgeBg}`}>
-                      {tasksInCol.length}
-                    </span>
-
-                    {col.id === "todo" && (
-                      <Link
-                        href={selectedWorkspace === "all" ? "/tasks/create" : `/tasks/create?workspace=${encodeURIComponent(selectedWorkspace)}`}
-                        className="w-7 h-7 flex items-center justify-center rounded-xl bg-white border border-border text-gray-500 hover:text-primary hover:border-primary/40 transition-all cursor-pointer shadow-2xs hover:scale-105"
-                        title="Tambah Tugas Baru"
-                      >
-                        <Plus className="w-3.5 h-3.5" />
-                      </Link>
-                    )}
-                  </div>
-                </div>
-
-                {/* Task Cards List */}
-                {tasksInCol.length === 0 ? (
-                  <div className="flex-1 flex flex-col items-center justify-center p-8 text-center border-2 border-dashed border-gray-200/80 rounded-2xl">
-                    <div className="w-12 h-12 rounded-2xl bg-white flex items-center justify-center text-gray-300 mb-2 border border-border/80 shadow-2xs">
-                      <Layers className="w-5 h-5" />
-                    </div>
-                    <p className="text-xs font-bold text-gray-600">
-                      {col.id === "todo"
-                        ? "Belum ada tugas di To Do"
-                        : col.id === "doing"
-                        ? "Tidak ada tugas aktif"
-                        : "Belum ada tugas selesai"}
-                    </p>
-                    <p className="text-[10px] text-gray-400 mt-0.5">
-                      {selectedWorkspace !== "all"
-                        ? `Tidak ada tugas untuk workspace "${selectedWorkspace}"`
-                        : "Tarik kartu tugas ke sini untuk memindahkan status."}
-                    </p>
-                  </div>
-                ) : (
-                  <div className="space-y-3.5 flex-1 overflow-y-auto pr-1">
-                    {tasksInCol.map((task) => (
-                      <TaskCard
-                        key={task.id}
-                        task={task}
-                        onDeleteRequest={(t) => setDeleteTarget(t)}
-                        onDragStart={handleDragStart}
-                      />
-                    ))}
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
-      </div>
-    </DashboardShell>
-  );
+    <div ref={pageRef} className={s.page}>
+      <header className={s.header}><div><h1>Tugas</h1><p>{tasks.filter(task => task.status !== "done").length} tugas aktif</p></div><Link href={createHref} className={s.primary}><Plus size={17} />Tambah tugas</Link></header>
+      {actionError && <p className={s.error} role="alert">{actionError}</p>}
+      <section className={s.workspaces} aria-label="Workspace"><div className={s.workspaceHeading}><h2>Workspace</h2><Link href="/tasks/create" className={s.textLink}><FolderPlus size={16} />Workspace baru</Link></div><div className={s.workspaceTabs}>
+        <button type="button" aria-pressed={selectedWorkspace === "all"} onClick={() => setSelectedWorkspace("all")}>Semua<span>{tasks.length}</span></button>
+        {workspacesList.map(name => { const selected = selectedWorkspace.toLowerCase() === name.toLowerCase(); const count = tasks.filter(task => (task.workspace || task.course || "Umum").toLowerCase() === name.toLowerCase()).length; return <div className={s.workspaceTab} key={name} data-selected={selected}><button type="button" aria-pressed={selected} onClick={() => setSelectedWorkspace(selected ? "all" : name)}>{name}<span>{count}</span></button>{name !== "Umum" && <button type="button" className={s.workspaceRemove} aria-label={`Hapus workspace ${name}`} onClick={() => { setWorkspaceDeleteAction("relocate"); setWorkspaceToDelete({ name, taskCount: count }); }}><Trash2 size={13} /></button>}</div>; })}
+      </div></section>
+      <div className={s.toolbar}><div className={s.search}><Search size={17} aria-hidden="true" /><input aria-label="Cari tugas" placeholder="Cari tugas atau workspace…" value={searchQuery} onChange={event => setSearchQuery(event.target.value)} /></div><Dropdown className={s.filterDropdown} label="Filter prioritas" value={selectedPriority} onChange={setSelectedPriority} options={[{ value: "all", label: "Semua prioritas" }, ...Object.entries(priorityLabels).map(([value, label]) => ({ value, label }))]} /><Dropdown className={s.filterDropdown} label="Urutkan tugas" value={sortBy} onChange={setSortBy} options={[{ value: "priority", label: "Prioritas" }, { value: "deadline", label: "Tenggat terdekat" }, { value: "title", label: "Nama tugas" }]} /><div className={s.viewSwitch} aria-label="Tampilan tugas"><button type="button" aria-label="Daftar" aria-pressed={view === "list"} onClick={() => setView("list")}><List size={18} /></button><button type="button" aria-label="Papan" aria-pressed={view === "board"} onClick={() => setView("board")}><Columns3 size={18} /></button></div></div>
+      {view === "list" ? <><nav className={s.statusTabs} aria-label="Status tugas">{([{ id: "active", label: "Aktif" }, { id: "doing", label: "Dikerjakan" }, { id: "done", label: "Selesai" }, { id: "all", label: "Semua" }] as const).map(item => <button type="button" key={item.id} aria-pressed={pocket === item.id} onClick={() => setPocket(item.id)}>{item.label}<span>{filteredTasks.filter(task => item.id === "all" || (item.id === "active" ? task.status !== "done" : task.status === item.id)).length}</span></button>)}</nav><div className={s.list}>{listTasks.length ? listTasks.map(card) : <div className={s.empty}><CheckCircle2 size={28} /><h2>{searchQuery || selectedPriority !== "all" ? "Tidak ada tugas yang cocok" : pocket === "done" ? "Belum ada tugas selesai" : "Belum ada tugas di sini"}</h2><Link href={createHref} className={s.textLink}>Tambah tugas<Plus size={16} /></Link></div>}</div></> : <div className={s.board}>{COLUMNS.map(column => { const items = sortTasks(filteredTasks.filter(task => task.status === column.id)); return <section key={column.id} className={s.boardColumn} data-status={column.id} data-drag-over={dragOverCol === column.id} onDragOver={event => { event.preventDefault(); setDragOverCol(column.id); }} onDragLeave={event => { if (!event.currentTarget.contains(event.relatedTarget as Node)) setDragOverCol(null); }} onDrop={event => handleDrop(event, column.id)}><header><h2>{column.label}<span>{items.length}</span></h2>{column.id === "todo" && <Link href={createHref} aria-label="Tambah tugas"><Plus size={17} /></Link>}</header><div className={s.boardItems}>{items.length ? items.map(card) : <p className={s.boardEmpty}>Tarik tugas ke sini untuk mengubah status.</p>}</div></section>; })}</div>}
+    </div>
+  </DashboardShell>;
 }
-
