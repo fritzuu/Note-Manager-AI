@@ -11,6 +11,8 @@ import {
   type UserCredential,
 } from "firebase/auth";
 import { auth } from "./firebase";
+import { awaitAuthProfile } from "./authOperation";
+import type { UserDocument } from "./firestore";
 import {
   createUserDocument,
   getUserDocument,
@@ -62,24 +64,29 @@ export async function signInWithEmail(
 export async function signInWithGoogle(): Promise<{
   credential: UserCredential;
   isNewUser: boolean;
+  userDoc: UserDocument | null;
 }> {
   const credential = await signInWithPopup(auth, googleProvider);
   const { user } = credential;
 
-  const existingDoc = await getUserDocument(user.uid);
+  // Establish the session before waiting for the profile store.
+  const token = await user.getIdToken();
+  document.cookie = `auth-token=${token}; path=/; max-age=604800; SameSite=Lax`;
+  document.cookie = `__session=${token}; path=/; max-age=604800; SameSite=Lax`;
+  const existingDoc = await awaitAuthProfile(getUserDocument(user.uid));
   let isNewUser = false;
 
   if (!existingDoc) {
     isNewUser = true;
-    await createUserDocument(user.uid, {
+    await awaitAuthProfile(createUserDocument(user.uid, {
       uid: user.uid,
       name: user.displayName ?? "",
       email: user.email ?? "",
       assessmentCompleted: false,
-    });
+    }));
   }
 
-  return { credential, isNewUser };
+  return { credential, isNewUser, userDoc: existingDoc };
 }
 
 export async function signOut(): Promise<void> {

@@ -9,6 +9,7 @@ import React, {
 } from "react";
 import { onAuthStateChanged, type User } from "firebase/auth";
 import { auth } from "@/lib/firebase";
+import { awaitAuthProfile } from "@/lib/authOperation";
 import { getUserDocument, createUserDocument, type UserDocument } from "@/lib/firestore";
 
 interface AuthContextValue {
@@ -65,16 +66,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           document.cookie = `auth-token=${token}; path=/; max-age=${60 * 60 * 24 * 7}; SameSite=Lax`;
           document.cookie = `__session=${token}; path=/; max-age=${60 * 60 * 24 * 7}; SameSite=Lax`;
 
-          let doc = await getUserDocument(firebaseUser.uid);
+          let doc = await awaitAuthProfile(getUserDocument(firebaseUser.uid));
           if (!doc) {
             // Auto-create the user profile in Firestore if it's missing (e.g. from failed earlier registrations)
-            await createUserDocument(firebaseUser.uid, {
+            await awaitAuthProfile(createUserDocument(firebaseUser.uid, {
               uid: firebaseUser.uid,
               name: firebaseUser.displayName || firebaseUser.email?.split("@")[0] || "Student",
               email: firebaseUser.email || "",
               assessmentCompleted: false,
-            });
-            doc = await getUserDocument(firebaseUser.uid);
+            }));
+            doc = await awaitAuthProfile(getUserDocument(firebaseUser.uid));
           }
           setUserDoc(doc);
         } catch (error) {
