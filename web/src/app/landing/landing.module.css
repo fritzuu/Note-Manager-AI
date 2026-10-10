@@ -56,7 +56,7 @@
 .sceneChoices button[aria-pressed="true"] { border-bottom: 1px solid var(--ink); }
 .heroProgress { height: 2px; position: absolute; bottom: 0; left: 0; width: 100%; transform-origin: left; background: var(--ink); }
 .sceneLoading { height: 100%; display: flex; justify-content: center; align-items: center; gap: 12px; color: #667267; font-size: 12px; }
-.sceneLoading > span { width: 40px; height: 40px; border: 7px solid #b9c99f; border-right-color: #193d32; border-radius: 50%; }
+
 .journey { position: relative; padding: 110px 0 125px; background: var(--ink); color: var(--paper); overflow: hidden; scroll-margin-top: 90px; }
 .journeyHeading { position: relative; z-index: 1; }
 .journeyHeading .eyebrow { color: #b5c59e; }
@@ -286,3 +286,7 @@
 @media (prefers-reduced-motion: reduce) { :global(html):has(.page) { scroll-behavior: auto; } }
 .page :is(.journey, .features, .faq) { scroll-margin-top: 100px; }
 @media (max-width: 760px) { .page :is(.journey, .features, .faq) { scroll-margin-top: 78px; } }
+
+/* Reserve space for the scene without a spinner or an opening loading screen. */
+.sceneLoading { background: radial-gradient(ellipse at center, #dde7cb55 0%, transparent 65%); }
+.previewLoading { border-radius: 24px; background: #eef1e655; }

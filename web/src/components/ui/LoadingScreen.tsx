@@ -1,3 +1,6 @@
+"use client";
+
+import { useEffect, useState } from "react";
 import Image from "next/image";
 import s from "./loading-screen.module.css";
 
@@ -7,6 +10,7 @@ export interface LoadingScreenProps {
   subtext?: string;
   fullHeight?: boolean;
   className?: string;
+  compact?: boolean;
 }
 
 export function LoadingScreen({
@@ -15,10 +19,17 @@ export function LoadingScreen({
   subtext = "Sebentar lagi siap.",
   fullHeight = false,
   className = "",
+  compact = false,
 }: LoadingScreenProps) {
+  const [visible, setVisible] = useState(false);
+  useEffect(() => {
+    const timer = window.setTimeout(() => setVisible(true), 350);
+    return () => window.clearTimeout(timer);
+  }, []);
   const displayLabel = label || message || "Menyiapkan ruangmu";
 
-  return <div data-loading-screen className={`${s.screen} ${fullHeight ? s.fullHeight : ""} ${className}`} role="status" aria-live="polite" aria-label={displayLabel}>
+  return <div data-loading-screen data-compact={compact || undefined} data-visible={visible} className={`${s.screen} ${fullHeight ? s.fullHeight : ""} ${compact ? s.compact : ""} ${className}`} role={visible ? "status" : undefined} aria-live={visible ? "polite" : undefined} aria-label={visible ? displayLabel : undefined} aria-hidden={!visible}>
+    {visible && <>
     <div className={s.mark} aria-hidden="true">
       <div className={s.orbit} />
       <div className={s.innerOrbit} />
@@ -28,5 +39,6 @@ export function LoadingScreen({
     <h3 className={s.label}>{displayLabel}</h3>
     {subtext && <p className={s.subtext}>{subtext}</p>}
     <div className={s.track} aria-hidden="true"><span /></div>
+    </>}
   </div>;
 }

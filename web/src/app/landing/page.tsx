@@ -12,8 +12,8 @@ import type { FeatureId } from "@/components/landing/ProductPreviews";
 import { useLandingScroll } from "@/components/landing/useLandingScroll";
 import s from "./landing.module.css";
 
-const CognivaWorld = dynamic(() => import("@/components/landing/CognivaWorld"), { ssr: false, loading: () => <div className={s.sceneLoading}><span />Menyiapkan ruang belajarmu…</div> });
-const FeaturePreview = dynamic(() => import("@/components/landing/ProductPreviews").then((module) => module.FeaturePreview), { loading: () => <div className={s.previewLoading}>Menyiapkan demo interaktif…</div> });
+const CognivaWorld = dynamic(() => import("@/components/landing/CognivaWorld"), { ssr: false, loading: () => <div className={s.sceneLoading} aria-hidden="true" /> });
+const FeaturePreview = dynamic(() => import("@/components/landing/ProductPreviews").then((module) => module.FeaturePreview), { loading: () => <div className={s.previewLoading} aria-hidden="true" /> });
 const FEATURES = [
   { id: "notes", icon: FileText, title: "Ide tersimpan. Intinya ditemukan.", description: "Tulis catatan, rapikan materi, lalu gunakan ringkasan AI untuk melihat hal yang paling penting.", caption: "Catatan" },
   { id: "tasks", icon: SlidersHorizontal, title: "Satu prioritas. Langkah yang jelas.", description: "Atur tugas dengan prioritas yang mempertimbangkan deadline, kesulitan, dan progresmu.", caption: "Tugas" },
@@ -40,7 +40,7 @@ function Reveal({ children, className, delay = 0 }: { children: ReactNode; class
 }
 
 export default function LandingPage() {
-  const { user, loading } = useAuth();
+  const { user, userDoc, loading } = useAuth();
   const router = useRouter();
   const scrollTo = useLandingScroll();
   const reduced = useReducedMotion();
@@ -59,7 +59,7 @@ export default function LandingPage() {
   const mobileMenu = useRef<HTMLDivElement>(null);
   const feature = FEATURES[activeFeature];
 
-  useEffect(() => { if (!loading && user) router.replace("/dashboard"); }, [user, loading, router]);
+  useEffect(() => { if (!loading && user) router.replace(userDoc?.assessmentCompleted ? "/dashboard" : "/assessment"); }, [user, userDoc?.assessmentCompleted, loading, router]);
   useEffect(() => {
     const update = () => setScrolled(window.scrollY > 32);
     update(); window.addEventListener("scroll", update, { passive: true });

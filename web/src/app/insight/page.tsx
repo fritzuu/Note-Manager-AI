@@ -8,6 +8,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { getAssessment, getAcademicInsight, saveAcademicInsight, type AcademicAssessmentData, type AcademicInsight } from "@/lib/firestore";
 import { deriveAcademicRiskFromInsight } from "@/lib/fuzzyLogic";
 import { getAiProvider, getCustomApiKey, getOpenRouterModel } from "@/lib/aiConfig";
+import { LoadingScreen } from "@/components/ui/LoadingScreen";
 import { DashboardShell } from "@/components/layout/DashboardShell";
 import { MarkdownRenderer } from "@/components/ui/MarkdownRenderer";
 import { WarningModal } from "@/components/ui/WarningModal";
@@ -144,7 +145,7 @@ export default function AcademicInsightPage() {
       <div className={styles.actions}><Link href="/assessment" className={styles.button}><Edit3 size={16} /> Ubah profil</Link><button className={`${styles.button} ${styles.primary}`} disabled={loading || generating || asking} onClick={() => user && void generate(user.uid)}><RefreshCw size={16} className={generating ? styles.spin : ""} />{generating ? "Memperbarui…" : "Perbarui hasil"}</button></div>
     </header>
     {error && <div className={styles.error} role="alert">{error}{!insight && <Link href="/assessment">Isi profil belajar <ArrowRight size={16} /></Link>}</div>}
-    {(authLoading || loading) && <div data-delayed-loading className={styles.loading} role="status"><div className={styles.loadingOrbit}><Loader2 size={28} className={styles.spin} /></div><h2>{generating ? "Membaca profil belajarmu…" : "Memuat pola belajar…"}</h2><p>Hasil disusun dari jawaban yang kamu simpan.</p></div>}
+    {(authLoading || loading) && <LoadingScreen label={generating ? "Memperbarui pola belajar" : "Memuat pola belajar"} />}
     {!loading && insight && <>
       <section className={styles.overview} aria-labelledby="overview-title">
         <div className={styles.overviewCopy}><span className={styles.eyebrow}>Dari profil belajarmu</span><h2 id="overview-title">{insight.headline || insightCopy(insight.prediction)}</h2><p>{insightCopy(insight.recommendation)}</p><div className={styles.heroLinks}><Link href="/pomodoro">Mulai sesi fokus <ArrowUpRight size={18} /></Link><Link href="/tasks">Atur tugas <ArrowUpRight size={18} /></Link></div></div>

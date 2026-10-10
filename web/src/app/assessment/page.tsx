@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { ArrowLeft, ArrowRight, Check, Loader2, SlidersHorizontal, UserRound, BookOpen, Moon, Coffee } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { getAssessment, saveAssessment, markAssessmentComplete, saveAcademicInsight } from "@/lib/firestore";
+import { LoadingScreen } from "@/components/ui/LoadingScreen";
 import { DashboardShell } from "@/components/layout/DashboardShell";
 import { AiApiKeyModal } from "@/components/modals/AiApiKeyModal";
 import { Dropdown } from "@/components/ui/Dropdown";
@@ -112,7 +113,7 @@ export default function AssessmentPage() {
     <header className={s.header}><div><Link href="/insight" className={s.back}><ArrowLeft size={16} />Pola belajar</Link><h1>{editing ? "Ubah profil belajar" : "Profil belajarmu"}</h1><p>Jawab sesuai keseharianmu. Tidak perlu terlihat sempurna.</p></div><span className={s.headerNote}>Bisa diperbarui kapan saja</span></header>
     {error && <div className={s.error} role="alert">{error}{loadFailed && <button onClick={() => setReload(value => value + 1)}>Muat ulang</button>}{saved && <Link href="/insight">Buka pola belajar <ArrowRight size={15} /></Link>}</div>}
     {legacy && <p className={s.notice}>Jawaban lamamu tetap terisi. Pilihan pola makan, internet, dan pendidikan sekarang lebih jelas; pilih kembali yang sesuai sebelum menyimpan.</p>}
-    {authLoading || loading ? <div data-delayed-loading className={s.loading} role="status"><Loader2 className={s.spin} size={24} />Memuat jawabanmu…</div> : !loadFailed && <div className={s.layout}>
+    {authLoading || loading ? <LoadingScreen label="Memuat profil belajarmu" /> : !loadFailed && <div className={s.layout}>
       <aside className={s.side}><nav aria-label="Bagian profil">{steps.map((item, index) => <button key={item.title} type="button" disabled={saving} onClick={() => go(index)} className={s.step} data-current={step === index} aria-current={step === index ? "step" : undefined}><span className={s.stepIcon}><item.icon size={19} /></span><span><strong>{item.title}</strong><small>{String(index + 1).padStart(2, "0")} / 04</small></span>{step === index && <ArrowRight size={16} />}</button>)}</nav><div className={s.sideNote}><span className={s.noteLine} /><h2>Mulai dari mengenali ritmemu.</h2><p>Jawaban ini membantu menyusun gambaran belajar. Hasilnya bukan nilai ujian atau penilaian tentang dirimu.</p><div className={s.completion}><span>{completeCount} dari {PROFILE_FIELDS.length} jawaban terisi</span><div><i style={{ width: `${completeCount / PROFILE_FIELDS.length * 100}%` }} /></div></div></div></aside>
       <form className={s.form} onSubmit={event => { event.preventDefault(); if (step < steps.length - 1) next(); else void save(); }}>
         <div className={s.formHeader}><span>Bagian {step + 1} dari 4</span><h2 ref={heading} tabIndex={-1}>{steps[step].title}</h2><p>{steps[step].description}</p></div>

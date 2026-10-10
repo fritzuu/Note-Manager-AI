@@ -3,11 +3,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowRight, ArrowUpRight, RefreshCw, Timer, Check, BookOpen, Loader2 } from "lucide-react";
+import { ArrowRight, ArrowUpRight, RefreshCw, Timer, Check, BookOpen } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useScreenTime, formatScreenTime } from "@/contexts/ScreenTimeContext";
 import { getUserNotes, getUserTasks, getUserPomodoroSessions, getAcademicInsight, type TaskDocument, type PomodoroSession, type NoteDocument, type AcademicInsight } from "@/lib/firestore";
 import { focusSeconds, isRecordedFocusSession, isFullFocusSession, formatFocusDuration } from "@/lib/pomodoroSessions";
+import { LoadingScreen } from "@/components/ui/LoadingScreen";
 import { DashboardShell } from "@/components/layout/DashboardShell";
 import { Dropdown } from "@/components/ui/Dropdown";
 import s from "@/components/analytics/analytics.module.css";
@@ -96,7 +97,7 @@ export default function AnalyticsPage() {
 
   return <DashboardShell><main className={s.page}>
     <header className={s.header}><div><h1>Aktivitas belajar</h1><p>Lihat waktu fokus dan pekerjaan yang sudah kamu jalani.</p></div><div className={s.headerActions}><Dropdown id="analytics-period" label="Periode aktivitas" compact value={period} options={[{ value: "7", label: "7 hari terakhir" }, { value: "30", label: "30 hari terakhir" }]} onChange={value => { setPeriod(value); setSelectedDate(todayKey); }} /><button className={s.iconButton} aria-label="Perbarui data aktivitas" disabled={loading} onClick={() => void load()}><RefreshCw size={17} className={loading ? s.spin : ""} /></button></div></header>
-    {authLoading || (!data && loading) ? <div data-delayed-loading className={s.loading} role="status"><Loader2 size={24} className={s.spin} />Memuat aktivitasmu…</div> : data && <>
+    {authLoading || (!data && loading) ? <LoadingScreen label="Memuat aktivitasmu" /> : data && <>
       {!!data.unavailable.length && <div className={s.notice} role="alert">Data {data.unavailable.join(", ")} belum bisa dimuat. Angkanya belum ditampilkan.<button disabled={loading} onClick={() => void load()}>Coba lagi <RefreshCw size={14} /></button></div>}
       <section className={s.overview} aria-label="Ringkasan aktivitas"><div className={s.focusHero}><span className={s.overline}>Waktu fokus · {count} hari terakhir</span><h2>{focusReady ? shortDuration(totalSeconds) : "—"}</h2><p>{focusReady ? difference !== null ? difference === 0 ? `Sama dengan ${count} hari sebelumnya.` : `${Math.abs(difference)}% ${difference > 0 ? "lebih banyak" : "lebih sedikit"} dari ${count} hari sebelumnya.` : totalSeconds > 0 ? "Ada waktu yang sudah kamu luangkan untuk fokus." : "Sesi fokus pertamamu akan tercatat di sini." : "Riwayat sesi belum bisa dimuat."}</p><Link href="/pomodoro">Mulai sesi fokus <ArrowUpRight size={18} /></Link></div><div className={s.overviewStats}><div><span>Sesi selesai</span><strong>{focusReady ? fullSessions : "—"}</strong><p>Sesi yang durasinya tuntas</p></div><div><span>Hari dengan sesi fokus</span><strong>{focusReady ? focusDays : "—"}<small> / {count}</small></strong><p>Hari dengan waktu fokus tercatat</p></div><div><span>Tugas selesai</span><strong>{tasks ? done : "—"}<small>{tasks ? ` / ${tasks.length}` : ""}</small></strong><p>Seluruh tugas, di luar filter periode</p></div></div></section>
       <div className={s.mainGrid}><section className={s.chartPanel} aria-labelledby="chart-title"><div className={s.sectionHead}><div><h2 id="chart-title">Ritme harian</h2><p>{metric === "focus" ? "Waktu dari sesi fokus yang sudah diakhiri." : "Waktu penggunaan aplikasi, terpisah dari waktu fokus."}</p></div><Dropdown id="analytics-metric" label="Data grafik" compact value={metric} options={[{ value: "focus", label: "Sesi fokus" }, { value: "app", label: "Penggunaan aplikasi" }]} onChange={setMetric} /></div>

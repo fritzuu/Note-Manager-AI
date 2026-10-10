@@ -4,6 +4,6 @@
 .routeSurface :global(.animate-fade-in),
 .routeSurface :global(.animate-slide-up),
 .routeSurface :global(.animate-scale-in) { animation: none; }
-.routeSurface [data-loading-screen] { min-height: calc(100svh - 140px); }
+.routeSurface [data-loading-screen]:not([data-compact]) { min-height: calc(100svh - 140px); }
 @keyframes settle { from { opacity: .96; } to { opacity: 1; } }
 @media (prefers-reduced-motion: reduce) { .routeSurface { animation: none; } }

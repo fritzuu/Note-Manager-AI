@@ -15,7 +15,7 @@ import { OpenNotes, OpenTasks, QuietInsight, QuietStat } from "@/components/dash
 import { ClockBentoWidget } from "@/components/dashboard/bento/widgets/ClockBentoWidget";
 import n from "./native-preview.module.css";
 
-const TiptapEditor = dynamic(() => import("@/components/notes/TiptapEditor").then((module) => module.TiptapEditor), { ssr: false, loading: () => <div className={n.editorFallback}>Menyiapkan editor catatan…</div> });
+const TiptapEditor = dynamic(() => import("@/components/notes/TiptapEditor").then((module) => module.TiptapEditor), { ssr: false, loading: () => <div className={n.editorFallback} aria-hidden="true" /> });
 
 export type FeatureId = "notes" | "tasks" | "focus" | "insight" | "assistant" | "dashboard";
 const NAV: { id: FeatureId; label: string; icon: typeof Brain }[] = [

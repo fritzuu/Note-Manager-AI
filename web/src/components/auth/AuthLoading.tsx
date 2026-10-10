@@ -1,3 +1,4 @@
+import { LoadingScreen } from "@/components/ui/LoadingScreen";
 import s from "./auth.module.css";
 
 export function FlowLoader() {
@@ -5,20 +6,9 @@ export function FlowLoader() {
 }
 
 export function AuthFormLoading() {
-  return <div className={s.formLoading} role="status" aria-label="Menyiapkan halaman">
-    <div className={s.loadingHeading}><span /><span /></div>
-    <div className={s.loadingLine} />
-    <div className={s.loadingPill} />
-    <div className={s.loadingSeparator} />
-    <div className={s.loadingField}><span /><span /></div>
-    <div className={s.loadingField}><span /><span /></div>
-    <div className={s.loadingAction}><FlowLoader /></div>
-  </div>;
+  return <LoadingScreen compact label="Menyiapkan halaman" subtext="" />;
 }
 
 export function AuthSceneLoading() {
-  return <div className={s.sceneLoading} aria-hidden="true">
-    <div className={s.loadingSculpture}><span /><span /><span /></div>
-    <div className={s.loadingShadow} />
-  </div>;
+  return <div className={s.sceneLoading} aria-hidden="true" />;
 }

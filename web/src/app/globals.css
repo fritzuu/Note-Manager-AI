@@ -295,10 +295,3 @@ input[type="checkbox"],
 .cursor-pointer * {
   cursor: pointer !important;
 }
-
-/* Fast requests never flash a loader. Content replaces it as soon as it is ready. */
-[data-delayed-loading] { animation: delayedLoadingReveal 220ms ease 200ms both !important; }
-@keyframes delayedLoadingReveal { from { opacity: 0; visibility: hidden; } to { opacity: 1; visibility: visible; } }
-@media (prefers-reduced-motion: reduce) {
-  [data-delayed-loading] { animation: delayedLoadingReveal 1ms linear 200ms both !important; }
-}

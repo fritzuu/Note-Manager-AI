@@ -1,4 +1,13 @@
-.screen { width: 100%; min-height: calc(100svh - 140px); flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 32px 24px; text-align: center; color: #193d32; animation: appear .22s ease .2s both; }
+.screen { width: 100%; min-height: calc(100svh - 140px); flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 32px 24px; text-align: center; color: #193d32; opacity: 0; }
+.screen[data-visible="true"] { opacity: 1; animation: appear .22s ease both; }
+.compact { min-height: 160px; padding: 20px 16px; flex: none; }
+.compact .mark { width: 68px; height: 68px; margin-bottom: 15px; }
+.compact .logo { width: 50px; height: 50px; }
+.compact .logo img { width: 30px; }
+.compact .satellite { transform-origin: 3.5px 29px; }
+.compact .label { font-size: 14px; }
+.compact .subtext { font-size: 12px; }
+.compact .track { margin-top: 15px; }
 .fullHeight { min-height: 100svh; }
 .mark { position: relative; width: 112px; height: 112px; display: grid; place-items: center; margin-bottom: 28px; }
 .logo { width: 78px; height: 78px; display: grid; place-items: center; border-radius: 50%; background: #edf1e4; box-shadow: inset 0 1px 0 #ffffffcc; animation: breathe 3s ease-in-out infinite; }
@@ -16,4 +25,4 @@
 @keyframes breathe { 0%, 100% { transform: scale(1); } 50% { transform: scale(.96); } }
 @keyframes flow { from { transform: translateX(-44px); } to { transform: translateX(100px); } }
 @keyframes appear { from { opacity: 0; } to { opacity: 1; } }
-@media (prefers-reduced-motion: reduce) { .logo, .orbit, .innerOrbit, .satellite, .track > span { animation: none; } .screen { animation: appear 1ms linear .2s both; } .track > span { left: 27px; } }
+@media (prefers-reduced-motion: reduce) { .logo, .orbit, .innerOrbit, .satellite, .track > span { animation: none; } .screen[data-visible="true"] { animation: none; } .track > span { left: 27px; } }

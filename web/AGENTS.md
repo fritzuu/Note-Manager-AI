@@ -8,3 +8,5 @@
 - Keep the learning streak on the dashboard and derive its active days from screen time. Do not add a separate Pomodoro streak; Pomodoro tracks focus sessions and task progress.
 
 - Pomodoro time is separate from task completion. Start progress check-ins at the last saved value; time-based estimates are optional and capped below 100%. Require an explicit task-complete choice for 100%. Keep actual elapsed time for early endings/resets while counting only full sessions as completed.
+
+- Public entry and landing pages must render without waiting for authentication or showing a page loader. Initial data loaders use the shared LoadingScreen, including its delayed reveal; keep request/action feedback separate from page loading.

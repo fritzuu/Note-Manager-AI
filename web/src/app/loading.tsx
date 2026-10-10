@@ -1,5 +1,12 @@
+"use client";
+
+import { usePathname } from "next/navigation";
+import { isWorkspacePath } from "@/components/layout/WorkspaceFrame";
 import { LoadingScreen } from "@/components/ui/LoadingScreen";
 
 export default function Loading() {
-  return <LoadingScreen label="Menyiapkan ruangmu" subtext="Sebentar lagi siap." />;
+  const pathname = usePathname();
+  // Public pages do not need an account or workspace loading screen.
+  if (!isWorkspacePath(pathname)) return null;
+  return <LoadingScreen />;
 }

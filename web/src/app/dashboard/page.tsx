@@ -137,7 +137,7 @@ function DashboardContentImpl() {
 
   if (authLoading || loading) {
     return (
-      <LoadingScreen label="Menyiapkan ruang belajarmu" subtext="Menyiapkan ringkasan belajar & data terkini" />
+      <LoadingScreen label="Menyiapkan ruang belajarmu" subtext="Sebentar lagi siap." />
     );
   }
 
@@ -269,11 +269,11 @@ export default function DashboardPage() {
   return (
     <DashboardShell>
       {!mounted ? (
-        <LoadingScreen label="Menyiapkan ruang belajarmu" subtext="Menyiapkan ringkasan belajar & data terkini" />
+        <LoadingScreen label="Menyiapkan ruang belajarmu" subtext="Sebentar lagi siap." />
       ) : (
         <Suspense
           fallback={
-            <LoadingScreen label="Menyiapkan ruang belajarmu" subtext="Menyiapkan ringkasan belajar & data terkini" />
+            <LoadingScreen label="Menyiapkan ruang belajarmu" subtext="Sebentar lagi siap." />
           }
         >
           <DashboardContentImpl />
