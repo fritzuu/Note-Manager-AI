@@ -1,675 +1,262 @@
 "use client";
 
-import React, {
-  createContext,
-  useContext,
-  useEffect,
-  useState,
-  useRef,
-  useCallback,
-} from "react";
-import { useRouter } from "next/navigation";
+import React, { createContext, useContext, useEffect, useState, useRef, useCallback } from "react";
+import { useRouter, usePathname } from "next/navigation";
+import { Timestamp } from "firebase/firestore";
 import { useAuth } from "./AuthContext";
-import {
-  getUserTasks,
-  getUserPomodoroSessions,
-  createPomodoroSession,
-  completePomodoroSession,
-  updatePomodoroSession,
-  deletePomodoroSession,
-  updateTask,
-  type TaskDocument,
-  type PomodoroSession,
-} from "@/lib/firestore";
+import { getUserTasks, getTask, getUserPomodoroSessions, createPomodoroSession, updatePomodoroSession, deletePomodoroSession, updateTask, type TaskDocument, type PomodoroSession } from "@/lib/firestore";
+import { computePriorityDetailed, deadlineToDays } from "@/lib/fuzzyLogic";
 import { computePomodoroFocus, type PomodoroFuzzyResult } from "@/lib/pomodoroFuzzy";
+import { isFullFocusSession, isRecordedFocusSession, focusMinutes } from "@/lib/pomodoroSessions";
+import { useLearningProgress } from "@/components/dashboard/streak/useLearningProgress";
+import { FocusProgressDialog } from "@/components/pomodoro/FocusProgressDialog";
 import { FloatingPomodoroWidget } from "@/components/pomodoro/FloatingPomodoroWidget";
 
-interface PomodoroContextValue {
-  tasks: TaskDocument[];
-  sessions: PomodoroSession[];
-  loading: boolean;
-  selectedTaskId: string;
-  selectedTask: TaskDocument | null;
-  timerSeconds: number;
-  isRunning: boolean;
-  phase: "focus" | "break";
-  sessionId: string | null;
-  sessionCompleted: boolean;
-  breakSeconds: number;
-  fuzzyResult: PomodoroFuzzyResult;
-  todaySessions: PomodoroSession[];
-  streakDays: number;
-  totalFocusToday: number;
-  totalSessions: number;
-  showProgressPrompt: boolean;
-  setShowProgressPrompt: (show: boolean) => void;
-  progressIncrement: number;
-  suggestedProgress: number;
-  adjustedProgress: number;
-  setAdjustedProgress: (progress: number) => void;
-  isUpdatingProgress: boolean;
-  saveTaskProgress: () => Promise<void>;
-  startTimer: () => Promise<void>;
-  pauseTimer: () => void;
-  resetTimer: () => Promise<void>;
-  endSession: () => Promise<void>;
-  setSelectedTaskId: (id: string) => void;
-  refreshData: () => Promise<void>;
+type Outcome = "full" | "early" | "reset";
+interface CheckIn { taskId: string; title: string; before: number; suggested: number; adjusted: number; done: boolean; elapsed: number; outcome: Outcome }
+interface TimerState {
+  selected: string; seconds: number; running: boolean; phase: "focus" | "break";
+  session: string | null; planned: number; breakMinutes: number; customMinutes: number | null;
+  target: number | null; finished: boolean; outcome: Outcome | null; floating: boolean;
+  prompt: CheckIn | null;
 }
-
+const initialState: TimerState = { selected: "", seconds: 1500, running: false, phase: "focus", session: null, planned: 1500, breakMinutes: 5, customMinutes: null, target: null, finished: false, outcome: null, floating: false, prompt: null };
+interface PomodoroContextValue {
+  tasks: TaskDocument[]; sessions: PomodoroSession[]; loading: boolean; selectedTaskId: string; selectedTask: TaskDocument | null;
+  timerSeconds: number; isRunning: boolean; phase: "focus" | "break"; sessionId: string | null; sessionCompleted: boolean;
+  breakSeconds: number; fuzzyResult: PomodoroFuzzyResult; todaySessions: PomodoroSession[]; streakDays: number; totalFocusToday: number; totalSessions: number;
+  showProgressPrompt: boolean; setShowProgressPrompt: (show: boolean) => void; progressIncrement: number; suggestedProgress: number;
+  adjustedProgress: number; setAdjustedProgress: (progress: number) => void; isUpdatingProgress: boolean;
+  progressBefore: number; progressTaskTitle: string; progressElapsedSeconds: number; taskMarkedDone: boolean; setTaskMarkedDone: (done: boolean) => void;
+  lastSessionOutcome: Outcome | null; isBusy: boolean; error: string;
+  recommendedFocusMinutes: number;
+  setFocusMinutes: (minutes: number | null) => void;
+  saveTaskProgress: () => Promise<void>; startTimer: () => Promise<void>; pauseTimer: () => void;
+  resetTimer: () => Promise<void>; endSession: () => Promise<void>; setSelectedTaskId: (id: string) => void; refreshData: () => Promise<void>;
+}
 const PomodoroContext = createContext<PomodoroContextValue | null>(null);
+const clamp = (value: number, low: number, high: number) => Math.max(low, Math.min(high, Number.isFinite(value) ? value : low));
+const remaining = (state: TimerState) => state.running && state.target ? Math.max(0, Math.ceil((state.target - Date.now()) / 1000)) : state.seconds;
 
 export function PomodoroProvider({ children }: { children: React.ReactNode }) {
   const { user, loading: authLoading } = useAuth();
   const router = useRouter();
-
+  const pathname = usePathname();
   const [tasks, setTasks] = useState<TaskDocument[]>([]);
   const [sessions, setSessions] = useState<PomodoroSession[]>([]);
   const [loading, setLoading] = useState(true);
-  const [mounted, setMounted] = useState(false);
-
-  const [selectedTaskId, setSelectedTaskIdState] = useState<string>("");
-  const [timerSeconds, setTimerSeconds] = useState(25 * 60);
-  const [isRunning, setIsRunning] = useState(false);
-  const [phase, setPhase] = useState<"focus" | "break">("focus");
-  const [sessionId, setSessionId] = useState<string | null>(null);
-  const [sessionCompleted, setSessionCompleted] = useState(false);
-  const [breakSeconds, setBreakSeconds] = useState(5 * 60);
-  const [showFloatingWidget, setShowFloatingWidget] = useState(false);
+  const [state, setState] = useState<TimerState>(initialState);
+  const stateRef = useRef(state);
+  const tasksRef = useRef(tasks); tasksRef.current = tasks;
+  const ownerRef = useRef<string | null>(null);
+  const [isBusy, setBusy] = useState(false);
+  const busyRef = useRef(false);
+  const dataReadyRef = useRef(false);
+  const [isUpdatingProgress, setUpdatingProgress] = useState(false);
+  const [error, setError] = useState("");
   const [widgetDismissed, setWidgetDismissed] = useState(false);
-
-  // Progress check-in states upon focus session completion
-  const [showProgressPrompt, setShowProgressPrompt] = useState(false);
-  const [progressIncrement, setProgressIncrement] = useState(0);
-  const [suggestedProgress, setSuggestedProgress] = useState(0);
-  const [adjustedProgress, setAdjustedProgress] = useState(0);
-  const [isUpdatingProgress, setIsUpdatingProgress] = useState(false);
-
-  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const sessionIdRef = useRef<string | null>(sessionId);
-  const targetEndTimeRef = useRef<number | null>(null);
-
-  // Sync ref
-  useEffect(() => {
-    sessionIdRef.current = sessionId;
-  }, [sessionId]);
-
-  const selectedTask = tasks.find((t) => t.id === selectedTaskId) || null;
-
-  // Compute fuzzy recommendation
-  const fuzzyResult = selectedTask
-    ? computePomodoroFocus(
-        selectedTask.priorityScore,
-        selectedTask.difficulty / 10,
-        selectedTask.estimatedTotalMinutes
-      )
-    : computePomodoroFocus(30, 5);
-
-  // Load / refresh tasks & sessions
+  const { streakDays } = useLearningProgress(sessions);
+  const commit = useCallback((patch: Partial<TimerState>) => {
+    const next = { ...stateRef.current, ...patch };
+    stateRef.current = next; setState(next);
+    if (ownerRef.current) { try { localStorage.setItem(`cogniva_pomodoro_v2:${ownerRef.current}`, JSON.stringify(next)); } catch {} }
+  }, []);
+  const perform = async (action: (uid: string) => Promise<void>) => {
+    if (!user || loading || busyRef.current) return;
+    if (!dataReadyRef.current) { setError("Data sesi belum tersedia. Muat ulang halaman sebelum mulai."); return; }
+    const uid = user.uid;
+    busyRef.current = true; setBusy(true); setError("");
+    try { await action(uid); }
+    catch (cause) { if (ownerRef.current === uid) setError(cause instanceof Error ? cause.message : "Perubahan belum tersimpan. Coba lagi."); }
+    finally { busyRef.current = false; setBusy(false); }
+  };
   const refreshData = useCallback(async () => {
     if (!user) return;
-    try {
-      const [userTasks, userSessions] = await Promise.all([
-        getUserTasks(user.uid),
-        getUserPomodoroSessions(user.uid),
-      ]);
-      const activeTasks = userTasks.filter((t) => t.status !== "done");
-      setTasks(activeTasks);
-      setSessions(userSessions);
-
-      // Select first active task if none selected or current selection no longer active
-      setSelectedTaskIdState((prev) => {
-        if (prev && activeTasks.some((t) => t.id === prev)) return prev;
-        return activeTasks.length > 0 ? activeTasks[0].id : "";
-      });
-    } catch (e) {
-      console.error("Failed to load Pomodoro tasks/sessions:", e);
-    } finally {
-      setLoading(false);
-    }
+    const [nextTasks, nextSessions] = await Promise.all([getUserTasks(user.uid), getUserPomodoroSessions(user.uid)]);
+    if (ownerRef.current !== user.uid) return;
+    setTasks(nextTasks.filter(task => task.status !== "done")); setSessions(nextSessions);
   }, [user]);
 
-  // Load data on user state change
   useEffect(() => {
     if (authLoading) return;
-    if (user) {
-      refreshData();
-    } else {
-      setTasks([]);
-      setSessions([]);
-      setLoading(false);
-    }
-  }, [user, authLoading, refreshData]);
-
-  // Complete session handler
-  const handleComplete = useCallback(async () => {
-    const curSessionId = sessionIdRef.current;
-    if (curSessionId && user) {
+    let active = true;
+    ownerRef.current = user?.uid || null;
+    dataReadyRef.current = false;
+    stateRef.current = initialState; setState(initialState); setTasks([]); setSessions([]); setError("");
+    if (!user) { setLoading(false); return; }
+    setLoading(true);
+    void Promise.all([getUserTasks(user.uid), getUserPomodoroSessions(user.uid)]).then(([nextTasks, nextSessions]) => {
+      if (!active) return;
+      dataReadyRef.current = true;
+      const activeTasks = nextTasks.filter(task => task.status !== "done");
+      setTasks(activeTasks); tasksRef.current = activeTasks; setSessions(nextSessions);
+      let restored: TimerState | null = null;
       try {
-        await completePomodoroSession(curSessionId);
-        const updated = await getUserPomodoroSessions(user.uid);
-        setSessions(updated);
-
-        // Calculate progress increment for the selected task
-        if (selectedTask) {
-          const completedCount = updated.filter(
-            (s) => s.taskId === selectedTask.id && s.completed
-          ).length;
-          
-          const estimatedTotalSessions = fuzzyResult.recommendedMinutes > 0
-            ? Math.round(selectedTask.estimatedTotalMinutes / fuzzyResult.recommendedMinutes)
-            : 0;
-          const targetSessions = selectedTask.estimatedTotalMinutes > 0
-            ? Math.max(1, estimatedTotalSessions)
-            : 0;
-
-          const currentProgress = selectedTask.progress || 0;
-          if (currentProgress < 100) {
-            const remaining = selectedTask.estimatedTotalMinutes || fuzzyResult.recommendedMinutes;
-            const factor = (100 - currentProgress) / 100;
-            const baseTotalTime = factor > 0 ? remaining / factor : remaining;
-            const focusMinutes = fuzzyResult.recommendedMinutes;
-            const increment = baseTotalTime > 0
-              ? Math.max(1, Math.round((focusMinutes / baseTotalTime) * 100))
-              : 10;
-            
-            // If sessions target reached or exceeded, set progress to 100%
-            const reachesTarget = targetSessions > 0 && completedCount >= targetSessions;
-            const nextProgress = reachesTarget ? 100 : Math.min(100, currentProgress + increment);
-
-            setProgressIncrement(reachesTarget ? (100 - currentProgress) : increment);
-            setSuggestedProgress(nextProgress);
-            setAdjustedProgress(nextProgress);
-            setShowProgressPrompt(true);
+        const raw = localStorage.getItem(`cogniva_pomodoro_v2:${user.uid}`);
+        if (raw) {
+          const value = JSON.parse(raw);
+          if (typeof value.selected === "string" && Number.isFinite(value.seconds) && Number.isFinite(value.planned) && value.planned > 0 && ["focus", "break"].includes(value.phase)) {
+            restored = { ...initialState, ...value, seconds: clamp(value.seconds, 0, 7200), planned: clamp(value.planned, 60, 7200), breakMinutes: clamp(value.breakMinutes, 1, 60) };
           }
-        }
-      } catch (e) {
-        console.error("Failed to complete Pomodoro session:", e);
-      }
-    }
-
-    setSessionCompleted(true);
-    setIsRunning(false);
-    targetEndTimeRef.current = null;
-    if (typeof window !== "undefined") {
-      localStorage.setItem("pomodoro_is_running", "false");
-      localStorage.removeItem("pomodoro_target_end_time");
-      localStorage.removeItem("pomodoro_session_id");
-    }
-  }, [user, selectedTask, fuzzyResult.recommendedMinutes]);
-
-  // Hydrate from localStorage once mounted on client
-  useEffect(() => {
-    setMounted(true);
-    try {
-      const savedTaskId = localStorage.getItem("pomodoro_selected_task_id");
-      const savedPhase = (localStorage.getItem("pomodoro_phase") as "focus" | "break") || "focus";
-      const savedSessionId = localStorage.getItem("pomodoro_session_id");
-      const savedWidget = localStorage.getItem("pomodoro_show_widget") === "true";
-      const savedRunning = localStorage.getItem("pomodoro_is_running") === "true";
-      const savedTargetEndTimeStr = localStorage.getItem("pomodoro_target_end_time");
-
-      if (savedTaskId) setSelectedTaskIdState(savedTaskId);
-      if (savedPhase) setPhase(savedPhase);
-      if (savedSessionId) setSessionId(savedSessionId);
-      if (savedWidget) setShowFloatingWidget(savedWidget);
-
-      if (savedRunning && savedTargetEndTimeStr) {
-        const targetEnd = parseInt(savedTargetEndTimeStr, 10);
-        const remaining = Math.ceil((targetEnd - Date.now()) / 1000);
-
-        if (remaining > 0) {
-          targetEndTimeRef.current = targetEnd;
-          setTimerSeconds(remaining);
-          setIsRunning(true);
         } else {
-          // Finished while away
-          setTimerSeconds(0);
-          setIsRunning(false);
-          targetEndTimeRef.current = null;
-          handleComplete();
+          // Recover a previous timer only when its session belongs to this account.
+          const legacy = nextSessions.find(session => session.id === localStorage.getItem("pomodoro_session_id") && !isRecordedFocusSession(session));
+          if (legacy) restored = { ...initialState, selected: legacy.taskId === "general" ? "" : legacy.taskId, session: legacy.id, planned: legacy.duration * 60, seconds: Number(localStorage.getItem("pomodoro_timer_seconds")) || legacy.duration * 60, running: localStorage.getItem("pomodoro_is_running") === "true", target: Number(localStorage.getItem("pomodoro_target_end_time")) || null, floating: true };
         }
+      } catch {}
+      if (restored?.session) {
+        const owned = nextSessions.find(session => session.id === restored?.session && !isRecordedFocusSession(session));
+        if (!owned) restored = null;
+      }
+      if (restored) {
+        if (restored.running && !restored.target) restored.running = false;
+        restored.seconds = remaining(restored);
+        commit(restored);
       } else {
-        const savedSeconds = localStorage.getItem("pomodoro_timer_seconds");
-        if (savedSeconds) {
-          setTimerSeconds(parseInt(savedSeconds, 10));
-        }
+        const task = activeTasks[0];
+        const recommendation = task ? computePomodoroFocus(task.priorityScore, task.difficulty, task.estimatedTotalMinutes) : computePomodoroFocus(30, 5);
+        commit({ ...initialState, selected: task?.id || "", seconds: recommendation.recommendedMinutes * 60, planned: recommendation.recommendedMinutes * 60, breakMinutes: recommendation.breakMinutes });
       }
-    } catch {
-      // Ignore localStorage errors
-    }
-  }, [handleComplete]);
+    }).catch(() => { if (active) setError("Tugas dan sesi belum bisa dimuat. Coba muat ulang halaman."); }).finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
+  }, [user?.uid, authLoading, commit]);
 
-  // Keep targetEndTime accurate with setInterval and visibilitychange
+  const selectedTask = tasks.find(task => task.id === state.selected) || null;
+  const base = selectedTask ? computePomodoroFocus(selectedTask.priorityScore, selectedTask.difficulty, selectedTask.estimatedTotalMinutes) : computePomodoroFocus(30, 5);
+  const fuzzyResult: PomodoroFuzzyResult = { ...base, recommendedMinutes: state.session || state.phase === "break" ? state.planned / 60 : state.customMinutes ?? base.recommendedMinutes, breakMinutes: state.session || state.phase === "break" ? state.breakMinutes : base.breakMinutes };
   useEffect(() => {
-    if (!isRunning) {
-      if (intervalRef.current) clearInterval(intervalRef.current);
-      return;
+    if (loading || state.running || state.session || state.phase !== "focus" || state.prompt) return;
+    const seconds = (state.customMinutes ?? base.recommendedMinutes) * 60;
+    if (state.seconds !== seconds || state.breakMinutes !== base.breakMinutes) commit({ seconds, planned: seconds, breakMinutes: base.breakMinutes });
+  }, [loading, state.running, state.session, state.phase, state.prompt, state.customMinutes, base.recommendedMinutes, base.breakMinutes, commit]);
+
+  const finish = async (outcome: Outcome) => perform(async uid => {
+    const current = stateRef.current;
+    const left = remaining(current);
+    commit({ running: false, seconds: left, target: null });
+    if (current.phase === "break") { commit({ phase: "focus", seconds: current.planned, finished: false, floating: false }); return; }
+    const elapsed = current.session ? clamp(current.planned - left, 0, current.planned) : 0;
+    const kind: Outcome = elapsed >= current.planned ? "full" : outcome;
+    if (current.session) {
+      if (elapsed === 0) await deletePomodoroSession(current.session);
+      else await updatePomodoroSession(current.session, { completed: kind === "full", outcome: kind, elapsedSeconds: elapsed, plannedMinutes: current.planned / 60, duration: Math.round(elapsed / 60 * 100) / 100 });
+      if (ownerRef.current !== uid) return;
+      const previousSession = sessions.find(session => session.id === current.session);
+      window.dispatchEvent(new CustomEvent("cogniva-focus-session-updated", { detail: { userId: uid, sessionId: current.session, session: elapsed > 0 && previousSession ? { ...previousSession, completed: kind === "full", outcome: kind, elapsedSeconds: elapsed, plannedMinutes: current.planned / 60, duration: Math.round(elapsed / 60 * 100) / 100, endedAt: Timestamp.now() } : null } }));
+      setSessions(previous => elapsed === 0 ? previous.filter(session => session.id !== current.session) : previous.map(session => session.id === current.session ? { ...session, completed: kind === "full", outcome: kind, elapsedSeconds: elapsed, plannedMinutes: current.planned / 60, duration: Math.round(elapsed / 60 * 100) / 100, endedAt: Timestamp.now() } : session));
     }
-
-    const checkTimer = () => {
-      if (!targetEndTimeRef.current) return;
-      const remaining = Math.max(0, Math.ceil((targetEndTimeRef.current - Date.now()) / 1000));
-      setTimerSeconds(remaining);
-
-      if (remaining <= 0) {
-        if (intervalRef.current) clearInterval(intervalRef.current);
-        if (phase === "focus") {
-          handleComplete();
-          // Switch to break phase
-          setTimeout(() => {
-            const bSecs = fuzzyResult.breakMinutes * 60;
-            setPhase("break");
-            setBreakSeconds(bSecs);
-            setTimerSeconds(bSecs);
-            setIsRunning(false);
-            if (typeof window !== "undefined") {
-              localStorage.setItem("pomodoro_phase", "break");
-              localStorage.setItem("pomodoro_timer_seconds", bSecs.toString());
-              localStorage.setItem("pomodoro_is_running", "false");
-              localStorage.removeItem("pomodoro_target_end_time");
-            }
-          }, 300);
-        } else {
-          // Break finished -> switch back to focus
-          const fSecs = fuzzyResult.recommendedMinutes * 60;
-          setPhase("focus");
-          setIsRunning(false);
-          setTimerSeconds(fSecs);
-          if (typeof window !== "undefined") {
-            localStorage.setItem("pomodoro_phase", "focus");
-            localStorage.setItem("pomodoro_timer_seconds", fSecs.toString());
-            localStorage.setItem("pomodoro_is_running", "false");
-            localStorage.removeItem("pomodoro_target_end_time");
-          }
-        }
-      }
-    };
-
-    intervalRef.current = setInterval(checkTimer, 1000);
-    const handleVisibility = () => {
-      if (document.visibilityState === "visible") {
-        checkTimer();
-      }
-    };
-    document.addEventListener("visibilitychange", handleVisibility);
-
-    return () => {
-      if (intervalRef.current) clearInterval(intervalRef.current);
-      document.removeEventListener("visibilitychange", handleVisibility);
-    };
-  }, [isRunning, phase, fuzzyResult.breakMinutes, fuzzyResult.recommendedMinutes, handleComplete]);
-
-  // Sync state to localStorage
+    const task = tasksRef.current.find(item => item.id === current.selected);
+    let prompt: CheckIn | null = null;
+    if (task && elapsed > 0 && kind !== "reset" && task.progress < 100) {
+      const before = clamp(task.progress, 0, 99);
+      const estimate = task.estimatedTotalMinutes > 0 ? Math.round((elapsed / 60 / task.estimatedTotalMinutes) * (100 - before)) : 0;
+      prompt = { taskId: task.id, title: task.title, before, suggested: clamp(before + estimate, before, 99), adjusted: before, done: false, elapsed, outcome: kind };
+    }
+    commit({ session: null, running: false, target: null, phase: kind === "reset" ? "focus" : "break", seconds: kind === "reset" ? current.planned : current.breakMinutes * 60, finished: kind !== "reset" && elapsed > 0, outcome: kind, prompt, floating: kind !== "reset" });
+    void getUserPomodoroSessions(uid).then(next => { if (ownerRef.current === uid) setSessions(next); }).catch(() => {});
+  });
+  const finishRef = useRef(finish); finishRef.current = finish;
   useEffect(() => {
-    if (!mounted || typeof window === "undefined") return;
-    try {
-      localStorage.setItem("pomodoro_timer_seconds", timerSeconds.toString());
-      localStorage.setItem("pomodoro_is_running", isRunning.toString());
-      localStorage.setItem("pomodoro_phase", phase);
-      localStorage.setItem("pomodoro_show_widget", showFloatingWidget.toString());
-      localStorage.setItem("pomodoro_selected_task_id", selectedTaskId);
-      if (sessionId) {
-        localStorage.setItem("pomodoro_session_id", sessionId);
-      } else {
-        localStorage.removeItem("pomodoro_session_id");
-      }
-    } catch {
-      // Ignore
-    }
-  }, [mounted, timerSeconds, isRunning, phase, sessionId, showFloatingWidget, selectedTaskId]);
-
-  // Adjust default timer when selected task changes and not currently running
-  useEffect(() => {
-    if (!isRunning && !sessionId) {
-      if (phase === "focus") {
-        setTimerSeconds(fuzzyResult.recommendedMinutes * 60);
-      } else {
-        setTimerSeconds(fuzzyResult.breakMinutes * 60);
-      }
-      setBreakSeconds(fuzzyResult.breakMinutes * 60);
-    }
-  }, [selectedTaskId, fuzzyResult.recommendedMinutes, fuzzyResult.breakMinutes, isRunning, phase, sessionId]);
+    if (loading || !state.running) return;
+    const tick = () => {
+      const current = stateRef.current;
+      if (!current.running) return;
+      const seconds = remaining(current);
+      if (seconds !== current.seconds) commit({ seconds });
+      if (seconds === 0) void finishRef.current("full");
+    };
+    tick();
+    const interval = setInterval(tick, 1000);
+    const visible = () => { if (document.visibilityState === "visible") tick(); };
+    document.addEventListener("visibilitychange", visible);
+    return () => { clearInterval(interval); document.removeEventListener("visibilitychange", visible); };
+  }, [loading, state.running, state.phase, commit]);
 
   const startTimer = async () => {
-    if (!user) return;
-    let curSessionId = sessionId;
-
-    const expectedDuration =
-      phase === "focus"
-        ? fuzzyResult.recommendedMinutes * 60
-        : fuzzyResult.breakMinutes * 60;
-
-    let currentSecs = timerSeconds;
-    // If timer reached zero or previous session was completed, restart from clean full duration
-    if (currentSecs <= 0 || sessionCompleted) {
-      currentSecs = expectedDuration;
-      setTimerSeconds(expectedDuration);
-    }
-
-    if (!curSessionId && phase === "focus") {
-      try {
-        const taskId = selectedTask ? selectedTask.id : "general";
-        const taskTitle = selectedTask ? selectedTask.title : "Focus Session";
-        curSessionId = await createPomodoroSession(
-          user.uid,
-          taskId,
-          taskTitle,
-          fuzzyResult.recommendedMinutes
-        );
-        setSessionId(curSessionId);
-        sessionIdRef.current = curSessionId;
-        if (typeof window !== "undefined") {
-          localStorage.setItem("pomodoro_session_id", curSessionId);
-          localStorage.setItem(
-            "pomodoro_initial_seconds",
-            (fuzzyResult.recommendedMinutes * 60).toString()
-          );
-        }
-      } catch (e) {
-        console.error("Failed to start Pomodoro session:", e);
+    if (stateRef.current.prompt) { if (pathname !== "/dashboard" && pathname !== "/pomodoro") router.push("/pomodoro"); return; }
+    if (stateRef.current.session && remaining(stateRef.current) === 0) { await finish("full"); return; }
+    await perform(async uid => {
+    const current = stateRef.current;
+    if (current.running || current.prompt) return;
+    const task = tasksRef.current.find(item => item.id === current.selected);
+    let id = current.session;
+    const planned = current.session ? current.planned : current.phase === "focus" ? (current.customMinutes ?? (task ? computePomodoroFocus(task.priorityScore, task.difficulty, task.estimatedTotalMinutes).recommendedMinutes : base.recommendedMinutes)) * 60 : current.planned;
+    const seconds = current.seconds > 0 && !current.finished ? current.seconds : current.phase === "break" ? current.breakMinutes * 60 : planned;
+    if (!id && current.phase === "focus") {
+      if (task?.status === "todo") {
+        await updateTask(task.id, { status: "doing" });
+        if (ownerRef.current !== uid) return;
+        setTasks(previous => previous.map(item => item.id === task.id ? { ...item, status: "doing" } : item));
       }
+      id = await createPomodoroSession(uid, task?.id || "general", task?.title || "Sesi tanpa tugas", planned / 60);
+      if (ownerRef.current !== uid) return;
+      setSessions(previous => [{ id: id!, userId: uid, taskId: task?.id || "general", taskTitle: task?.title || "Sesi tanpa tugas", duration: planned / 60, completed: false, startedAt: Timestamp.now() }, ...previous]);
     }
-
-    const targetEnd = Date.now() + currentSecs * 1000;
-    targetEndTimeRef.current = targetEnd;
-    if (typeof window !== "undefined") {
-      localStorage.setItem("pomodoro_target_end_time", targetEnd.toString());
-      localStorage.setItem("pomodoro_timer_seconds", currentSecs.toString());
-      localStorage.setItem("pomodoro_is_running", "true");
-      localStorage.setItem("pomodoro_show_widget", "true");
-    }
-
-    setIsRunning(true);
-    setSessionCompleted(false);
-    setShowFloatingWidget(true);
+    commit({ session: id, planned, seconds, running: true, target: Date.now() + seconds * 1000, finished: false, floating: true });
     setWidgetDismissed(false);
+    });
   };
-
-  const pauseTimer = () => {
-    setIsRunning(false);
-    targetEndTimeRef.current = null;
-    if (typeof window !== "undefined") {
-      localStorage.setItem("pomodoro_is_running", "false");
-      localStorage.removeItem("pomodoro_target_end_time");
-      localStorage.setItem("pomodoro_timer_seconds", timerSeconds.toString());
-    }
-  };
-
-  const resetTimer = async () => {
-    const curSessionId = sessionIdRef.current;
-    const initialSecs =
-      (typeof window !== "undefined"
-        ? parseInt(localStorage.getItem("pomodoro_initial_seconds") || "0", 10)
-        : 0) || (fuzzyResult.recommendedMinutes * 60);
-
-    const elapsedSeconds = Math.max(0, initialSecs - timerSeconds);
-    const elapsedMinutes = Math.floor(elapsedSeconds / 60);
-
-    if (curSessionId && user && phase === "focus") {
-      try {
-        if (elapsedMinutes >= 1) {
-          // If user focused for at least 1 minute before reset, preserve the study duration in stats!
-          await updatePomodoroSession(curSessionId, {
-            duration: elapsedMinutes,
-            completed: true,
-          });
-          const updated = await getUserPomodoroSessions(user.uid);
-          setSessions(updated);
-        } else {
-          // Under 1 minute - clean up empty session
-          await deletePomodoroSession(curSessionId);
-        }
-      } catch (e) {
-        console.error("Failed to update/delete session on reset:", e);
-      }
-    }
-
-    const defaultSeconds = fuzzyResult.recommendedMinutes * 60;
-    setIsRunning(false);
-    targetEndTimeRef.current = null;
-    setPhase("focus");
-    setTimerSeconds(defaultSeconds);
-    setBreakSeconds(fuzzyResult.breakMinutes * 60);
-    setSessionId(null);
-    sessionIdRef.current = null;
-    setSessionCompleted(false);
-    setShowFloatingWidget(false);
-
-    if (typeof window !== "undefined") {
-      localStorage.removeItem("pomodoro_session_id");
-      localStorage.removeItem("pomodoro_target_end_time");
-      localStorage.removeItem("pomodoro_initial_seconds");
-      localStorage.setItem("pomodoro_is_running", "false");
-      localStorage.setItem("pomodoro_phase", "focus");
-      localStorage.setItem("pomodoro_show_widget", "false");
-      localStorage.setItem("pomodoro_timer_seconds", defaultSeconds.toString());
-    }
-  };
-
-  const endSession = async () => {
-    const curSessionId = sessionIdRef.current;
-    const initialSecs =
-      (typeof window !== "undefined"
-        ? parseInt(localStorage.getItem("pomodoro_initial_seconds") || "0", 10)
-        : 0) || (fuzzyResult.recommendedMinutes * 60);
-
-    const elapsedSeconds = Math.max(0, initialSecs - timerSeconds);
-    const elapsedMinutes = Math.max(1, Math.round(elapsedSeconds / 60));
-
-    if (curSessionId && user && phase === "focus") {
-      try {
-        await updatePomodoroSession(curSessionId, {
-          duration: elapsedMinutes,
-          completed: true,
-        });
-        const updated = await getUserPomodoroSessions(user.uid);
-        setSessions(updated);
-
-        // Calculate progress increment for the selected task
-        if (selectedTask) {
-          const completedCount = updated.filter(
-            (s) => s.taskId === selectedTask.id && s.completed
-          ).length;
-
-          const estimatedTotalSessions = fuzzyResult.recommendedMinutes > 0
-            ? Math.round(selectedTask.estimatedTotalMinutes / fuzzyResult.recommendedMinutes)
-            : 0;
-          const targetSessions = selectedTask.estimatedTotalMinutes > 0
-            ? Math.max(1, estimatedTotalSessions)
-            : 0;
-
-          const currentProgress = selectedTask.progress || 0;
-          if (currentProgress < 100) {
-            const remaining = selectedTask.estimatedTotalMinutes || fuzzyResult.recommendedMinutes;
-            const factor = (100 - currentProgress) / 100;
-            const baseTotalTime = factor > 0 ? remaining / factor : remaining;
-            const focusMinutes = elapsedMinutes;
-            const increment = baseTotalTime > 0
-              ? Math.max(1, Math.round((focusMinutes / baseTotalTime) * 100))
-              : 10;
-
-            const reachesTarget = targetSessions > 0 && completedCount >= targetSessions;
-            const nextProgress = reachesTarget ? 100 : Math.min(100, currentProgress + increment);
-
-            setProgressIncrement(reachesTarget ? (100 - currentProgress) : increment);
-            setSuggestedProgress(nextProgress);
-            setAdjustedProgress(nextProgress);
-            setShowProgressPrompt(true);
-          }
-        }
-      } catch (e) {
-        console.error("Failed to end Pomodoro session:", e);
-      }
-    }
-
-    const resetSecs = fuzzyResult.recommendedMinutes * 60;
-    setIsRunning(false);
-    targetEndTimeRef.current = null;
-    setSessionCompleted(true);
-    setPhase("focus");
-    setTimerSeconds(resetSecs);
-    setBreakSeconds(fuzzyResult.breakMinutes * 60);
-    setSessionId(null);
-    sessionIdRef.current = null;
-    setShowFloatingWidget(false);
-
-    if (typeof window !== "undefined") {
-      localStorage.setItem("pomodoro_is_running", "false");
-      localStorage.setItem("pomodoro_phase", "focus");
-      localStorage.setItem("pomodoro_timer_seconds", resetSecs.toString());
-      localStorage.removeItem("pomodoro_target_end_time");
-      localStorage.removeItem("pomodoro_session_id");
-      localStorage.removeItem("pomodoro_initial_seconds");
-      localStorage.setItem("pomodoro_show_widget", "false");
-    }
-  };
-
+  const pauseTimer = () => { if (busyRef.current) return; commit({ seconds: remaining(stateRef.current), running: false, target: null }); };
+  const resetTimer = async () => { if (stateRef.current.prompt) { if (pathname !== "/dashboard" && pathname !== "/pomodoro") router.push("/pomodoro"); return; } await finish("reset"); };
+  const endSession = async () => finish("early");
   const setSelectedTaskId = (id: string) => {
-    if (isRunning) return; // Prevent changing task while timer is running
-    setSelectedTaskIdState(id);
-    setSessionId(null);
-    sessionIdRef.current = null;
-    setSessionCompleted(false);
-    setPhase("focus");
-
-    const newTask = tasks.find((t) => t.id === id) || null;
-    const newFuzzy = newTask
-      ? computePomodoroFocus(
-          newTask.priorityScore,
-          newTask.difficulty / 10,
-          newTask.estimatedTotalMinutes
-        )
-      : computePomodoroFocus(30, 5);
-
-    const newSecs = newFuzzy.recommendedMinutes * 60;
-    setTimerSeconds(newSecs);
-    setBreakSeconds(newFuzzy.breakMinutes * 60);
-
-    if (typeof window !== "undefined") {
-      localStorage.setItem("pomodoro_selected_task_id", id);
-      localStorage.setItem("pomodoro_timer_seconds", newSecs.toString());
-      localStorage.setItem("pomodoro_phase", "focus");
-      localStorage.setItem("pomodoro_is_running", "false");
-      localStorage.removeItem("pomodoro_session_id");
-      localStorage.removeItem("pomodoro_target_end_time");
-      localStorage.removeItem("pomodoro_initial_seconds");
-    }
+    const current = stateRef.current;
+    if (current.running || current.session || current.prompt || current.phase === "break" || busyRef.current) { setError("Akhiri sesi sebelumnya sebelum mengganti tugas."); return; }
+    const task = tasksRef.current.find(item => item.id === id);
+    const recommendation = task ? computePomodoroFocus(task.priorityScore, task.difficulty, task.estimatedTotalMinutes) : computePomodoroFocus(30, 5);
+    commit({ selected: id, customMinutes: null, seconds: recommendation.recommendedMinutes * 60, planned: recommendation.recommendedMinutes * 60, breakMinutes: recommendation.breakMinutes, phase: "focus", finished: false, floating: false });
+    setError("");
   };
-
-  const saveTaskProgress = async () => {
-    if (!selectedTask || !user) return;
-    setIsUpdatingProgress(true);
+  const setFocusMinutes = (minutes: number | null) => {
+    const current = stateRef.current;
+    if (current.running || current.session || current.prompt || current.phase !== "focus" || busyRef.current) return;
+    const duration = minutes === null ? base.recommendedMinutes : Math.round(clamp(minutes, 1, 120));
+    commit({ customMinutes: minutes === null ? null : duration, seconds: duration * 60, planned: duration * 60 });
+  };
+  const setShowProgressPrompt = (show: boolean) => { if (!show && !busyRef.current) commit({ prompt: null }); };
+  const setAdjustedProgress = (progress: number) => { const prompt = stateRef.current.prompt; if (prompt) commit({ prompt: { ...prompt, adjusted: clamp(Math.round(progress), 0, 99), done: false } }); };
+  const setTaskMarkedDone = (done: boolean) => { const prompt = stateRef.current.prompt; if (prompt) commit({ prompt: { ...prompt, done, adjusted: done ? 100 : prompt.before } }); };
+  const saveTaskProgress = async () => perform(async uid => {
+    const prompt = stateRef.current.prompt;
+    if (!prompt) return;
+    setUpdatingProgress(true);
     try {
-      const isDone = adjustedProgress >= 100;
-      await updateTask(selectedTask.id, {
-        progress: adjustedProgress,
-        status: isDone ? "done" : selectedTask.status,
-      });
-      const userTasks = await getUserTasks(user.uid);
-      const activeTasks = userTasks.filter((t) => t.status !== "done");
-      setTasks(activeTasks);
-      setShowProgressPrompt(false);
-    } catch (e) {
-      console.error("Failed to update task progress:", e);
-    } finally {
-      setIsUpdatingProgress(false);
-    }
-  };
-
-  // Stats derived from session documents
-  const today = new Date();
-  const todaySessions = sessions.filter((s) => {
-    const d = s.startedAt?.toDate ? s.startedAt.toDate() : null;
-    return d && d.toDateString() === today.toDateString() && s.completed;
+      const latest = await getTask(prompt.taskId);
+      if (ownerRef.current !== uid) return;
+      if (!latest || latest.userId !== uid) throw new Error("Tugas ini tidak lagi tersedia.");
+      if (latest.status === "done") {
+        if (ownerRef.current !== uid) return;
+        setTasks(previous => previous.filter(task => task.id !== latest.id));
+        window.dispatchEvent(new CustomEvent("cogniva-focus-task-updated", { detail: { userId: uid, task: latest } }));
+        const seconds = stateRef.current.breakMinutes * 60;
+        commit({ selected: "", prompt: null, phase: "break", seconds, running: true, target: Date.now() + seconds * 1000, finished: false, floating: true });
+        return;
+      }
+      if (latest.progress !== prompt.before) {
+        commit({ prompt: { ...prompt, before: latest.progress, adjusted: latest.progress, done: latest.status === "done" } });
+        throw new Error("Progres tugas berubah. Nilai terbaru sudah ditampilkan; periksa sebelum menyimpan.");
+      }
+      const progress = prompt.done ? 100 : clamp(prompt.adjusted, 0, 99);
+      const result = computePriorityDetailed({ deadlineDays: latest.deadline?.toDate ? deadlineToDays(latest.deadline.toDate()) : 7, importance: latest.importance, difficulty: latest.difficulty, progress, academicRisk: latest.academicRisk ?? 40 });
+      const changes = { progress, status: prompt.done ? "done" as const : "doing" as const, priorityScore: result.priorityScore, priorityLevel: result.priorityLevel, riskLevel: result.riskLevel, estimatedTotalMinutes: result.estimatedTotalMinutes, reasoning: result.reasoning };
+      await updateTask(latest.id, changes);
+      if (ownerRef.current !== uid) return;
+      setTasks(previous => previous.flatMap(task => task.id !== latest.id ? [task] : prompt.done ? [] : [{ ...task, ...changes }]));
+      window.dispatchEvent(new CustomEvent("cogniva-focus-task-updated", { detail: { userId: uid, task: { ...latest, ...changes } } }));
+      const current = stateRef.current;
+      const seconds = current.breakMinutes * 60;
+      commit({ selected: prompt.done ? "" : current.selected, prompt: null, phase: "break", seconds, running: true, target: Date.now() + seconds * 1000, finished: false, floating: true });
+      setWidgetDismissed(false);
+    } finally { setUpdatingProgress(false); }
   });
-
-  const totalFocusToday = todaySessions.reduce((acc, s) => acc + s.duration, 0);
-  const totalSessions = sessions.filter((s) => s.completed).length;
-
-  // Streak calculation
-  const streakDays = (() => {
-    let streak = 0;
-    const now = new Date();
-    for (let i = 0; i < 30; i++) {
-      const d = new Date(now);
-      d.setDate(d.getDate() - i);
-      const dayStr = d.toDateString();
-      const hasSession = sessions.some((s) => {
-        const sd = s.startedAt?.toDate ? s.startedAt.toDate() : null;
-        return sd && sd.toDateString() === dayStr && s.completed;
-      });
-      if (hasSession) streak++;
-      else if (i > 0) break;
-    }
-    return streak;
-  })();
-
-  return (
-    <PomodoroContext.Provider
-      value={{
-        tasks,
-        sessions,
-        loading,
-        selectedTaskId,
-        selectedTask,
-        timerSeconds,
-        isRunning,
-        phase,
-        sessionId,
-        sessionCompleted,
-        breakSeconds,
-        fuzzyResult,
-        todaySessions,
-        streakDays,
-        totalFocusToday,
-        totalSessions,
-        showProgressPrompt,
-        setShowProgressPrompt,
-        progressIncrement,
-        suggestedProgress,
-        adjustedProgress,
-        setAdjustedProgress,
-        isUpdatingProgress,
-        saveTaskProgress,
-        startTimer,
-        pauseTimer,
-        resetTimer,
-        endSession,
-        setSelectedTaskId,
-        refreshData,
-      }}
-    >
-      {children}
-
-      {/* Floating Pomodoro Widget - shown on all pages except /pomodoro */}
-      {mounted && user && !widgetDismissed && (isRunning || showFloatingWidget) && (
-        <FloatingPomodoroWidget
-          isRunning={isRunning}
-          timerSeconds={timerSeconds}
-          phase={phase}
-          taskTitle={selectedTask?.title || "Focus Session"}
-          onStart={startTimer}
-          onPause={pauseTimer}
-          onReset={resetTimer}
-          onExpand={() => router.push("/pomodoro")}
-          onDismiss={() => {
-            setWidgetDismissed(true);
-            setShowFloatingWidget(false);
-            if (typeof window !== "undefined") {
-              localStorage.setItem("pomodoro_show_widget", "false");
-            }
-          }}
-        />
-      )}
-    </PomodoroContext.Provider>
-  );
+  const today = new Date().toDateString();
+  const recordedToday = sessions.filter(session => isRecordedFocusSession(session) && session.startedAt?.toDate?.().toDateString() === today);
+  const todaySessions = recordedToday.filter(isFullFocusSession);
+  return <PomodoroContext.Provider value={{ tasks, sessions, loading, selectedTaskId: state.selected, selectedTask, timerSeconds: state.seconds, isRunning: state.running, phase: state.phase, sessionId: state.session, sessionCompleted: state.finished, breakSeconds: state.breakMinutes * 60, fuzzyResult, todaySessions, streakDays, totalFocusToday: focusMinutes(recordedToday), totalSessions: sessions.filter(isFullFocusSession).length, showProgressPrompt: !!state.prompt, setShowProgressPrompt, progressIncrement: state.prompt ? state.prompt.suggested - state.prompt.before : 0, suggestedProgress: state.prompt?.suggested || 0, adjustedProgress: state.prompt?.adjusted || 0, setAdjustedProgress, isUpdatingProgress, progressBefore: state.prompt?.before || 0, progressTaskTitle: state.prompt?.title || "", progressElapsedSeconds: state.prompt?.elapsed || 0, taskMarkedDone: state.prompt?.done || false, setTaskMarkedDone, lastSessionOutcome: state.outcome, isBusy, error, recommendedFocusMinutes: base.recommendedMinutes, setFocusMinutes, saveTaskProgress, startTimer, pauseTimer, resetTimer, endSession, setSelectedTaskId, refreshData }}>
+    {children}
+    <FocusProgressDialog />
+    {error && pathname !== "/pomodoro" && !(state.prompt && pathname === "/dashboard") && <div role="alert" className="fixed top-5 right-5 z-[10001] max-w-sm rounded-xl border border-[#dfc6b3] bg-[#f5eadf] px-4 py-3 text-sm text-[#946044]">{error}</div>}
+    {user && !widgetDismissed && !(state.prompt && (pathname === "/dashboard" || pathname === "/pomodoro")) && (state.running || state.floating) && <FloatingPomodoroWidget isRunning={state.running} timerSeconds={state.seconds} phase={state.phase} taskTitle={selectedTask?.title || "Sesi tanpa tugas"} onStart={startTimer} onPause={pauseTimer} onReset={resetTimer} onExpand={() => router.push("/pomodoro")} onDismiss={() => { setWidgetDismissed(true); commit({ floating: false }); }} />}
+  </PomodoroContext.Provider>;
 }
-
-export function usePomodoro() {
-  const context = useContext(PomodoroContext);
-  if (!context) {
-    throw new Error("usePomodoro must be used within a PomodoroProvider");
-  }
-  return context;
-}
+export function usePomodoro() { const context = useContext(PomodoroContext); if (!context) throw new Error("usePomodoro must be used within a PomodoroProvider"); return context; }
