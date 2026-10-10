@@ -1,407 +1,116 @@
 "use client";
 
-import React, { useEffect, useState, useMemo, useCallback } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
-import {
-  TrendingUp,
-  Clock,
-  CheckSquare,
-  Flame,
-  Brain,
-  Zap,
-  FileText,
-  Layers,
-} from "lucide-react";
+import { ArrowRight, ArrowUpRight, RefreshCw, Timer, Check, BookOpen, Loader2 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useScreenTime, formatScreenTime } from "@/contexts/ScreenTimeContext";
-import {
-  getUserNotes,
-  getUserTasks,
-  getUserPomodoroSessions,
-  getAcademicInsight,
-  type TaskDocument,
-  type PomodoroSession,
-} from "@/lib/firestore";
+import { getUserNotes, getUserTasks, getUserPomodoroSessions, getAcademicInsight, type TaskDocument, type PomodoroSession, type NoteDocument, type AcademicInsight } from "@/lib/firestore";
+import { focusSeconds, isRecordedFocusSession, isFullFocusSession, formatFocusDuration } from "@/lib/pomodoroSessions";
 import { DashboardShell } from "@/components/layout/DashboardShell";
-import { LivingFlame } from "@/components/dashboard/streak/LivingFlame";
-import { LoadingScreen } from "@/components/ui/LoadingScreen";
-import { ErrorState } from "@/components/ui/ErrorState";
+import { Dropdown } from "@/components/ui/Dropdown";
+import s from "@/components/analytics/analytics.module.css";
 
-function HighImpactCard({
-  label,
-  value,
-  sub,
-  icon,
-  iconBg,
-  highlight = false,
-}: {
-  label: string;
-  value: string | number;
-  sub?: string;
-  icon: React.ReactNode;
-  iconBg: string;
-  highlight?: boolean;
-}) {
-  return (
-    <div
-      className={`rounded-2xl border p-6 flex items-center justify-between transition-all duration-300 ${
-        highlight
-          ? "bg-gradient-to-br from-primary-50/40 via-white to-emerald-50/20 border-primary/40 shadow-sm"
-          : "bg-white border-border shadow-card hover:shadow-card-hover"
-      }`}
-      suppressHydrationWarning
-    >
-      <div className="space-y-1" suppressHydrationWarning>
-        <p className="text-xs font-bold text-gray-400 uppercase tracking-wider">{label}</p>
-        <p className="text-3xl font-extrabold text-[#1F2937] tracking-tight" suppressHydrationWarning>{value}</p>
-        {sub && <p className="text-xs text-gray-500 font-medium" suppressHydrationWarning>{sub}</p>}
-      </div>
-      <div className={`w-13 h-13 rounded-2xl flex items-center justify-center ${iconBg} shadow-2xs`}>
-        {icon}
-      </div>
-    </div>
-  );
+type Snapshot = { uid: string; tasks: TaskDocument[] | null; sessions: PomodoroSession[] | null; notes: NoteDocument[] | null; insight: AcademicInsight | null; unavailable: string[] };
+function dateKey(date: Date) { return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`; }
+function sessionDate(value: unknown): Date | null {
+  if (!value || typeof value !== "object") return null;
+  const timestamp = value as { toDate?: () => Date; seconds?: number };
+  const date = typeof timestamp.toDate === "function" ? timestamp.toDate() : typeof timestamp.seconds === "number" ? new Date(timestamp.seconds * 1000) : null;
+  return date && Number.isFinite(date.getTime()) ? date : null;
+}
+function shortDuration(seconds: number) {
+  const minutes = Math.floor(seconds / 60);
+  return minutes >= 60 ? `${Math.floor(minutes / 60)}j ${minutes % 60}m` : minutes ? `${minutes} menit` : `${Math.floor(seconds)} detik`;
 }
 
 export default function AnalyticsPage() {
   const { user, loading: authLoading } = useAuth();
-  const { todayMinutes, formattedTodayTime, history: screenTimeHistory } = useScreenTime();
+  const { todaySeconds, history } = useScreenTime();
   const router = useRouter();
-
-  const [tasks, setTasks] = useState<TaskDocument[]>([]);
-  const [sessions, setSessions] = useState<PomodoroSession[]>([]);
-  const [notesCount, setNotesCount] = useState(0);
-  const [academicScore, setAcademicScore] = useState<number | null>(null);
+  const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [period, setPeriod] = useState("7");
+  const [metric, setMetric] = useState("focus");
+  const [today, setToday] = useState(() => new Date());
+  const [selectedDate, setSelectedDate] = useState(() => dateKey(new Date()));
+  const requestId = useRef(0);
+  const owner = useRef(user?.uid); owner.current = user?.uid;
 
-  const loadData = useCallback(async () => {
+  const load = useCallback(async () => {
     if (!user) return;
+    const uid = user.uid, id = ++requestId.current;
     setLoading(true);
-    setError(null);
-    try {
-      const [userTasks, userSessions, userNotes, userInsight] = await Promise.all([
-        getUserTasks(user.uid).catch((e) => {
-          console.warn("Analytics: Failed to fetch tasks:", e);
-          return [];
-        }),
-        getUserPomodoroSessions(user.uid).catch((e) => {
-          console.warn("Analytics: Failed to fetch sessions:", e);
-          return [];
-        }),
-        getUserNotes(user.uid).catch((e) => {
-          console.warn("Analytics: Failed to fetch notes:", e);
-          return [];
-        }),
-        getAcademicInsight(user.uid).catch(() => null),
-      ]);
-      setTasks(userTasks || []);
-      setSessions(userSessions || []);
-      setNotesCount((userNotes || []).length);
-      setAcademicScore(userInsight?.academicScore ?? null);
-    } catch (err) {
-      console.error("Failed to load analytics data:", err);
-      setError("Gagal memuat data analitik. Periksa koneksi internet Anda.");
-    } finally {
-      setLoading(false);
-    }
-  }, [user]);
+    const result = await Promise.allSettled([getUserTasks(uid), getUserPomodoroSessions(uid), getUserNotes(uid), getAcademicInsight(uid)]);
+    if (owner.current !== uid || requestId.current !== id) return;
+    const [tasks, sessions, notes, insight] = result;
+    const unavailable = result.flatMap((value, index) => value.status === "rejected" ? [["tugas", "sesi fokus", "catatan", "profil belajar"][index]] : []);
+    setSnapshot({ uid, tasks: tasks.status === "fulfilled" ? tasks.value : null, sessions: sessions.status === "fulfilled" ? sessions.value : null, notes: notes.status === "fulfilled" ? notes.value : null, insight: insight.status === "fulfilled" ? insight.value : null, unavailable });
+    setLoading(false); setToday(new Date());
+  }, [user?.uid]);
 
   useEffect(() => {
     if (authLoading) return;
-    if (!user) {
-      router.replace("/login");
-      return;
-    }
-    loadData();
-  }, [user, authLoading, router, loadData]);
+    if (!user) { router.replace("/login"); return; }
+    void load();
+    return () => { requestId.current++; };
+  }, [user?.uid, authLoading, router, load]);
+  useEffect(() => {
+    const update = () => setToday(new Date());
+    const timer = setInterval(update, 60_000);
+    window.addEventListener("focus", update);
+    return () => { clearInterval(timer); window.removeEventListener("focus", update); };
+  }, []);
 
-  // Streak & Active calculations
-  const today = useMemo(() => new Date(), []);
-  const completedSessions = useMemo(() => sessions.filter((s) => s.completed), [sessions]);
-  const pomodoroMinutesToday = useMemo(() => {
-    return completedSessions
-      .filter((s) => {
-        const d = s.startedAt?.toDate ? s.startedAt.toDate() : null;
-        return d && d.toDateString() === today.toDateString();
-      })
-      .reduce((acc, s) => acc + s.duration, 0);
-  }, [completedSessions, today]);
+  const data = snapshot?.uid === user?.uid ? snapshot : null;
+  const count = Number(period), todayKey = dateKey(today);
+  const recorded = useMemo(() => (data?.sessions || []).filter(isRecordedFocusSession).map(session => ({ session, date: sessionDate(session.startedAt), seconds: focusSeconds(session) })).filter(item => item.date && Number.isFinite(item.seconds)), [data?.sessions]);
+  const days = useMemo(() => Array.from({ length: count }, (_, index) => {
+    const date = new Date(today); date.setHours(0, 0, 0, 0); date.setDate(date.getDate() - (count - 1 - index));
+    const key = dateKey(date);
+    const entries = recorded.filter(item => item.date && dateKey(item.date) === key);
+    const screen = key === todayKey ? todaySeconds : Math.max(0, history.find(item => item.dateStr === key)?.screenTimeSeconds || 0);
+    return { date, key, entries, seconds: entries.reduce((sum, item) => sum + item.seconds, 0), full: entries.filter(item => isFullFocusSession(item.session)).length, screen };
+  }), [count, todayKey, recorded, todaySeconds, history]);
+  const selected = days.find(day => day.key === selectedDate) || days[days.length - 1];
+  const totalSeconds = days.reduce((sum, day) => sum + day.seconds, 0);
+  const fullSessions = days.reduce((sum, day) => sum + day.full, 0);
+  const focusDays = days.filter(day => day.seconds > 0).length;
+  const maximum = Math.max(60, ...days.map(day => metric === "focus" ? day.seconds : day.screen));
+  const tasks = data?.tasks;
+  const done = tasks?.filter(task => task.status === "done").length ?? 0;
+  const doing = tasks?.filter(task => task.status === "doing").length ?? 0;
+  const todo = tasks?.filter(task => task.status === "todo").length ?? 0;
+  const rate = tasks?.length ? Math.round(done / tasks.length * 100) : 0;
+  const notes = data?.notes?.filter(note => !note.isTrashed);
+  const activeNotes = notes?.filter(note => !note.isArchived).length ?? 0;
+  const archivedNotes = notes?.filter(note => note.isArchived).length ?? 0;
+  const focusReady = data?.sessions !== null && !!data;
+  const previousSeconds = useMemo(() => {
+    const first = new Date(today); first.setHours(0, 0, 0, 0); first.setDate(first.getDate() - (count * 2 - 1));
+    const end = new Date(today); end.setHours(0, 0, 0, 0); end.setDate(end.getDate() - (count - 1));
+    return recorded.filter(item => item.date && item.date >= first && item.date < end).reduce((sum, item) => sum + item.seconds, 0);
+  }, [count, todayKey, recorded]);
+  const difference = previousSeconds > 0 ? Math.round((totalSeconds - previousSeconds) / previousSeconds * 100) : null;
 
-  // Total active time today combines Screen Time (Context) + Pomodoro focus
-  const totalActiveMinutesToday = useMemo(() => {
-    return Math.max(todayMinutes, pomodoroMinutesToday);
-  }, [todayMinutes, pomodoroMinutesToday]);
-
-  // Consecutive Days Streak (Derived from screen time + focus session records)
-  const streakDays = useMemo(() => {
-    let count = 0;
-    for (let i = 0; i < 365; i++) {
-      const d = new Date(today);
-      d.setDate(d.getDate() - i);
-      const dayStr = d.toDateString();
-      const isoDateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-
-      const hasSession = sessions.some((s) => {
-        const sd = s.startedAt?.toDate ? s.startedAt.toDate() : null;
-        return sd && sd.toDateString() === dayStr && s.completed;
-      });
-
-      const hasScreenTime =
-        (i === 0 && todayMinutes > 0) ||
-        screenTimeHistory.some((h) => h.dateStr === isoDateStr && h.screenTimeSeconds >= 60);
-
-      if (hasSession || hasScreenTime) count++;
-      else if (i > 0) break;
-    }
-    return count;
-  }, [sessions, todayMinutes, screenTimeHistory, today]);
-
-  // Task metrics
-  const totalTasks = tasks.length;
-  const doneTasks = tasks.filter((t) => t.status === "done").length;
-  const completionRate = totalTasks > 0 ? Math.round((doneTasks / totalTasks) * 100) : 0;
-
-  // Holistic Productivity Score (Activity + Tasks + Notes)
-  const productivityScore = useMemo(() => {
-    const taskPart = completionRate * 0.4;
-    const activityPart = Math.min(100, (totalActiveMinutesToday / 60) * 100) * 0.35;
-    const notePart = Math.min(100, notesCount * 15) * 0.25;
-    return Math.min(100, Math.round(taskPart + activityPart + notePart));
-  }, [completionRate, totalActiveMinutesToday, notesCount]);
-
-  // 7-day Activity Chart Data (Screen Time & Focus Minutes)
-  const last7DaysData = useMemo(() => {
-    return Array.from({ length: 7 }, (_, i) => {
-      const d = new Date(today);
-      d.setDate(d.getDate() - (6 - i));
-      const dayStr = d.toDateString();
-      const isoDateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-      const dayName = d.toLocaleDateString("id-ID", { weekday: "short" });
-
-      const focusMins = completedSessions
-        .filter((s) => {
-          const sd = s.startedAt?.toDate ? s.startedAt.toDate() : null;
-          return sd && sd.toDateString() === dayStr;
-        })
-        .reduce((acc, s) => acc + s.duration, 0);
-
-      const historyItem = screenTimeHistory.find((h) => h.dateStr === isoDateStr);
-      const screenMins = i === 6 ? todayMinutes : historyItem ? Math.round(historyItem.screenTimeSeconds / 60) : 0;
-
-      const totalMins = Math.max(focusMins, screenMins);
-
-      return {
-        day: dayName,
-        date: `${d.getDate()}/${d.getMonth() + 1}`,
-        screenMins,
-        focusMins,
-        totalMins,
-      };
-    });
-  }, [today, completedSessions, screenTimeHistory, todayMinutes]);
-
-  const maxChartMins = useMemo(() => {
-    const maxVal = Math.max(...last7DaysData.map((d) => d.totalMins), 60);
-    return Math.max(60, Math.ceil(maxVal / 30) * 30);
-  }, [last7DaysData]);
-
-  if (authLoading || loading) {
-    return (
-      <DashboardShell>
-        <LoadingScreen label="Memuat Analitik..." subtext="Menghitung statistik & efisiensi belajar" />
-      </DashboardShell>
-    );
-  }
-
-  if (error) {
-    return (
-      <DashboardShell>
-        <ErrorState
-          title="Gagal Memuat Analitik"
-          message={error}
-          onRetry={loadData}
-        />
-      </DashboardShell>
-    );
-  }
-
-  return (
-    <DashboardShell>
-      <div className="space-y-6" suppressHydrationWarning>
-        {/* Header */}
-        <div className="animate-slide-up" suppressHydrationWarning>
-          <h1 className="text-2xl font-bold text-[#1F2937] tracking-tight" suppressHydrationWarning>
-            Analitik & Aktivitas Belajar
-          </h1>
-          <p className="text-sm text-gray-500 mt-1">
-            Pantau screen time, konsistensi streak, dan efisiensi penyelesaian tugasmu secara terpadu.
-          </p>
-        </div>
-
-      {/* 4 Core High-Impact Stat Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 animate-scale-in">
-        {/* 1. Screen Time & Waktu Aktif */}
-        <HighImpactCard
-          label="Screen Time Hari Ini"
-          value={formattedTodayTime}
-          sub={`${totalActiveMinutesToday} menit aktif belajar`}
-          icon={<Clock className="w-6 h-6 text-primary" />}
-          iconBg="bg-primary/10"
-          highlight
-        />
-
-        {/* 2. Study Streak */}
-        <HighImpactCard
-          label="Study Streak"
-          value={`${streakDays} Hari`}
-          sub={streakDays > 0 ? "Aktivitas belajar konsisten" : "Mulai belajar hari ini"}
-          icon={<LivingFlame streakDays={streakDays} size="sm" />}
-          iconBg="bg-orange-50"
-        />
-
-        {/* 3. Task Completion */}
-        <HighImpactCard
-          label="Tingkat Tuntas Tugas"
-          value={`${completionRate}%`}
-          sub={`${doneTasks} dari ${totalTasks} tugas selesai`}
-          icon={<CheckSquare className="w-6 h-6 text-emerald-600" />}
-          iconBg="bg-emerald-50"
-        />
-
-        {/* 4. Indeks Produktivitas */}
-        <HighImpactCard
-          label="Skor Produktivitas"
-          value={`${productivityScore}%`}
-          sub="Aktivitas + Tugas + Catatan"
-          icon={<Zap className="w-6 h-6 text-amber-500" />}
-          iconBg="bg-amber-50"
-        />
-      </div>
-
-      {/* Main Visuals Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 animate-scale-in">
-        {/* 7-Day Activity & Screen Time Chart (2 Columns) */}
-        <div className="lg:col-span-2 bg-white rounded-2xl border border-border shadow-card p-6 space-y-5">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2.5">
-              <div className="w-9 h-9 rounded-xl bg-primary/10 text-primary flex items-center justify-center font-bold">
-                <TrendingUp className="w-5 h-5" />
-              </div>
-              <div>
-                <h3 className="font-bold text-gray-800 text-sm">Tren Aktivitas & Screen Time (7 Hari)</h3>
-                <p className="text-[11px] text-gray-400">Total durasi aktif di aplikasi per hari</p>
-              </div>
-            </div>
-            <div className="text-right">
-              <span className="text-xs font-bold text-primary bg-primary-50 border border-primary-100 px-2.5 py-1 rounded-lg">
-                Hari ini: {formattedTodayTime}
-              </span>
-            </div>
-          </div>
-
-          {/* Bar Chart Visual */}
-          <div className="pt-4">
-            <div className="flex items-end justify-between gap-3 h-44 border-b border-border/70 pb-2">
-              {last7DaysData.map((item, idx) => {
-                const heightPercent = Math.max(8, Math.round((item.totalMins / maxChartMins) * 100));
-                const isToday = idx === 6;
-                return (
-                  <div key={idx} className="flex-1 flex flex-col items-center gap-2 h-full justify-end group relative">
-                    {/* Tooltip on hover */}
-                    <div className="absolute -top-9 bg-gray-900 text-white text-[10px] font-bold px-2 py-1 rounded-md opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap shadow-lg z-20">
-                      {item.totalMins} menit ({formatScreenTime(item.totalMins * 60)})
-                    </div>
-
-                    <div
-                      style={{ height: `${heightPercent}%` }}
-                      className={`w-full max-w-[36px] rounded-t-xl transition-all duration-500 shadow-sm ${
-                        isToday
-                          ? "bg-gradient-to-t from-primary to-primary-400"
-                          : item.totalMins > 0
-                          ? "bg-primary-200/80 hover:bg-primary-300"
-                          : "bg-gray-100"
-                      }`}
-                    />
-                    <span className={`text-[11px] font-bold ${isToday ? "text-primary" : "text-gray-400"}`}>
-                      {item.day}
-                    </span>
-                  </div>
-                );
-              })}
-            </div>
-
-            <div className="flex items-center justify-between text-xs text-gray-400 mt-3 font-medium">
-              <div className="flex items-center gap-4">
-                <span className="flex items-center gap-1.5">
-                  <span className="w-2.5 h-2.5 rounded-full bg-primary" /> Hari Ini
-                </span>
-                <span className="flex items-center gap-1.5">
-                  <span className="w-2.5 h-2.5 rounded-full bg-primary-200" /> Hari Sebelumnya
-                </span>
-              </div>
-              <span>Rata-rata: {Math.round(last7DaysData.reduce((a, b) => a + b.totalMins, 0) / 7)} m/hari</span>
-            </div>
-          </div>
-        </div>
-
-        {/* Ringkasan Komposisi Belajar (1 Column) */}
-        <div className="bg-white rounded-2xl border border-border shadow-card p-6 space-y-5 flex flex-col justify-between">
-          <div className="space-y-4">
-            <div className="flex items-center gap-2">
-              <Layers className="w-5 h-5 text-primary" />
-              <h3 className="font-bold text-gray-800 text-sm">Komposisi Belajar</h3>
-            </div>
-
-            <div className="space-y-3.5 pt-1">
-              {/* Screen Time Today */}
-              <div className="flex items-center justify-between p-3 rounded-xl bg-gray-50 border border-border/60">
-                <div className="flex items-center gap-2.5">
-                  <Clock className="w-4 h-4 text-primary" />
-                  <span className="text-xs font-semibold text-gray-700">Screen Time</span>
-                </div>
-                <span className="text-xs font-bold text-primary font-mono">{formattedTodayTime}</span>
-              </div>
-
-              {/* Pomodoro Focus Sessions */}
-              <div className="flex items-center justify-between p-3 rounded-xl bg-gray-50 border border-border/60">
-                <div className="flex items-center gap-2.5">
-                  <Flame className="w-4 h-4 text-orange-500" />
-                  <span className="text-xs font-semibold text-gray-700">Sesi Pomodoro Selesai</span>
-                </div>
-                <span className="text-xs font-bold text-gray-800 font-mono">{completedSessions.length} sesi</span>
-              </div>
-
-              {/* Saved Notes */}
-              <div className="flex items-center justify-between p-3 rounded-xl bg-gray-50 border border-border/60">
-                <div className="flex items-center gap-2.5">
-                  <FileText className="w-4 h-4 text-blue-500" />
-                  <span className="text-xs font-semibold text-gray-700">Catatan Tersimpan</span>
-                </div>
-                <span className="text-xs font-bold text-gray-800 font-mono">{notesCount} catatan</span>
-              </div>
-
-              {/* Academic ML Insight */}
-              <div className="flex items-center justify-between p-3 rounded-xl bg-gray-50 border border-border/60">
-                <div className="flex items-center gap-2.5">
-                  <Brain className="w-4 h-4 text-purple-500" />
-                  <span className="text-xs font-semibold text-gray-700">Skor Evaluasi ML</span>
-                </div>
-                <span className="text-xs font-bold text-purple-700 font-mono">
-                  {academicScore !== null ? `${academicScore}%` : "Tersedia"}
-                </span>
-              </div>
-            </div>
-          </div>
-
-          <div className="pt-3 border-t border-border/60">
-            <p className="text-[11px] text-gray-400 text-center leading-relaxed">
-              Semua waktu yang dihabiskan untuk membaca catatan, mengatur tugas, dan sesi Pomodoro otomatis dihitung ke dalam produktivitasmu.
-            </p>
-          </div>
-        </div>
-      </div>
-    </div>
-    </DashboardShell>
-  );
+  return <DashboardShell><main className={s.page}>
+    <header className={s.header}><div><h1>Aktivitas belajar</h1><p>Lihat waktu fokus dan pekerjaan yang sudah kamu jalani.</p></div><div className={s.headerActions}><Dropdown id="analytics-period" label="Periode aktivitas" compact value={period} options={[{ value: "7", label: "7 hari terakhir" }, { value: "30", label: "30 hari terakhir" }]} onChange={value => { setPeriod(value); setSelectedDate(todayKey); }} /><button className={s.iconButton} aria-label="Perbarui data aktivitas" disabled={loading} onClick={() => void load()}><RefreshCw size={17} className={loading ? s.spin : ""} /></button></div></header>
+    {authLoading || (!data && loading) ? <div data-delayed-loading className={s.loading} role="status"><Loader2 size={24} className={s.spin} />Memuat aktivitasmu…</div> : data && <>
+      {!!data.unavailable.length && <div className={s.notice} role="alert">Data {data.unavailable.join(", ")} belum bisa dimuat. Angkanya belum ditampilkan.<button disabled={loading} onClick={() => void load()}>Coba lagi <RefreshCw size={14} /></button></div>}
+      <section className={s.overview} aria-label="Ringkasan aktivitas"><div className={s.focusHero}><span className={s.overline}>Waktu fokus · {count} hari terakhir</span><h2>{focusReady ? shortDuration(totalSeconds) : "—"}</h2><p>{focusReady ? difference !== null ? difference === 0 ? `Sama dengan ${count} hari sebelumnya.` : `${Math.abs(difference)}% ${difference > 0 ? "lebih banyak" : "lebih sedikit"} dari ${count} hari sebelumnya.` : totalSeconds > 0 ? "Ada waktu yang sudah kamu luangkan untuk fokus." : "Sesi fokus pertamamu akan tercatat di sini." : "Riwayat sesi belum bisa dimuat."}</p><Link href="/pomodoro">Mulai sesi fokus <ArrowUpRight size={18} /></Link></div><div className={s.overviewStats}><div><span>Sesi selesai</span><strong>{focusReady ? fullSessions : "—"}</strong><p>Sesi yang durasinya tuntas</p></div><div><span>Hari dengan sesi fokus</span><strong>{focusReady ? focusDays : "—"}<small> / {count}</small></strong><p>Hari dengan waktu fokus tercatat</p></div><div><span>Tugas selesai</span><strong>{tasks ? done : "—"}<small>{tasks ? ` / ${tasks.length}` : ""}</small></strong><p>Seluruh tugas, di luar filter periode</p></div></div></section>
+      <div className={s.mainGrid}><section className={s.chartPanel} aria-labelledby="chart-title"><div className={s.sectionHead}><div><h2 id="chart-title">Ritme harian</h2><p>{metric === "focus" ? "Waktu dari sesi fokus yang sudah diakhiri." : "Waktu penggunaan aplikasi, terpisah dari waktu fokus."}</p></div><Dropdown id="analytics-metric" label="Data grafik" compact value={metric} options={[{ value: "focus", label: "Sesi fokus" }, { value: "app", label: "Penggunaan aplikasi" }]} onChange={setMetric} /></div>
+        {metric === "focus" && !focusReady ? <p className={s.empty}>Riwayat fokus belum tersedia. Coba muat ulang.</p> : <><div className={s.chartScroll}><div className={s.chart} data-long={count > 7} aria-label={`Grafik ${metric === "focus" ? "waktu fokus" : "penggunaan aplikasi"} ${count} hari`}>{days.map(day => {
+          const seconds = metric === "focus" ? day.seconds : day.screen;
+          return <button className={s.day} type="button" key={day.key} data-selected={selected.key === day.key} data-today={day.key === todayKey} aria-pressed={selected.key === day.key} aria-label={`${day.date.toLocaleDateString("id-ID", { day: "numeric", month: "long" })}: ${formatFocusDuration(seconds)}`} onClick={() => setSelectedDate(day.key)}><span className={s.barArea}><i className={s.bar} data-empty={seconds === 0} style={{ "--bar-height": `${seconds / maximum * 100}%` } as CSSProperties} /></span><span className={s.dayLabel}>{count === 7 ? day.date.toLocaleDateString("id-ID", { weekday: "short" }) : day.date.getDate()}</span></button>;
+        })}</div></div><div className={s.chartFooter}><span>{days[0].date.toLocaleDateString("id-ID", { day: "numeric", month: "short" })} — {today.toLocaleDateString("id-ID", { day: "numeric", month: "short" })}</span><span>Rata-rata {shortDuration(days.reduce((sum, day) => sum + (metric === "focus" ? day.seconds : day.screen), 0) / count)} / hari</span></div></>}
+        <div className={s.dayDetail}><div><span>{selected.date.toLocaleDateString("id-ID", { weekday: "long", day: "numeric", month: "long" })}</span><strong>{metric === "focus" ? focusReady ? formatFocusDuration(selected.seconds) : "—" : formatScreenTime(selected.screen)}</strong></div><p>{metric === "focus" ? focusReady ? `${selected.full} sesi selesai${selected.entries.some(item => !isFullFocusSession(item.session)) ? " · waktu dari sesi singkat juga tercatat" : ""}` : "Data sesi belum tersedia" : "Tidak dihitung sebagai waktu belajar."}</p></div>
+        <p className={s.footnote}>Waktu jeda tidak dihitung. Sesi dikelompokkan menurut tanggal mulai; sesi yang masih berjalan belum masuk ringkasan.</p>
+      </section><aside className={s.taskPanel}><div className={s.sectionHead}><div><h2>Keadaan tugasmu</h2><p>Seluruh tugas yang tersimpan.</p></div><Link href="/tasks" aria-label="Buka tugas"><ArrowUpRight size={18} /></Link></div>{tasks ? <><div className={s.taskRate}><strong>{rate}<small>%</small></strong><span>{done} dari {tasks.length} tugas selesai</span></div><div className={s.taskTrack} aria-hidden="true">{tasks.length > 0 && <><i style={{ width: `${done / tasks.length * 100}%` }} /><i style={{ width: `${doing / tasks.length * 100}%` }} /><i style={{ width: `${todo / tasks.length * 100}%` }} /></>}</div><ul className={s.taskLegend}><li><span><i />Selesai</span><strong>{done}</strong></li><li><span><i />Dikerjakan</span><strong>{doing}</strong></li><li><span><i />Belum dimulai</span><strong>{todo}</strong></li></ul><Link href="/tasks" className={s.inlineLink}>{tasks.length ? "Lanjutkan tugasmu" : "Buat tugas pertama"}<ArrowRight size={17} /></Link></> : <p className={s.empty}>Data tugas belum bisa dimuat.</p>}</aside></div>
+      <section className={s.lowerGrid}><article className={s.notesPanel}><div className={s.sectionHead}><div><h2>Catatan yang kamu simpan</h2><p>Jumlah saat ini, di luar filter periode.</p></div><BookOpen size={20} /></div><div className={s.noteCount}><strong>{notes ? notes.length : "—"}</strong><span>catatan</span></div><div className={s.noteFacts}><span>{notes ? `${activeNotes} aktif` : "Data belum tersedia"}</span>{notes && <span>{archivedNotes} diarsipkan</span>}</div><Link href="/notes" className={s.inlineLink}>Buka catatan <ArrowRight size={17} /></Link></article>
+        <article className={s.profilePanel}><span className={s.overline}>Dari jawaban profil</span><h2>{data.insight?.headline || "Kenali kebiasaan belajarmu"}</h2><p>{data.insight?.recommendation || "Profil membantu mengenali kebiasaan. Hasilnya terpisah dari aktivitas yang tercatat di halaman ini."}</p>{data.insight && <span className={s.profileScore}>Skor kebiasaan {data.insight.academicScore}/100 · bukan nilai ujian</span>}<Link href={data.insight ? "/insight" : "/assessment"} className={s.inlineLink}>{data.insight ? "Lihat pola belajar" : "Isi atau perbarui profil"}<ArrowRight size={17} /></Link></article></section>
+      <section className={s.sessions}><div className={s.sectionHead}><div><h2>Sesi terbaru</h2><p>Sesi yang tercatat dalam {count} hari terakhir.</p></div><Link href="/pomodoro">Buka sesi fokus <ArrowUpRight size={17} /></Link></div>{!focusReady ? <p className={s.empty}>Riwayat sesi belum bisa dimuat.</p> : days.flatMap(day => day.entries).length === 0 ? <div className={s.emptySession}><Timer size={23} /><p>Belum ada sesi di periode ini. Mulai dari durasi yang nyaman untukmu.</p><Link href="/pomodoro">Mulai fokus <ArrowRight size={16} /></Link></div> : <ul className={s.sessionList}>{days.flatMap(day => day.entries).sort((a, b) => (b.date?.getTime() || 0) - (a.date?.getTime() || 0)).slice(0, 5).map(item => <li key={item.session.id}><span className={s.sessionIcon}>{isFullFocusSession(item.session) ? <Check size={17} /> : <Timer size={17} />}</span><div><strong>{item.session.taskTitle || "Fokus mandiri"}</strong><span>{item.date?.toLocaleDateString("id-ID", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })} · {isFullFocusSession(item.session) ? "Selesai" : item.session.outcome === "reset" ? "Direset" : "Diakhiri lebih awal"}</span></div><span className={s.sessionDuration}>{formatFocusDuration(item.seconds)}</span></li>)}</ul>}</section>
+      <details className={s.explanation}><summary>Cara membaca aktivitas ini</summary><p>Waktu fokus berasal dari durasi sesi yang tercatat, termasuk sesi yang diakhiri lebih awal atau direset. Jumlah sesi selesai hanya menghitung sesi yang tuntas. Hari dengan sesi fokus menunjukkan aktivitas dalam periode pilihan, bukan streak.</p><p>Penggunaan aplikasi tidak membuktikan bahwa kamu sedang belajar. Data ini ditampilkan terpisah dan tidak digabungkan menjadi skor produktivitas. Tugas dan catatan menunjukkan keadaan saat ini, bukan jumlah yang selesai atau dibuat dalam periode pilihan.</p></details>
+    </>}
+  </main></DashboardShell>;
 }
