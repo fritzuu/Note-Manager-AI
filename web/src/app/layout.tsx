@@ -3,6 +3,7 @@ import { Inter } from "next/font/google";
 import "./globals.css";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { PomodoroProvider } from "@/contexts/PomodoroContext";
+import { WorkspaceFrame } from "@/components/layout/WorkspaceFrame";
 import { ScreenTimeProvider } from "@/contexts/ScreenTimeContext";
 
 const inter = Inter({
@@ -67,7 +68,7 @@ export default function RootLayout({
         <AuthProvider>
           <PomodoroProvider>
             <ScreenTimeProvider>
-              {children}
+              <WorkspaceFrame>{children}</WorkspaceFrame>
             </ScreenTimeProvider>
           </PomodoroProvider>
         </AuthProvider>

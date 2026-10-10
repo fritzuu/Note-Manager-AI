@@ -1,0 +1,19 @@
+.screen { width: 100%; min-height: calc(100svh - 140px); flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 32px 24px; text-align: center; color: #193d32; animation: appear .22s ease .2s both; }
+.fullHeight { min-height: 100svh; }
+.mark { position: relative; width: 112px; height: 112px; display: grid; place-items: center; margin-bottom: 28px; }
+.logo { width: 78px; height: 78px; display: grid; place-items: center; border-radius: 50%; background: #edf1e4; box-shadow: inset 0 1px 0 #ffffffcc; animation: breathe 3s ease-in-out infinite; }
+.logo img { display: block; width: 46px; height: auto; }
+.orbit, .innerOrbit { position: absolute; inset: 0; border: 1px solid #b5c7a633; border-radius: 50%; }
+.orbit::after { content: ''; position: absolute; inset: -1px; border: 1.5px solid transparent; border-top-color: #789566; border-right-color: #78956633; border-radius: 50%; }
+.orbit { animation: orbit 3.2s linear infinite; }
+.innerOrbit { inset: 8px; border-color: #b5c7a622; border-bottom-color: #b5c7a8; animation: orbit 4.8s linear infinite reverse; }
+.satellite { position: absolute; width: 7px; height: 7px; border-radius: 50%; background: #db9a6c; top: 5px; left: calc(50% - 3.5px); transform-origin: 3.5px 51px; animation: orbit 3.2s linear infinite; }
+.label { margin: 0; font-family: var(--font-inter), Arial, sans-serif; font-size: 17px; line-height: 1.5; font-weight: 500; letter-spacing: -.025em; }
+.subtext { margin: 8px 0 0; max-width: 300px; color: #7b8877; font-family: var(--font-inter), Arial, sans-serif; font-size: 14px; line-height: 1.6; }
+.track { position: relative; width: 96px; height: 3px; border-radius: 10px; overflow: hidden; margin-top: 24px; background: #dce5d1; }
+.track > span { position: absolute; width: 42px; height: 100%; border-radius: inherit; background: #65805a; animation: flow 1.8s cubic-bezier(.45,0,.55,1) infinite; }
+@keyframes orbit { to { transform: rotate(360deg); } }
+@keyframes breathe { 0%, 100% { transform: scale(1); } 50% { transform: scale(.96); } }
+@keyframes flow { from { transform: translateX(-44px); } to { transform: translateX(100px); } }
+@keyframes appear { from { opacity: 0; } to { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .logo, .orbit, .innerOrbit, .satellite, .track > span { animation: none; } .screen { animation: appear 1ms linear .2s both; } .track > span { left: 27px; } }
