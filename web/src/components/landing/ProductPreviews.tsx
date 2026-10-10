@@ -1,21 +1,19 @@
 "use client";
 
 import { useEffect, useRef, useState, type MouseEvent, type KeyboardEvent, type RefObject } from "react";
-import dynamic from "next/dynamic";
 import Image from "next/image";
 import { Timestamp } from "firebase/firestore";
 import { AnimatePresence, motion, useInView, useReducedMotion } from "framer-motion";
-import { ArrowLeft, ArrowRight, ArrowUpRight, Bell, ChevronLeft, ChevronRight, BookOpen, Brain, Check, CheckSquare, ChevronDown, Coffee, FileText, Flame, GripVertical, LayoutDashboard,  MessageSquare, MousePointer2, Pause, Play, RotateCcw, Search, Send, SlidersHorizontal, Sparkles, Star, Timer } from "lucide-react";
+import { ArrowRight, ArrowUpRight, Bell, ChevronLeft, ChevronRight, BookOpen, Brain, CheckSquare, ChevronDown, Coffee, FileText, Flame, LayoutDashboard,  MessageSquare, MousePointer2, Pause, Play, RotateCcw, SlidersHorizontal, Timer } from "lucide-react";
 import { Dropdown } from "@/components/ui/Dropdown";
 import { Button } from "@/components/ui/Button";
 import { computePriorityDetailed } from "@/lib/fuzzy/inference";
 import { computePomodoroFocus } from "@/lib/pomodoroFuzzy";
 import type { AcademicInsight, NoteDocument, TaskDocument } from "@/lib/firestore";
-import { OpenNotes, OpenTasks, QuietInsight, QuietStat } from "@/components/dashboard/bento/DashboardWidgets";
+import { OpenNotes, OpenTasks, QuietStat } from "@/components/dashboard/bento/DashboardWidgets";
 import { ClockBentoWidget } from "@/components/dashboard/bento/widgets/ClockBentoWidget";
+import { NotesDemo, TasksDemo, FocusDemo, InsightDemo, AssistantDemo } from "./WorkspaceDemos";
 import n from "./native-preview.module.css";
-
-const TiptapEditor = dynamic(() => import("@/components/notes/TiptapEditor").then((module) => module.TiptapEditor), { ssr: false, loading: () => <div className={n.editorFallback} aria-hidden="true" /> });
 
 export type FeatureId = "notes" | "tasks" | "focus" | "insight" | "assistant" | "dashboard";
 const NAV: { id: FeatureId; label: string; icon: typeof Brain }[] = [
@@ -107,56 +105,14 @@ function NativeDashboard({ step, playing, stop, compact = false }: { step: numbe
   </motion.div>)}</div></div>;
 }
 
-function NativeNotes({ step, playing, compact = false, stop }: { step: number; playing: boolean; compact?: boolean; stop: () => void }) {
-  const [content, setContent] = useState(NOTE_HTML);
-  const [summaryOpen, setSummaryOpen] = useState(false);
-  const [selected, setSelected] = useState(0);
-  const [pinned, setPinned] = useState(true);
-  const reduced = useReducedMotion();
-  const editorRef = useRef<HTMLDivElement>(null);
-  const editorVisible = useInView(editorRef, { once: true });
-  const showSummary = summaryOpen || (playing && step >= 1);
-  const summary = [
-    { concepts: ["Korelasi", "Kausalitas", "Variabel ketiga"], points: ["Korelasi menunjukkan hubungan antarvariabel.", "Hubungan bukan bukti sebab-akibat.", "Periksa faktor lain sebelum menarik kesimpulan."], question: "Faktor lain apa yang bisa memengaruhi hubungan dua variabel?" },
-    { concepts: ["Metode penelitian", "Eksperimen"], points: ["Pilih metode sesuai pertanyaan penelitian.", "Jelaskan rancangan eksperimen sebelum pengamatan."], question: "Variabel apa yang akan diukur dalam eksperimenmu?" },
-    { concepts: ["Pengantar", "Studi kasus", "Kesimpulan"], points: ["Kenalkan topik di bagian pengantar.", "Gunakan studi kasus sebelum menarik kesimpulan."], question: "Apa satu pesan utama yang ingin disampaikan?" },
-  ][selected];
-  function selectNote(index: number) { stop(); setSelected(index); setContent(NOTES[index].content); setSummaryOpen(false); }
-  return <div className={`${n.notesWorkspace} ${compact ? n.notesCompact : ""}`}><aside className={n.notesSidebar}><div><p><FileText size={15} /> Catatan <span>03</span></p><span className={n.fakeSearch}><Search size={13} />Cari catatan…</span><div className={n.noteFilters}><span>Semua</span><span>Disematkan</span><span>Arsip</span></div></div>{NOTES.map((note, index) => <button key={note.id} onClick={() => selectNote(index)} className={selected === index ? n.selectedNote : ""}><strong>{note.title}{index === 0 && <Star size={11} fill="currentColor" />}</strong><span>{note.content.replace(/<[^>]+>/g, " ").replace(/&amp;/g, "&").slice(0, 75)}…</span><span>{note.tags.map((tag) => <i key={tag}>{tag}</i>)}</span></button>)}</aside><div className={n.noteMain}><div className={n.editorActions}><span><ArrowLeft size={14} />Semua catatan</span><div><button aria-label={pinned ? "Lepas pin catatan contoh" : "Pin catatan contoh"} aria-pressed={pinned} onClick={() => { stop(); setPinned(!pinned); }}><Star size={14} fill={pinned ? "#bccd9a" : "none"} color={pinned ? "#7e975e" : "#9ca3af"} /></button><button aria-label="Tampilkan ringkasan contoh" aria-pressed={showSummary} onClick={() => { stop(); setSummaryOpen(!showSummary); }}><Sparkles size={14} />Rangkuman</button></div></div><div ref={editorRef} className={n.editorPaper}><div className={n.noteTitleRow}><p>{NOTES[selected].title}</p></div><div className={n.noteTags}>{NOTES[selected].tags.map((tag) => <span key={tag}>#{tag}</span>)}</div>{compact ? <div className={n.compactEditor}><div className={n.compactToolbar} aria-hidden="true"><RotateCcw size={13} /><span>Inter</span><span>Normal</span><strong>B</strong><i>I</i><span>H₂</span><BookOpen size={14} /></div><div className={n.readonlyNote}><p>{selected === 0 ? "Korelasi menggambarkan hubungan antara dua variabel. Saat satu variabel berubah, variabel lain dapat ikut berubah." : NOTES[selected].content.replace(/<[^>]+>/g, " ")}</p>{selected === 0 && <><motion.mark initial={false} animate={{ backgroundColor: playing && step >= 1 ? "#e5edcd" : "#fffef8" }} transition={{ duration: reduced ? 0 : 0.5 }}>Hubungan ini belum tentu berarti sebab-akibat.</motion.mark><blockquote>Contoh: penjualan es krim dan penggunaan kipas sama-sama meningkat saat cuaca panas.</blockquote></>}</div></div> : editorVisible ? <TiptapEditor content={content} onChange={setContent} userId="" /> : <div className={n.editorFallback}>Editor catatan dan toolbar asli Cogniva</div>}</div></div><aside className={`${n.aiSummary} ${showSummary ? n.summaryActive : ""}`}><div><Sparkles size={15} /><span>Rangkuman catatan</span></div><div className={n.summaryBody}>{showSummary ? <motion.div initial={reduced ? false : { opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: reduced ? 0 : 0.4 }}><p>Konsep Utama</p><div className={n.conceptTags}>{summary.concepts.map((concept, index) => <motion.span key={concept} initial={reduced ? false : { opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: reduced ? 0 : index * 0.12 }}>{concept}</motion.span>)}</div><p>Poin Penting</p><ul>{summary.points.map((point, index) => <motion.li key={point} initial={reduced ? false : { opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: reduced ? 0 : 0.15 + index * 0.15 }}>{point}</motion.li>)}</ul><div className={n.practiceQuestion}><span>Pertanyaan latihan</span><p>{summary.question}</p></div></motion.div> : <div className={n.summaryEmpty}><span><Brain size={25} /></span><p>Pahami isi catatan</p><span>Lihat konsep, poin penting, dan pertanyaan latihan dari catatan ini.</span><Button size="sm" onClick={() => { stop(); setSummaryOpen(true); }} icon={<Sparkles size={14} />}>Buat rangkuman</Button></div>}</div></aside></div>;
-}
-
-function NativeTasks({ step, stop, compact = false }: { step: number; stop: () => void; compact?: boolean }) {
-  const reduced = useReducedMotion();
-  const [manualStep, setManualStep] = useState<number | null>(null);
-  const state = manualStep ?? step;
-  const location = state === 0 ? 0 : state < 3 ? 1 : 2;
-  const progress = [20, 40, 70, 100][state];
-  const task = computePriorityDetailed({ deadlineDays: 1, importance: 8, difficulty: 8, progress, academicRisk: 40 });
-  return <div className={`${n.nativeTasks} ${compact ? n.tasksCompact : ""}`}><div className={n.nativePageHeading}><div><span className={n.pageIcon}><CheckSquare size={20} /></span><div><p>Tugas</p><span>Kelola tugas, deadline, dan prioritas akademik.</span></div></div><div className={n.workspacePicker}><Dropdown compact label="Ruang tugas contoh" value="kuliah" options={[{ value: "kuliah", label: "Kuliah" }]} onChange={() => {}} /></div></div><div className={n.taskBoard}>{["Belum mulai", "Dikerjakan", "Selesai"].map((label, column) => <div key={label} className={`${n.boardColumn} ${column === 1 ? n.doingColumn : column === 2 ? n.doneColumn : ""}`}><div className={n.columnHeading}><span>{column === 2 ? <Check size={14} /> : <span className={n.columnDot} />}{label}</span><span>{column === location ? "1" : "0"}</span></div>{column === location && <motion.div layoutId={`practical-card-${compact ? "hero" : "feature"}`} transition={{ duration: reduced ? 0 : 0.65, type: "spring", bounce: 0.12 }} className={n.nativeTaskCard}><div><span className={`${n.nativePriority} ${location === 2 ? n.priorityDone : ""}`}>{location === 2 ? "Selesai" : ({ Critical: "Segera kerjakan", High: "Utamakan", Medium: "Berikutnya", Low: "Bisa nanti" }[task.priorityLevel])}</span><GripVertical size={15} /></div><p>Laporan praktikum</p><span>Susun metode, hasil pengamatan, dan pembahasan.</span><div className={n.taskProgress}><div><span>Progres</span><strong>{progress}%</strong></div><div><motion.span initial={false} animate={{ width: `${progress}%` }} transition={{ duration: reduced ? 0 : 0.55 }} /></div></div><div className={n.cardDeadline}><span><Timer size={12} />Besok</span><button onClick={() => { stop(); setManualStep((state + 1) % 4); }} aria-label="Lanjutkan progres tugas contoh">{location === 2 ? "Ulangi demo" : "Lanjutkan"}<ArrowRight size={12} /></button></div></motion.div>}{column !== location && <div className={n.boardEmpty}>{column === 2 ? "Tugas selesai muncul di sini" : "Belum ada tugas"}</div>}</div>)}</div><div className={n.taskHint}><Button variant="outline" size="sm" onClick={() => { stop(); setManualStep(0); }} icon={<RotateCcw size={13} />}>Ulangi demo</Button></div></div>;
-}
-
-function NativeInsight({ step }: { step: number }) {
-  const reduced = useReducedMotion();
-  return <div className={n.nativeInsight}><div className={n.nativePageHeading}><div><div><p>Pola belajar</p><span>Kenali kebiasaanmu, lalu pilih satu langkah berikutnya.</span></div></div></div><div className={n.insightHero}><span>Dari profil contoh</span><h2>Bangun ritme belajar mandiri</h2><p>{INSIGHT.recommendation}</p></div><div className={n.insightStrengths}>{[{ title: "Yang sudah terjaga", body: INSIGHT.strengths[0], icon: Check }, { title: "Yang bisa diperbaiki", body: INSIGHT.weaknesses[0], icon: SlidersHorizontal }].map(({ title, body, icon: Icon }, index) => <motion.div key={title} initial={false} animate={{ opacity: !reduced && step === index ? .85 : 1 }}><Icon size={19} color="#80976c" /><p>{title}</p><span>{body}</span></motion.div>)}</div><div className={n.originalInsightWidget}><QuietInsight insight={INSIGHT} /></div></div>;
-}
-
-function NativeAssistant({ step, playing, stop }: { step: number; playing: boolean; stop: () => void }) {
-  const [choice, setChoice] = useState<number | null>(null);
-  const reduced = useReducedMotion();
-  const current = choice ?? (step >= 2 ? 1 : 0);
-  const question = current === 0 ? "Jelaskan korelasi dengan contoh sehari-hari." : "Bantu aku menguji pemahaman tentang kausalitas.";
-  const answer = current === 0 ? "Penjualan es krim dan penggunaan kipas bisa sama-sama meningkat saat cuaca panas. Keduanya berkorelasi, tetapi membeli es krim tidak menyebabkan kipas menyala. Cuaca adalah faktor lain yang perlu diperhatikan." : "Jika mahasiswa yang lebih sering ke perpustakaan punya nilai lebih tinggi, apakah perpustakaan pasti penyebabnya? Pertimbangkan kebiasaan belajar atau motivasi sebagai faktor lain yang mungkin memengaruhi keduanya.";
-  const revealed = !playing || step >= 1 || choice !== null;
-  return <div className={n.nativeAssistant}><div className={n.nativePageHeading}><div><span className={n.pageIcon}><BookOpen size={20} /></span><div><p>Asisten</p><span>Tanya jawab dengan konteks catatan belajarmu.</span></div></div></div><div className={n.assistantLayout}><aside><p><BookOpen size={15} />Konteks catatan</p><div className={n.contextCard}><FileText size={16} /><strong>Korelasi & kausalitas</strong><span>Statistika · Pertemuan 04</span></div><p>Pertanyaan cepat</p>{["Jelaskan konsep tersulit", "Buat pertanyaan latihan"].map((prompt, index) => <button key={prompt} className={index === 0 ? n.purplePrompt : n.bluePrompt} onClick={() => { stop(); setChoice(index); }}><Sparkles size={14} />{prompt}<ArrowUpRight size={12} /></button>)}</aside><div className={n.chatPanel}><div className={n.assistantContext}><BookOpen size={16} /><span>Bahan belajar</span><Dropdown compact label="Bahan belajar demo" value="statistika" options={[{ value: "statistika", label: "Korelasi & kausalitas" }]} onChange={() => {}} /></div><div className={n.chatMessages}><motion.div key={question} className={n.userMessage} initial={reduced ? false : { opacity: 0, scale: 0.92, y: 12 }} animate={{ opacity: 1, scale: 1, y: 0 }}>{question}</motion.div><AnimatePresence>{revealed && <motion.div key={answer} className={n.aiMessage} initial={reduced ? false : { opacity: 0, y: 22 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={{ duration: reduced ? 0 : 0.45 }}><p>{answer}</p></motion.div>}</AnimatePresence></div><div className={n.chatComposer}><span>Pilih pertanyaan contoh di samping</span><span><Send size={15} /></span></div></div></div></div>;
-}
-
 function NativeScreen({ id, step, playing, stop, compact = false }: { id: FeatureId; step: number; playing: boolean; stop: () => void; compact?: boolean }) {
-  if (id === "dashboard") return <NativeDashboard step={step} playing={playing} stop={stop} compact={compact} />;
-  if (id === "notes") return <NativeNotes step={step} playing={playing} compact={compact} stop={stop} />;
-  if (id === "tasks") return <NativeTasks step={step} stop={stop} compact={compact} />;
-  if (id === "focus") return <div className={n.focusPage}><div className={n.nativePageHeading}><div><span className={n.pageIcon}><Timer size={20} /></span><div><p>Sesi fokus</p><span>Satu tugas, satu sesi fokus.</span></div></div></div><NativeFocus compact={compact} step={step} playing={playing} /></div>;
-  if (id === "insight") return <NativeInsight step={step} />;
-  return <NativeAssistant step={step} playing={playing} stop={stop} />;
+  const props = { step, playing, stop, compact };
+  if (id === "dashboard") return <NativeDashboard {...props} />;
+  if (id === "notes") return <NotesDemo seed={NOTES} {...props} />;
+  if (id === "tasks") return <TasksDemo {...props} />;
+  if (id === "focus") return <FocusDemo {...props} />;
+  if (id === "insight") return <InsightDemo data={INSIGHT} {...props} />;
+  return <AssistantDemo seed={NOTES} {...props} />;
 }
 
 function NativeShell({ id, onNavigate, step, playing, stop, compact = false }: { id: FeatureId; onNavigate: (id: FeatureId) => void; step: number; playing: boolean; stop: () => void; compact?: boolean }) {
