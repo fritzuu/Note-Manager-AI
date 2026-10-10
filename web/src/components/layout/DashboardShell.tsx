@@ -1,405 +1,170 @@
 "use client";
 
-import React, { useState, useEffect, useRef } from "react";
+import { createContext, useContext, useEffect, useRef, useState, useId, type ReactNode } from "react";
 import Link from "next/link";
+import { createPortal } from "react-dom";
 import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
-import {
-  LayoutDashboard,
-  FileText,
-  MessageSquare,
-  Brain,
-  TrendingUp,
-  Settings,
-  Sparkles,
-  LogOut,
-  Menu,
-  X,
-  CheckSquare,
-  Timer,
-  ChevronUp,
-  Key,
-  ShieldCheck,
-  Cpu,
-  User,
-  Edit3,
-  BookOpen,
-  MailWarning,
-  RefreshCw,
-} from "lucide-react";
+import { LayoutDashboard, FileText, MessageSquare, Brain, TrendingUp, Settings, LogOut, Menu, X, CheckSquare, Timer, ChevronUp, Key, User, BookOpen, ChevronLeft, ChevronRight } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { signOut } from "@/lib/auth";
 import { getCustomApiKey } from "@/lib/aiConfig";
 import { AiApiKeyModal } from "@/components/modals/AiApiKeyModal";
 import { EmailVerificationGatekeeper } from "@/components/auth/EmailVerificationGatekeeper";
+import ds from "./dashboard-shell.module.css";
 
-interface DashboardShellProps {
-  children: React.ReactNode;
-  fullWidth?: boolean;
+const navigation = [
+  { label: "Ruangmu", items: [
+    { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
+    { name: "Catatan", href: "/notes", icon: FileText },
+    { name: "Tugas", href: "/tasks", icon: CheckSquare },
+    { name: "Sesi fokus", href: "/pomodoro", icon: Timer },
+  ] },
+  { label: "Belajar", items: [
+    { name: "Asisten", href: "/assistant", icon: MessageSquare },
+    { name: "Pola belajar", href: "/insight", icon: Brain },
+    { name: "Aktivitas", href: "/analytics", icon: TrendingUp },
+  ] },
+];
+
+const ShellContext = createContext(false);
+type ShellProps = { children: ReactNode; fullWidth?: boolean };
+
+// Pages can still declare a shell, while navigation keeps one shared instance alive.
+export function DashboardShell({ children, fullWidth = false }: ShellProps) {
+  const hasShell = useContext(ShellContext);
+  if (hasShell) return <>{children}</>;
+  return <ShellContext.Provider value={true}><DashboardShellFrame fullWidth={fullWidth}>{children}</DashboardShellFrame></ShellContext.Provider>;
 }
 
-export function DashboardShell({ children, fullWidth = false }: DashboardShellProps) {
+function DashboardShellFrame({ children, fullWidth = false }: ShellProps) {
   const { user, userDoc } = useAuth();
   const pathname = usePathname();
   const router = useRouter();
+  const accountId = useId();
+  const sidebarId = useId();
+  const [collapsed, setCollapsed] = useState(false);
+  const [tooltip, setTooltip] = useState<{ label: string; left: number; top: number } | null>(null);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [apiKeyModalOpen, setApiKeyModalOpen] = useState(false);
   const [hasCustomApiKey, setHasCustomApiKey] = useState(false);
   const [mounted, setMounted] = useState(false);
-  const userMenuRef = useRef<HTMLDivElement>(null);
+  const [signingOut, setSigningOut] = useState(false);
+  const [signOutError, setSignOutError] = useState("");
+  const accountRef = useRef<HTMLDivElement>(null);
+  const accountButtonRef = useRef<HTMLButtonElement>(null);
+  const sidebarRef = useRef<HTMLElement>(null);
+  const drawerCloseRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     setMounted(true);
-    const updateKeyStatus = () => {
-      setHasCustomApiKey(!!getCustomApiKey());
-    };
-    updateKeyStatus();
-    window.addEventListener("mindflow-api-key-updated", updateKeyStatus);
-    return () => window.removeEventListener("mindflow-api-key-updated", updateKeyStatus);
+    try { setCollapsed(localStorage.getItem("cogniva_sidebar_collapsed") === "true"); } catch { /* Sidebar stays usable without browser storage. */ }
+    const update = () => setHasCustomApiKey(!!getCustomApiKey());
+    update();
+    window.addEventListener("mindflow-api-key-updated", update);
+    return () => window.removeEventListener("mindflow-api-key-updated", update);
   }, []);
 
-  // Close dropdown menu when clicking outside
+  useEffect(() => { setMobileMenuOpen(false); setUserMenuOpen(false); setTooltip(null); }, [pathname]);
+
   useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (userMenuRef.current && !userMenuRef.current.contains(event.target as Node)) {
-        setUserMenuOpen(false);
-      }
+    if (!userMenuOpen) return;
+    const outside = (event: PointerEvent) => { if (!accountRef.current?.contains(event.target as Node)) setUserMenuOpen(false); };
+    const escape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") { event.preventDefault(); setUserMenuOpen(false); accountButtonRef.current?.focus(); }
     };
-    if (userMenuOpen) {
-      document.addEventListener("mousedown", handleClickOutside);
-    }
-    return () => document.removeEventListener("mousedown", handleClickOutside);
+    document.addEventListener("pointerdown", outside);
+    document.addEventListener("keydown", escape);
+    return () => { document.removeEventListener("pointerdown", outside); document.removeEventListener("keydown", escape); };
   }, [userMenuOpen]);
 
+  useEffect(() => {
+    if (!mobileMenuOpen) return;
+    const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const overflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    drawerCloseRef.current?.focus();
+    const keydown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        if (accountRef.current?.querySelector('[data-account-panel]')) return;
+        setMobileMenuOpen(false); return;
+      }
+      if (event.key !== "Tab") return;
+      const elements = Array.from(sidebarRef.current?.querySelectorAll<HTMLElement>('a[href], button:not(:disabled), [tabindex="0"]') || []).filter(element => element.getClientRects().length > 0);
+      const first = elements[0], last = elements[elements.length - 1];
+      if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
+      else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
+    };
+    const desktop = window.matchMedia("(min-width: 768px)");
+    const onDesktop = () => { if (desktop.matches) setMobileMenuOpen(false); };
+    desktop.addEventListener("change", onDesktop);
+    document.addEventListener("keydown", keydown);
+    return () => { document.body.style.overflow = overflow; document.removeEventListener("keydown", keydown); desktop.removeEventListener("change", onDesktop); previous?.focus(); };
+  }, [mobileMenuOpen]);
+
+  useEffect(() => {
+    if (!tooltip) return;
+    const hide = () => setTooltip(null);
+    const escape = (event: KeyboardEvent) => { if (event.key === "Escape") hide(); };
+    document.addEventListener("keydown", escape);
+    window.addEventListener("scroll", hide, true);
+    window.addEventListener("resize", hide);
+    return () => { document.removeEventListener("keydown", escape); window.removeEventListener("scroll", hide, true); window.removeEventListener("resize", hide); };
+  }, [tooltip]);
+
+  const toggleSidebar = () => {
+    const next = !collapsed;
+    setCollapsed(next); setUserMenuOpen(false); setTooltip(null);
+    try { localStorage.setItem("cogniva_sidebar_collapsed", String(next)); } catch { /* Keep the current choice for this page. */ }
+  };
+  const showLabel = (element: HTMLElement, label: string) => {
+    if (!collapsed || !window.matchMedia("(min-width: 768px)").matches) return;
+    const rect = element.getBoundingClientRect();
+    setTooltip({ label, left: rect.right + 16, top: rect.top + rect.height / 2 });
+  };
+  const closeNavigation = () => { setMobileMenuOpen(false); setUserMenuOpen(false); };
+  const active = (href: string) => pathname === href || pathname.startsWith(href + "/");
+  const name = mounted ? userDoc?.name || user?.displayName || "Akunmu" : "Akunmu";
+  const detail = mounted ? userDoc?.major || user?.email || "Pengaturan akun" : "Pengaturan akun";
+  const avatar = mounted ? userDoc?.avatarUrl || user?.photoURL : null;
+  const avatarContent = avatar ? <Image src={avatar} alt="" fill sizes="40px" className={ds.avatarImage} unoptimized /> : <span>{Array.from(name.trim())[0]?.toUpperCase() || "U"}</span>;
   const handleSignOut = async () => {
-    await signOut();
-    document.cookie = "auth-token=; path=/; max-age=0";
-    router.push("/");
+    if (signingOut) return;
+    setSigningOut(true); setSignOutError("");
+    try {
+      await signOut();
+      document.cookie = "auth-token=; path=/; max-age=0";
+      document.cookie = "__session=; path=/; max-age=0";
+      closeNavigation(); router.push("/");
+    } catch { setSignOutError("Belum bisa keluar. Coba lagi."); setSigningOut(false); }
   };
 
-  // Main navigation items (Settings is in User Profile Menu)
-  const navItems = [
-    { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
-    { name: "Notes", href: "/notes", icon: FileText },
-    { name: "Tasks", href: "/tasks", icon: CheckSquare },
-    { name: "AI Assistant", href: "/assistant", icon: MessageSquare },
-    { name: "Pomodoro", href: "/pomodoro", icon: Timer },
-    { name: "Academic Insight", href: "/insight", icon: Brain },
-    { name: "Analytics", href: "/analytics", icon: TrendingUp },
-  ];
-
-  const firstName = mounted
-    ? userDoc?.name?.split(" ")[0] || user?.displayName?.split(" ")[0] || "Student"
-    : "Student";
-  const displayName = mounted
-    ? userDoc?.name || user?.displayName || "Student"
-    : "Student";
-  const email = mounted ? user?.email || "" : "";
-  const avatarUrl = mounted ? userDoc?.avatarUrl || user?.photoURL || null : null;
-  const major = mounted ? userDoc?.major || null : null;
-
-  const userDropdownMenu = (
-    <div
-      ref={userMenuRef}
-      className="absolute bottom-full left-4 right-4 mb-2 bg-white rounded-3xl border border-border shadow-2xl p-2.5 z-50 animate-scale-in space-y-1.5"
-    >
-      {/* User Header with Avatar & Quick Edit */}
-      <div className="p-3 bg-gradient-to-br from-primary/5 via-primary/10 to-accent/10 rounded-2xl border border-primary/15 flex items-center justify-between gap-3">
-        <div className="flex items-center gap-3 min-w-0">
-          <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-primary to-primary-600 flex items-center justify-center text-white font-bold text-base shrink-0 shadow-sm relative overflow-hidden border border-white/60">
-            {avatarUrl ? (
-              <Image
-                src={avatarUrl}
-                alt="Avatar"
-                fill
-                className="object-cover"
-                unoptimized
-              />
-            ) : (
-              firstName[0]
-            )}
-          </div>
-          <div className="min-w-0">
-            <p className="text-xs font-bold text-gray-900 truncate">{displayName}</p>
-            <p className="text-[10px] text-gray-500 truncate">{major || email}</p>
-          </div>
+  return <div className={ds.shell}>
+    {tooltip && mounted && createPortal(<div role="tooltip" className={ds.navTooltip} style={{ left: tooltip.left, top: tooltip.top }}>{tooltip.label}</div>, document.body)}
+    <AiApiKeyModal isOpen={apiKeyModalOpen} onClose={() => setApiKeyModalOpen(false)} />
+    {mobileMenuOpen && <div className={ds.drawerBackdrop} onClick={closeNavigation} aria-hidden="true" />}
+    <aside ref={sidebarRef} id={sidebarId} className={ds.sidebar} data-collapsed={collapsed} data-open={mobileMenuOpen} role={mobileMenuOpen ? "dialog" : undefined} aria-modal={mobileMenuOpen ? true : undefined} aria-label="Navigasi utama">
+      <div className={ds.brandRow}><Link href="/dashboard" onClick={closeNavigation} aria-label="Cogniva, buka dashboard"><Image src="/brand/cogniva/cogniva-horizontal-color.svg" alt="Cogniva" width={146} height={42} className={ds.brand} priority /><Image src="/brand/cogniva/cogniva-symbol-color.svg" alt="" width={32} height={32} className={ds.brandSymbol} /></Link><button ref={drawerCloseRef} type="button" className={ds.drawerClose} onClick={closeNavigation} aria-label="Tutup navigasi"><X size={20} /></button></div>
+      <button type="button" className={ds.collapseButton} onClick={toggleSidebar} aria-label={collapsed ? "Buka sidebar" : "Ringkas sidebar"} aria-expanded={!collapsed} aria-controls={sidebarId}>{collapsed ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}</button>
+      <nav className={ds.navigation} aria-label="Halaman">{navigation.map(group => <div key={group.label} className={ds.navGroup}><p className={ds.groupLabel}>{group.label}</p>{group.items.map(item => { const Icon = item.icon; return <Link key={item.href} href={item.href} aria-current={active(item.href) ? "page" : undefined} className={ds.navLink} aria-label={item.name} onMouseEnter={event => showLabel(event.currentTarget, item.name)} onMouseLeave={() => setTooltip(null)} onFocus={event => showLabel(event.currentTarget, item.name)} onBlur={() => setTooltip(null)} onClick={closeNavigation}><Icon size={19} strokeWidth={1.65} /><span>{item.name}</span>{active(item.href) && <i aria-hidden="true" />}</Link>; })}</div>)}</nav>
+      <div className={ds.sidebarFooter}>
+        <Link href="/settings" className={ds.navLink} aria-current={active("/settings") ? "page" : undefined} aria-label="Pengaturan" onMouseEnter={event => showLabel(event.currentTarget, "Pengaturan")} onMouseLeave={() => setTooltip(null)} onFocus={event => showLabel(event.currentTarget, "Pengaturan")} onBlur={() => setTooltip(null)} onClick={closeNavigation}><Settings size={19} strokeWidth={1.65} /><span>Pengaturan</span></Link>
+        <div ref={accountRef} className={ds.account}>
+          {userMenuOpen && <div id={accountId} data-account-panel className={ds.accountPanel}>
+            <div className={ds.accountHeading}><strong>{name}</strong><span>{mounted ? user?.email : ""}</span></div>
+            <Link href="/settings" onClick={closeNavigation}><User size={17} /><span>Profil</span></Link>
+            <Link href="/assessment" onClick={closeNavigation}><BookOpen size={17} /><span>Gaya belajar<small>{userDoc?.assessmentCompleted ? "Sudah diisi" : "Belum diisi"}</small></span></Link>
+            <button type="button" onClick={() => { closeNavigation(); setApiKeyModalOpen(true); }}><Key size={17} /><span>Koneksi asisten<small>{hasCustomApiKey ? "Key pribadi" : "Koneksi bawaan"}</small></span></button>
+            <div className={ds.signOut}><button type="button" disabled={signingOut} onClick={handleSignOut}><LogOut size={17} /><span>{signingOut ? "Keluar…" : "Keluar"}</span></button>{signOutError && <p role="alert">{signOutError}</p>}</div>
+          </div>}
+          <button ref={accountButtonRef} type="button" className={ds.accountButton} aria-expanded={userMenuOpen} aria-controls={userMenuOpen ? accountId : undefined} aria-label={`Menu akun ${name}`} onClick={() => { setTooltip(null); setUserMenuOpen(previous => !previous); }}><span className={ds.avatar}>{avatarContent}</span><span className={ds.accountText}><strong>{name}</strong><span>{detail}</span></span><ChevronUp size={16} className={ds.accountChevron} data-open={userMenuOpen} /></button>
         </div>
-
-        <Link
-          href="/settings"
-          onClick={() => setUserMenuOpen(false)}
-          className="p-2 bg-white hover:bg-primary hover:text-white text-gray-600 rounded-xl transition-all shadow-xs border border-border shrink-0 cursor-pointer"
-          title="Ubah Profil & Foto"
-        >
-          <Edit3 className="w-3.5 h-3.5" />
-        </Link>
       </div>
-
-      {/* Menu Options */}
-      <div className="py-1 space-y-1">
-        {/* Quick Profile & Avatar Edit */}
-        <Link
-          href="/settings"
-          onClick={() => {
-            setUserMenuOpen(false);
-            setMobileMenuOpen(false);
-          }}
-          className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-xs font-semibold transition-colors cursor-pointer group ${
-            pathname === "/settings"
-              ? "bg-primary text-white shadow-xs"
-              : "text-gray-700 hover:bg-primary-50 hover:text-primary"
-          }`}
-        >
-          <div
-            className={`w-6 h-6 rounded-lg flex items-center justify-center transition-colors ${
-              pathname === "/settings"
-                ? "bg-white/20 text-white"
-                : "bg-gray-100 text-gray-500 group-hover:bg-primary group-hover:text-white"
-            }`}
-          >
-            <User className="w-3.5 h-3.5" />
-          </div>
-          <span>Ubah Profil & Foto</span>
-        </Link>
-
-        {/* Academic Assessment Quick Status & Calibration */}
-        <Link
-          href="/assessment"
-          onClick={() => {
-            setUserMenuOpen(false);
-            setMobileMenuOpen(false);
-          }}
-          className="w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-semibold text-gray-700 hover:bg-primary-50 hover:text-primary transition-colors cursor-pointer group"
-        >
-          <div className="flex items-center gap-2.5">
-            <div className="w-6 h-6 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center group-hover:bg-indigo-600 group-hover:text-white transition-colors">
-              <BookOpen className="w-3.5 h-3.5" />
-            </div>
-            <span>Gaya Belajar</span>
-          </div>
-          <span className="text-[10px] px-2 py-0.5 rounded-full font-bold bg-primary/10 text-primary border border-primary/20">
-            {userDoc?.assessmentCompleted ? "Terkalibrasi" : "Belum Diisi"}
-          </span>
-        </Link>
-
-        {/* Custom AI API Key Option */}
-        <button
-          onClick={() => {
-            setUserMenuOpen(false);
-            setApiKeyModalOpen(true);
-          }}
-          className="w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-semibold text-gray-700 hover:bg-primary-50 hover:text-primary transition-colors cursor-pointer group"
-        >
-          <div className="flex items-center gap-2.5">
-            <div className="w-6 h-6 rounded-lg bg-primary-50 text-primary flex items-center justify-center group-hover:bg-primary group-hover:text-white transition-colors">
-              <Key className="w-3.5 h-3.5" />
-            </div>
-            <span>AI Provider & Key</span>
-          </div>
-          <span
-            className={`text-[10px] px-2 py-0.5 rounded-full font-bold flex items-center gap-1 ${
-              hasCustomApiKey
-                ? "bg-emerald-100 text-emerald-700"
-                : "bg-gray-100 text-gray-500"
-            }`}
-          >
-            {hasCustomApiKey ? (
-              <>
-                <ShieldCheck className="w-3 h-3" /> Custom
-              </>
-            ) : (
-              <>
-                <Cpu className="w-3 h-3" /> System
-              </>
-            )}
-          </span>
-        </button>
-      </div>
-
-      {/* Logout Action */}
-      <div className="pt-1 border-t border-border/60">
-        <button
-          onClick={handleSignOut}
-          className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold text-red-600 hover:bg-red-50 transition-colors cursor-pointer"
-        >
-          <div className="w-6 h-6 rounded-lg bg-red-100/60 text-red-600 flex items-center justify-center">
-            <LogOut className="w-3.5 h-3.5" />
-          </div>
-          <span>Keluar Akun</span>
-        </button>
-      </div>
+    </aside>
+    <div className={ds.main}>
+      <header className={ds.mobileHeader}><button type="button" onClick={() => setMobileMenuOpen(true)} aria-label="Buka navigasi" aria-expanded={mobileMenuOpen}><Menu size={21} /></button><Link href="/dashboard"><Image src="/brand/cogniva/cogniva-horizontal-color.svg" alt="Cogniva" width={112} height={32} className={ds.mobileBrand} /></Link><Link href="/settings" aria-label="Pengaturan akun" className={ds.mobileAvatar}>{avatarContent}</Link></header>
+      <div className={pathname === "/dashboard" ? ds.content : fullWidth ? ds.fullWidthContent : ds.pageContent}><EmailVerificationGatekeeper>{children}</EmailVerificationGatekeeper></div>
     </div>
-  );
-
-  const sidebarContent = (
-    <div className="flex flex-col h-full bg-white border-r border-border relative">
-      {/* Brand Logo */}
-      <div className="p-6 border-b border-border flex items-center gap-2.5">
-        <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-primary to-primary-600 flex items-center justify-center shadow-md">
-          <Sparkles className="w-5 h-5 text-white animate-pulse" />
-        </div>
-        <span className="font-bold text-primary text-xl tracking-tight">MindFlow AI</span>
-      </div>
-
-      {/* Navigation Links */}
-      <nav className="flex-1 px-4 py-6 space-y-1.5 overflow-y-auto">
-        {navItems.map((item) => {
-          const Icon = item.icon;
-          const isActive = pathname === item.href || pathname.startsWith(item.href + "/");
-          return (
-            <Link
-              key={item.name}
-              href={item.href}
-              onClick={() => setMobileMenuOpen(false)}
-              className={`flex items-center gap-3.5 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-200 cursor-pointer ${
-                isActive
-                  ? "bg-primary text-white shadow-sm"
-                  : "text-gray-500 hover:text-primary hover:bg-primary-50 active:scale-[0.98]"
-              }`}
-            >
-              <Icon className={`w-5 h-5 ${isActive ? "text-white" : "text-gray-400 group-hover:text-primary"}`} />
-              {item.name}
-            </Link>
-          );
-        })}
-      </nav>
-
-      {/* User Profile Avatar / Menu Trigger at Bottom */}
-      <div className="p-4 border-t border-border bg-gray-50/50 relative" suppressHydrationWarning>
-        {userMenuOpen && userDropdownMenu}
-
-        <button
-          onClick={() => setUserMenuOpen((prev) => !prev)}
-          className={`w-full flex items-center justify-between gap-3 p-2 rounded-2xl border transition-all duration-200 cursor-pointer text-left ${
-            userMenuOpen
-              ? "bg-white border-primary shadow-md ring-2 ring-primary/10"
-              : "bg-white border-border shadow-sm hover:border-primary/50 hover:bg-primary-50/20"
-          }`}
-          suppressHydrationWarning
-        >
-          <div className="flex items-center gap-2.5 min-w-0" suppressHydrationWarning>
-            <div
-              className="w-9 h-9 rounded-full bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center text-primary font-bold text-sm shrink-0 ring-2 ring-primary/10 relative overflow-hidden"
-              suppressHydrationWarning
-            >
-              {avatarUrl ? (
-                <Image
-                  src={avatarUrl}
-                  alt="Avatar"
-                  fill
-                  className="object-cover rounded-full"
-                  unoptimized
-                />
-              ) : (
-                firstName[0]
-              )}
-              {hasCustomApiKey && (
-                <span
-                  title="Custom AI Key Active"
-                  className="absolute -top-0.5 -right-0.5 w-3 h-3 bg-emerald-500 rounded-full ring-2 ring-white z-10"
-                />
-              )}
-            </div>
-            <div className="min-w-0" suppressHydrationWarning>
-              <p className="text-xs font-semibold text-gray-800 truncate" suppressHydrationWarning>
-                {displayName}
-              </p>
-              <p className="text-[10px] text-gray-400 truncate" suppressHydrationWarning>
-                {major || email}
-              </p>
-            </div>
-          </div>
-          <div className="p-1 text-gray-400 shrink-0">
-            <ChevronUp
-              className={`w-4 h-4 transition-transform duration-200 ${
-                userMenuOpen ? "rotate-180 text-primary" : ""
-              }`}
-            />
-          </div>
-        </button>
-      </div>
-    </div>
-  );
-
-  return (
-    <div className="min-h-screen flex bg-background" suppressHydrationWarning>
-      {/* Custom AI API Key Modal */}
-      <AiApiKeyModal
-        isOpen={apiKeyModalOpen}
-        onClose={() => setApiKeyModalOpen(false)}
-      />
-
-      {/* Desktop Sidebar (hidden on mobile) */}
-      <aside className="hidden md:block w-64 shrink-0 h-screen sticky top-0" suppressHydrationWarning>
-        {sidebarContent}
-      </aside>
-
-      {/* Mobile Menu Drawer Overlay */}
-      {mobileMenuOpen && (
-        <div className="fixed inset-0 z-50 flex md:hidden">
-          {/* Backdrop */}
-          <div
-            className="fixed inset-0 bg-black/40 backdrop-blur-sm transition-opacity duration-300"
-            onClick={() => setMobileMenuOpen(false)}
-          />
-          {/* Drawer body */}
-          <div className="relative flex flex-col w-64 max-w-xs bg-white h-full shadow-2xl animate-[slide-in-left_0.2s_ease-out]">
-            <button
-              onClick={() => setMobileMenuOpen(false)}
-              className="absolute top-4 right-4 p-1.5 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100"
-            >
-              <X className="w-5 h-5" />
-            </button>
-            <div className="h-full">
-              {sidebarContent}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Main Content Area */}
-      <div className="flex-1 flex flex-col min-w-0 min-h-screen" suppressHydrationWarning>
-        {/* Mobile Sticky Navbar */}
-        <header className="md:hidden bg-white/80 backdrop-blur-md border-b border-border sticky top-0 z-30 px-6 py-4 flex items-center justify-between" suppressHydrationWarning>
-          <div className="flex items-center gap-2.5">
-            <button
-              onClick={() => setMobileMenuOpen(true)}
-              className="p-2 text-gray-500 hover:text-primary hover:bg-gray-50 rounded-xl border border-border"
-            >
-              <Menu className="w-5 h-5" />
-            </button>
-            <span className="font-bold text-primary tracking-tight">MindFlow AI</span>
-          </div>
-          <Link
-            href="/settings"
-            className="w-8 h-8 rounded-full bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center text-primary font-semibold text-sm ring-2 ring-primary/10 cursor-pointer relative overflow-hidden shrink-0"
-            suppressHydrationWarning
-            title="Pengaturan Profil"
-          >
-            {avatarUrl ? (
-              <Image
-                src={avatarUrl}
-                alt="Avatar"
-                fill
-                className="object-cover rounded-full"
-                unoptimized
-              />
-            ) : (
-              firstName[0]
-            )}
-          </Link>
-        </header>
-
-        {/* Inner Content page */}
-        <div className={`flex-1 w-full animate-fade-in ${
-          fullWidth ? "p-4 md:p-6" : "max-w-7xl mx-auto p-6 md:p-8 space-y-8"
-        }`}>
-          <EmailVerificationGatekeeper>
-            {children}
-          </EmailVerificationGatekeeper>
-        </div>
-      </div>
-    </div>
-  );
+  </div>;
 }
