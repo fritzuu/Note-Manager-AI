@@ -1,5 +1,6 @@
 "use client";
 
+import { Dropdown } from "@/components/ui/Dropdown";
 import React, { useRef, useState, useEffect } from "react";
 import { useEditor, EditorContent } from "@tiptap/react";
 import { BubbleMenu } from "@tiptap/react/menus";
@@ -29,9 +30,6 @@ import {
   Strikethrough,
   Code,
   Quote,
-  Heading1,
-  Heading2,
-  Heading3,
   List,
   ListOrdered,
   AlignLeft,
@@ -48,8 +46,10 @@ import {
   Smile,
   ChevronDown,
   Highlighter,
+  MoreHorizontal,
+  X,
 } from "lucide-react";
-// Firebase Storage imports removed - local upload endpoint is used instead
+import es from "./tiptap-editor.module.css";
 
 // Define custom Font Size extension for Tiptap
 const FontSize = Extension.create({
@@ -104,34 +104,49 @@ interface TiptapEditorProps {
   content: string;
   onChange: (html: string) => void;
   userId: string;
+  editable?: boolean;
   onStatsChange?: (stats: { words: number; characters: number; readingTime: number }) => void;
 }
 
 const fontFamilies = [
-  { name: "Default (Inter)", value: "Inter, sans-serif" },
-  { name: "Serif (Georgia)", value: "Georgia, serif" },
+  { name: "Sans serif", value: "Inter, sans-serif" },
+  { name: "Serif", value: "Georgia, serif" },
   { name: "Monospace", value: "monospace" },
   { name: "Playfair Display", value: "Playfair Display, serif" },
   { name: "Outfit", value: "Outfit, sans-serif" },
 ];
 
 const fontSizes = [
-  { name: "Small", value: "12px" },
+  { name: "Kecil", value: "12px" },
   { name: "Normal", value: "15px" },
-  { name: "Medium", value: "18px" },
-  { name: "Large", value: "24px" },
-  { name: "Extra Large", value: "32px" },
+  { name: "Sedang", value: "18px" },
+  { name: "Besar", value: "24px" },
+  { name: "Sangat besar", value: "32px" },
 ];
 
 const emojis = ["😊", "😂", "👍", "🔥", "❤️", "✨", "💡", "📝", "🚀", "🎓", "⭐", "✅", "❌", "❓"];
 
-export function TiptapEditor({ content, onChange, userId, onStatsChange }: TiptapEditorProps) {
+export function TiptapEditor({ content, onChange, userId, onStatsChange, editable = true }: TiptapEditorProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [imageUploading, setImageUploading] = useState(false);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const [insertDialog, setInsertDialog] = useState<"link" | "video" | null>(null);
+  const [insertUrl, setInsertUrl] = useState("");
+  const [insertError, setInsertError] = useState("");
+  const insertRef = useRef<HTMLFormElement>(null);
+  const insertInputRef = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    if (!insertDialog) return;
+    insertInputRef.current?.focus();
+    const outside = (event: PointerEvent) => { if (!insertRef.current?.contains(event.target as Node)) setInsertDialog(null); };
+    document.addEventListener("pointerdown", outside);
+    return () => document.removeEventListener("pointerdown", outside);
+  }, [insertDialog]);
 
   const editor = useEditor({
     immediatelyRender: false,
+    shouldRerenderOnTransaction: true,
+    editable,
     extensions: [
       StarterKit.configure({
         heading: {
@@ -182,7 +197,7 @@ export function TiptapEditor({ content, onChange, userId, onStatsChange }: Tipta
       TableCell,
       TableHeader,
       Placeholder.configure({
-        placeholder: "Start typing your notes... You can use standard formatting, insert tables, checklists, or drag and drop images here.",
+        placeholder: "Mulai menulis di sini…",
         emptyEditorClass: "is-editor-empty",
       }),
     ],
@@ -192,7 +207,7 @@ export function TiptapEditor({ content, onChange, userId, onStatsChange }: Tipta
     },
     editorProps: {
       attributes: {
-        class: "prose prose-sm md:prose-base focus:outline-none min-h-[480px] max-w-none text-gray-800 leading-relaxed font-sans pb-12 select-text",
+        class: "cogniva-document",
       },
       handleDOMEvents: {
         drop: (view, event) => {
@@ -224,9 +239,11 @@ export function TiptapEditor({ content, onChange, userId, onStatsChange }: Tipta
   // Sync content from outside (only if it differs and editor is loaded)
   useEffect(() => {
     if (editor && content !== editor.getHTML()) {
-      editor.commands.setContent(content || "");
+      editor.commands.setContent(content || "", { emitUpdate: false });
     }
   }, [content, editor]);
+
+  useEffect(() => { editor?.setEditable(editable); }, [editor, editable]);
 
   // Compute and emit statistics on update
   useEffect(() => {
@@ -235,7 +252,7 @@ export function TiptapEditor({ content, onChange, userId, onStatsChange }: Tipta
       const text = editor.state.doc.textContent.trim();
       const words = text ? text.split(/\s+/).filter(Boolean).length : 0;
       const characters = text.length;
-      const readingTime = Math.max(1, Math.ceil(words / 200));
+      const readingTime = Math.ceil(words / 200);
 
       if (onStatsChange) {
         onStatsChange({ words, characters, readingTime });
@@ -254,7 +271,7 @@ export function TiptapEditor({ content, onChange, userId, onStatsChange }: Tipta
 
   // Direct image file upload to local upload API
   const uploadImageFile = async (file: File) => {
-    if (!userId) return;
+    if (!userId || !editable) return;
     setImageUploading(true);
     try {
       const formData = new FormData();
@@ -295,26 +312,23 @@ export function TiptapEditor({ content, onChange, userId, onStatsChange }: Tipta
     }
   };
 
-  // Link Dialog
-  const setLink = () => {
-    const previousUrl = editor.getAttributes("link").href;
-    const url = window.prompt("Enter URL:", previousUrl);
-
-    if (url === null) return;
-    if (url === "") {
-      editor.chain().focus().extendMarkRange("link").unsetLink().run();
-      return;
+  const setLink = () => { setInsertUrl(editor.getAttributes("link").href || ""); setInsertError(""); setInsertDialog("link"); };
+  const addYoutubeVideo = () => { setInsertUrl(""); setInsertError(""); setInsertDialog("video"); };
+  const submitInsert = (event: React.FormEvent) => {
+    event.preventDefault();
+    const value = insertUrl.trim();
+    if (insertDialog === "link" && !value) {
+      editor.chain().focus().extendMarkRange("link").unsetLink().run(); setInsertDialog(null); return;
     }
-
-    editor.chain().focus().extendMarkRange("link").setLink({ href: url }).run();
-  };
-
-  // YouTube Dialog
-  const addYoutubeVideo = () => {
-    const url = window.prompt("Enter YouTube Video URL:");
-    if (url) {
-      editor.chain().focus().setYoutubeVideo({ src: url }).run();
-    }
+    try {
+      const url = new URL(value, window.location.origin);
+      if (!["http:", "https:", "mailto:", "tel:"].includes(url.protocol)) throw new Error("Invalid URL");
+      if (insertDialog === "video") {
+        if (!["youtube.com", "www.youtube.com", "m.youtube.com", "youtu.be", "www.youtu.be"].includes(url.hostname)) throw new Error("Invalid video URL");
+        editor.chain().focus().setYoutubeVideo({ src: url.href }).run();
+      } else editor.chain().focus().extendMarkRange("link").setLink({ href: url.href }).run();
+      setInsertDialog(null); setInsertError("");
+    } catch { setInsertError(insertDialog === "video" ? "Masukkan alamat video YouTube yang valid." : "Masukkan alamat tautan yang valid."); }
   };
 
   // Inline styling calls
@@ -340,556 +354,29 @@ export function TiptapEditor({ content, onChange, userId, onStatsChange }: Tipta
     }
   };
 
-  return (
-    <div className="flex flex-col border border-border bg-white rounded-2xl shadow-card relative">
-      {/* Editor Toolbar (Flush Sticky at Top of Screen) */}
-      <div className="flex flex-wrap items-center gap-1.5 bg-white/95 backdrop-blur-md border-b border-border p-2.5 sticky -top-8 md:-top-10 z-30 rounded-t-2xl shadow-sm transition-all">
-        {/* Undo/Redo */}
-        <div className="flex items-center gap-0.5 mr-1">
-          <button
-            onClick={() => editor.chain().focus().undo().run()}
-            disabled={!editor.can().undo()}
-            title="Undo (Cmd+Z)"
-            className="p-1.5 text-gray-500 hover:text-primary hover:bg-white rounded-lg disabled:opacity-30 transition-all cursor-pointer"
-          >
-            <Undo className="w-4 h-4" />
-          </button>
-          <button
-            onClick={() => editor.chain().focus().redo().run()}
-            disabled={!editor.can().redo()}
-            title="Redo (Cmd+Shift+Z)"
-            className="p-1.5 text-gray-500 hover:text-primary hover:bg-white rounded-lg disabled:opacity-30 transition-all cursor-pointer"
-          >
-            <Redo className="w-4 h-4" />
-          </button>
-        </div>
-
-        <div className="w-[1px] h-6 bg-border" />
-
-        {/* Font Family Dropdown */}
-        <div className="relative flex items-center bg-white border border-border rounded-lg px-2 py-1 select-none">
-          <select
-            onChange={(e) => editor.chain().focus().setFontFamily(e.target.value).run()}
-            value={editor.getAttributes("textStyle").fontFamily || "Inter, sans-serif"}
-            className="text-xs text-gray-600 bg-transparent focus:outline-none border-none pr-4 appearance-none cursor-pointer font-medium"
-          >
-            {fontFamilies.map((f) => (
-              <option key={f.value} value={f.value}>
-                {f.name}
-              </option>
-            ))}
-          </select>
-          <ChevronDown className="w-3 h-3 text-gray-400 absolute right-1.5 pointer-events-none" />
-        </div>
-
-        {/* Font Size Dropdown */}
-        <div className="relative flex items-center bg-white border border-border rounded-lg px-2 py-1 select-none">
-          <select
-            onChange={(e) => setFontSizeVal(e.target.value)}
-            value={editor.getAttributes("textStyle").fontSize || "15px"}
-            className="text-xs text-gray-600 bg-transparent focus:outline-none border-none pr-4 appearance-none cursor-pointer font-medium"
-          >
-            {fontSizes.map((s) => (
-              <option key={s.value} value={s.value}>
-                {s.name} ({s.value})
-              </option>
-            ))}
-          </select>
-          <ChevronDown className="w-3 h-3 text-gray-400 absolute right-1.5 pointer-events-none" />
-        </div>
-
-        <div className="w-[1px] h-6 bg-border" />
-
-        {/* Text Styles */}
-        <div className="flex items-center gap-0.5">
-          <button
-            onClick={() => editor.chain().focus().toggleBold().run()}
-            className={`p-1.5 rounded-lg transition-all cursor-pointer ${
-              editor.isActive("bold") ? "bg-primary text-white" : "text-gray-500 hover:text-primary hover:bg-white"
-            }`}
-            title="Bold (Cmd+B)"
-          >
-            <Bold className="w-4 h-4" />
-          </button>
-          <button
-            onClick={() => editor.chain().focus().toggleItalic().run()}
-            className={`p-1.5 rounded-lg transition-all cursor-pointer ${
-              editor.isActive("italic") ? "bg-primary text-white" : "text-gray-500 hover:text-primary hover:bg-white"
-            }`}
-            title="Italic (Cmd+I)"
-          >
-            <Italic className="w-4 h-4" />
-          </button>
-          <button
-            onClick={() => editor.chain().focus().toggleUnderline().run()}
-            className={`p-1.5 rounded-lg transition-all cursor-pointer ${
-              editor.isActive("underline") ? "bg-primary text-white" : "text-gray-500 hover:text-primary hover:bg-white"
-            }`}
-            title="Underline (Cmd+U)"
-          >
-            <UnderlineIcon className="w-4 h-4" />
-          </button>
-          <button
-            onClick={() => editor.chain().focus().toggleStrike().run()}
-            className={`p-1.5 rounded-lg transition-all cursor-pointer ${
-              editor.isActive("strike") ? "bg-primary text-white" : "text-gray-500 hover:text-primary hover:bg-white"
-            }`}
-            title="Strikethrough"
-          >
-            <Strikethrough className="w-4 h-4" />
-          </button>
-          <button
-            onClick={() => editor.chain().focus().toggleCode().run()}
-            className={`p-1.5 rounded-lg transition-all cursor-pointer ${
-              editor.isActive("code") ? "bg-primary text-white" : "text-gray-500 hover:text-primary hover:bg-white"
-            }`}
-            title="Code Inline"
-          >
-            <Code className="w-4 h-4" />
-          </button>
-        </div>
-
-        <div className="w-[1px] h-6 bg-border" />
-
-        {/* Headings */}
-        <div className="flex items-center gap-0.5">
-          <button
-            onClick={() => editor.chain().focus().toggleHeading({ level: 1 }).run()}
-            className={`p-1.5 rounded-lg transition-all cursor-pointer ${
-              editor.isActive("heading", { level: 1 }) ? "bg-primary text-white" : "text-gray-500 hover:text-primary hover:bg-white"
-            }`}
-            title="Heading H1"
-          >
-            <Heading1 className="w-4 h-4" />
-          </button>
-          <button
-            onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()}
-            className={`p-1.5 rounded-lg transition-all cursor-pointer ${
-              editor.isActive("heading", { level: 2 }) ? "bg-primary text-white" : "text-gray-500 hover:text-primary hover:bg-white"
-            }`}
-            title="Heading H2"
-          >
-            <Heading2 className="w-4 h-4" />
-          </button>
-          <button
-            onClick={() => editor.chain().focus().toggleHeading({ level: 3 }).run()}
-            className={`p-1.5 rounded-lg transition-all cursor-pointer ${
-              editor.isActive("heading", { level: 3 }) ? "bg-primary text-white" : "text-gray-500 hover:text-primary hover:bg-white"
-            }`}
-            title="Heading H3"
-          >
-            <Heading3 className="w-4 h-4" />
-          </button>
-        </div>
-
-        <div className="w-[1px] h-6 bg-border" />
-
-        {/* Text Alignments */}
-        <div className="flex items-center gap-0.5">
-          <button
-            onClick={() => editor.chain().focus().setTextAlign("left").run()}
-            className={`p-1.5 rounded-lg transition-all cursor-pointer ${
-              editor.isActive({ textAlign: "left" }) ? "bg-primary text-white" : "text-gray-500 hover:text-primary hover:bg-white"
-            }`}
-            title="Align Left"
-          >
-            <AlignLeft className="w-4 h-4" />
-          </button>
-          <button
-            onClick={() => editor.chain().focus().setTextAlign("center").run()}
-            className={`p-1.5 rounded-lg transition-all cursor-pointer ${
-              editor.isActive({ textAlign: "center" }) ? "bg-primary text-white" : "text-gray-500 hover:text-primary hover:bg-white"
-            }`}
-            title="Align Center"
-          >
-            <AlignCenter className="w-4 h-4" />
-          </button>
-          <button
-            onClick={() => editor.chain().focus().setTextAlign("right").run()}
-            className={`p-1.5 rounded-lg transition-all cursor-pointer ${
-              editor.isActive({ textAlign: "right" }) ? "bg-primary text-white" : "text-gray-500 hover:text-primary hover:bg-white"
-            }`}
-            title="Align Right"
-          >
-            <AlignRight className="w-4 h-4" />
-          </button>
-          <button
-            onClick={() => editor.chain().focus().setTextAlign("justify").run()}
-            className={`p-1.5 rounded-lg transition-all cursor-pointer ${
-              editor.isActive({ textAlign: "justify" }) ? "bg-primary text-white" : "text-gray-500 hover:text-primary hover:bg-white"
-            }`}
-            title="Align Justify"
-          >
-            <AlignJustify className="w-4 h-4" />
-          </button>
-        </div>
-
-        <div className="w-[1px] h-6 bg-border" />
-
-        {/* Lists & Quotes */}
-        <div className="flex items-center gap-0.5">
-          <button
-            onClick={() => editor.chain().focus().toggleBulletList().run()}
-            className={`p-1.5 rounded-lg transition-all cursor-pointer ${
-              editor.isActive("bulletList") ? "bg-primary text-white" : "text-gray-500 hover:text-primary hover:bg-white"
-            }`}
-            title="Bullet List"
-          >
-            <List className="w-4 h-4" />
-          </button>
-          <button
-            onClick={() => editor.chain().focus().toggleOrderedList().run()}
-            className={`p-1.5 rounded-lg transition-all cursor-pointer ${
-              editor.isActive("orderedList") ? "bg-primary text-white" : "text-gray-500 hover:text-primary hover:bg-white"
-            }`}
-            title="Numbered List"
-          >
-            <ListOrdered className="w-4 h-4" />
-          </button>
-          <button
-            onClick={() => editor.chain().focus().toggleTaskList().run()}
-            className={`p-1.5 rounded-lg transition-all cursor-pointer ${
-              editor.isActive("taskList") ? "bg-primary text-white" : "text-gray-500 hover:text-primary hover:bg-white"
-            }`}
-            title="Todo List"
-          >
-            <CheckSquare className="w-4 h-4" />
-          </button>
-          <button
-            onClick={() => editor.chain().focus().toggleBlockquote().run()}
-            className={`p-1.5 rounded-lg transition-all cursor-pointer ${
-              editor.isActive("blockquote") ? "bg-primary text-white" : "text-gray-500 hover:text-primary hover:bg-white"
-            }`}
-            title="Blockquote"
-          >
-            <Quote className="w-4 h-4" />
-          </button>
-        </div>
-
-        <div className="w-[1px] h-6 bg-border" />
-
-        {/* Insert Media & Table */}
-        <div className="flex items-center gap-0.5">
-          <button
-            onClick={setLink}
-            className={`p-1.5 rounded-lg transition-all cursor-pointer ${
-              editor.isActive("link") ? "bg-primary text-white" : "text-gray-500 hover:text-primary hover:bg-white"
-            }`}
-            title="Insert Link"
-          >
-            <LinkIcon className="w-4 h-4" />
-          </button>
-
-          <button
-            onClick={() => fileInputRef.current?.click()}
-            disabled={imageUploading}
-            className="p-1.5 text-gray-500 hover:text-primary hover:bg-white rounded-lg transition-all cursor-pointer flex items-center"
-            title="Upload/Insert Image"
-          >
-            {imageUploading ? (
-              <span className="w-4 h-4 rounded-full border-2 border-primary-200 border-t-primary animate-spin" />
-            ) : (
-              <ImageIcon className="w-4 h-4" />
-            )}
-          </button>
-          <input
-            type="file"
-            ref={fileInputRef}
-            onChange={handleImageUpload}
-            accept="image/*"
-            className="hidden"
-          />
-
-          <button
-            onClick={addYoutubeVideo}
-            className="p-1.5 text-gray-500 hover:text-primary hover:bg-white rounded-lg transition-all cursor-pointer"
-            title="Embed YouTube Video"
-          >
-            <YoutubeIcon className="w-4 h-4" />
-          </button>
-
-          <button
-            onClick={() => editor.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run()}
-            className="p-1.5 text-gray-500 hover:text-primary hover:bg-white rounded-lg transition-all cursor-pointer"
-            title="Insert Table (3x3)"
-          >
-            <TableIcon className="w-4 h-4" />
-          </button>
-        </div>
-
-        <div className="w-[1px] h-6 bg-border" />
-
-        {/* Text & Background Colors */}
-        <div className="flex items-center gap-1 bg-white border border-border rounded-lg px-1.5 py-0.5 select-none">
-          <div className="flex items-center gap-1" title="Text Color">
-            <span className="text-[10px] text-gray-400 font-semibold uppercase">Text</span>
-            <input
-              type="color"
-              onChange={handleColorChange}
-              value={editor.getAttributes("textStyle").color || "#1F2937"}
-              className="w-4.5 h-4.5 rounded cursor-pointer border-none p-0 overflow-hidden bg-transparent"
-            />
-          </div>
-          <div className="w-[1px] h-4 bg-border mx-1" />
-          <div className="flex items-center gap-1" title="Highlight/Background Color">
-            <Highlighter className="w-3 h-3 text-gray-400" />
-            <input
-              type="color"
-              onChange={handleHighlightChange}
-              value={editor.getAttributes("highlight").color || "#FFFFFF"}
-              className="w-4.5 h-4.5 rounded cursor-pointer border-none p-0 overflow-hidden bg-transparent"
-            />
-          </div>
-        </div>
-
-        <div className="w-[1px] h-6 bg-border" />
-
-        {/* Emojis, Shortcuts, Table Controls */}
-        <div className="flex items-center gap-0.5 relative">
-          <button
-            onClick={() => setShowEmojiPicker(!showEmojiPicker)}
-            className={`p-1.5 rounded-lg transition-all cursor-pointer ${
-              showEmojiPicker ? "bg-primary-50 text-primary" : "text-gray-500 hover:text-primary hover:bg-white"
-            }`}
-            title="Insert Emoji"
-          >
-            <Smile className="w-4 h-4" />
-          </button>
-
-          {/* Emoji Popover */}
-          {showEmojiPicker && (
-            <div className="absolute right-0 top-9 bg-white border border-border shadow-float rounded-xl p-2.5 z-50 grid grid-cols-7 gap-1.5 w-44 animate-scale-in">
-              {emojis.map((emoji) => (
-                <button
-                  key={emoji}
-                  onClick={() => {
-                    editor.chain().focus().insertContent(emoji).run();
-                    setShowEmojiPicker(false);
-                  }}
-                  className="text-lg p-1 hover:bg-gray-100 rounded-lg transition-colors cursor-pointer text-center"
-                >
-                  {emoji}
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* Floating Table Controls when inside Table */}
-      {editor.isActive("table") && (
-        <div className="flex flex-wrap items-center gap-1.5 bg-primary-50/95 backdrop-blur-md border-b border-border/60 px-4 py-2 text-xs text-primary-800 font-semibold select-none sticky top-[16px] md:top-[8px] z-25 shadow-sm">
-          <span className="mr-1.5 text-primary-700">Table Settings:</span>
-          <button
-            onClick={() => editor.chain().focus().addColumnBefore().run()}
-            className="hover:bg-primary-100 px-2 py-0.5 rounded transition-colors cursor-pointer"
-          >
-            + Col Before
-          </button>
-          <button
-            onClick={() => editor.chain().focus().addColumnAfter().run()}
-            className="hover:bg-primary-100 px-2 py-0.5 rounded transition-colors cursor-pointer"
-          >
-            + Col After
-          </button>
-          <button
-            onClick={() => editor.chain().focus().deleteColumn().run()}
-            className="hover:bg-red-50 text-red-700 hover:text-red-800 px-2 py-0.5 rounded transition-colors cursor-pointer"
-          >
-            - Delete Col
-          </button>
-          <div className="w-[1px] h-3.5 bg-primary-200" />
-          <button
-            onClick={() => editor.chain().focus().addRowBefore().run()}
-            className="hover:bg-primary-100 px-2 py-0.5 rounded transition-colors cursor-pointer"
-          >
-            + Row Before
-          </button>
-          <button
-            onClick={() => editor.chain().focus().addRowAfter().run()}
-            className="hover:bg-primary-100 px-2 py-0.5 rounded transition-colors cursor-pointer"
-          >
-            + Row After
-          </button>
-          <button
-            onClick={() => editor.chain().focus().deleteRow().run()}
-            className="hover:bg-red-50 text-red-700 hover:text-red-800 px-2 py-0.5 rounded transition-colors cursor-pointer"
-          >
-            - Delete Row
-          </button>
-          <div className="w-[1px] h-3.5 bg-primary-200" />
-          <button
-            onClick={() => editor.chain().focus().deleteTable().run()}
-            className="hover:bg-red-100 bg-red-50 text-red-700 px-2 py-0.5 rounded transition-colors cursor-pointer font-bold"
-          >
-            Delete Table
-          </button>
-        </div>
-      )}
-
-      {/* Floating Selection Bubble Menu */}
-      {editor && (
-        <BubbleMenu
-          editor={editor}
-          className="flex items-center gap-0.5 bg-white border border-border shadow-float rounded-xl p-1 animate-scale-in"
-        >
-          <button
-            onClick={() => editor.chain().focus().toggleBold().run()}
-            className={`p-1.5 rounded-lg text-xs font-semibold transition-colors cursor-pointer ${
-              editor.isActive("bold") ? "bg-primary text-white" : "text-gray-500 hover:bg-gray-100 hover:text-primary"
-            }`}
-          >
-            <Bold className="w-4 h-4" />
-          </button>
-          <button
-            onClick={() => editor.chain().focus().toggleItalic().run()}
-            className={`p-1.5 rounded-lg text-xs font-semibold transition-colors cursor-pointer ${
-              editor.isActive("italic") ? "bg-primary text-white" : "text-gray-500 hover:bg-gray-100 hover:text-primary"
-            }`}
-          >
-            <Italic className="w-4 h-4" />
-          </button>
-          <button
-            onClick={() => editor.chain().focus().toggleUnderline().run()}
-            className={`p-1.5 rounded-lg text-xs font-semibold transition-colors cursor-pointer ${
-              editor.isActive("underline") ? "bg-primary text-white" : "text-gray-500 hover:bg-gray-100 hover:text-primary"
-            }`}
-          >
-            <UnderlineIcon className="w-4 h-4" />
-          </button>
-          <button
-            onClick={setLink}
-            className={`p-1.5 rounded-lg text-xs font-semibold transition-colors cursor-pointer ${
-              editor.isActive("link") ? "bg-primary text-white" : "text-gray-500 hover:bg-gray-100 hover:text-primary"
-            }`}
-          >
-            <LinkIcon className="w-4 h-4" />
-          </button>
-        </BubbleMenu>
-      )}
-
-      {/* Editor Content Area */}
-      <div className="flex-1 p-6 md:p-10 bg-white min-h-[480px] overflow-y-auto">
-        <EditorContent editor={editor} />
-      </div>
-
-      <style jsx global>{`
-        /* Tiptap Placeholder style */
-        .ProseMirror p.is-editor-empty:first-child::before {
-          color: #adb5bd;
-          content: attr(data-placeholder);
-          float: left;
-          height: 0;
-          pointer-events: none;
-          font-style: italic;
-        }
-
-        /* Tiptap Task List style */
-        ul[data-type="taskList"] {
-          list-style: none;
-          padding: 0;
-          margin: 1.25rem 0;
-        }
-        ul[data-type="taskList"] li {
-          display: flex;
-          align-items: flex-start;
-          gap: 0.5rem;
-          margin-bottom: 0.4rem;
-        }
-        ul[data-type="taskList"] li > label {
-          user-select: none;
-          margin-top: 0.2rem;
-          cursor: pointer;
-        }
-        ul[data-type="taskList"] li > div {
-          flex: 1;
-        }
-        ul[data-type="taskList"] input[type="checkbox"] {
-          cursor: pointer;
-          width: 1.1rem;
-          height: 1.1rem;
-          border-radius: 4px;
-          border: 1.5px solid #d1d5db;
-          accent-color: var(--color-primary, #059669);
-        }
-
-        /* Tiptap Table style */
-        .ProseMirror table {
-          border-collapse: collapse;
-          table-layout: fixed;
-          width: 100%;
-          margin: 1.5rem 0;
-          overflow: hidden;
-        }
-        .ProseMirror table td,
-        .ProseMirror table th {
-          min-width: 1em;
-          border: 1px solid #e5e7eb;
-          padding: 8px 12px;
-          vertical-align: top;
-          box-sizing: border-box;
-          position: relative;
-        }
-        .ProseMirror table th {
-          background-color: #f9fafb;
-          font-weight: bold;
-          text-align: left;
-        }
-        .ProseMirror table .selectedCell::after {
-          z-index: 2;
-          position: absolute;
-          content: "";
-          left: 0;
-          right: 0;
-          top: 0;
-          bottom: 0;
-          background: rgba(5, 150, 105, 0.08);
-          pointer-events: none;
-        }
-        .ProseMirror table .column-resize-handle {
-          position: absolute;
-          right: -2px;
-          top: 0;
-          bottom: 0;
-          width: 4px;
-          z-index: 20;
-          background-color: #3b82f6;
-          pointer-events: none;
-        }
-
-        /* General styling for blockquote and inline code */
-        .ProseMirror blockquote {
-          border-left: 4px solid #059669;
-          padding-left: 1rem;
-          color: #4b5563;
-          font-style: italic;
-          margin: 1.25rem 0;
-        }
-        .ProseMirror pre {
-          background: #1f2937;
-          color: #f9fafb;
-          padding: 1rem;
-          border-radius: 12px;
-          font-family: monospace;
-          overflow-x: auto;
-          margin: 1.5rem 0;
-        }
-        .ProseMirror code {
-          background-color: #f3f4f6;
-          color: #d97706;
-          padding: 0.15rem 0.35rem;
-          border-radius: 6px;
-          font-size: 0.9em;
-          font-family: monospace;
-        }
-        .ProseMirror pre code {
-          background-color: transparent;
-          color: inherit;
-          padding: 0;
-          border-radius: 0;
-          font-size: inherit;
-        }
-      `}</style>
+  const tool = (label: string, icon: React.ReactNode, action: () => void, active = false, disabled = false) => <button type="button" key={label} title={label} aria-label={label} aria-pressed={active} disabled={disabled || !editable} className={es.tool} onMouseDown={event => event.preventDefault()} onClick={action}>{icon}</button>;
+  const styleTools = <>{tool("Tebal", <Bold size={17} />, () => editor.chain().focus().toggleBold().run(), editor.isActive("bold"))}{tool("Miring", <Italic size={17} />, () => editor.chain().focus().toggleItalic().run(), editor.isActive("italic"))}{tool("Garis bawah", <UnderlineIcon size={17} />, () => editor.chain().focus().toggleUnderline().run(), editor.isActive("underline"))}{tool("Tautan", <LinkIcon size={17} />, setLink, editor.isActive("link"))}</>;
+  return <div className={es.editor}>
+    <div className={es.toolbar} role="toolbar" aria-label="Format catatan">
+      <div className={es.toolGroup}>{tool("Urungkan", <Undo size={17} />, () => editor.chain().focus().undo().run(), false, !editor.can().undo())}{tool("Ulangi", <Redo size={17} />, () => editor.chain().focus().redo().run(), false, !editor.can().redo())}</div>
+      <div className={es.toolGroup}><Dropdown compact className={es.editorDropdown} label="Gaya paragraf" disabled={!editable} value={editor.isActive("heading", { level: 1 }) ? "1" : editor.isActive("heading", { level: 2 }) ? "2" : editor.isActive("heading", { level: 3 }) ? "3" : "paragraph"} options={[{ value: "paragraph", label: "Teks biasa" }, { value: "1", label: "Judul besar" }, { value: "2", label: "Subjudul" }, { value: "3", label: "Judul bagian" }]} onChange={value => { if (value === "paragraph") editor.chain().focus().setParagraph().run(); else editor.chain().focus().setHeading({ level: Number(value) as 1 | 2 | 3 }).run(); }} /></div>
+      <div className={es.toolGroup}>{styleTools}</div>
+      <div className={es.toolGroup}>{tool("Daftar poin", <List size={17} />, () => editor.chain().focus().toggleBulletList().run(), editor.isActive("bulletList"))}{tool("Daftar bernomor", <ListOrdered size={17} />, () => editor.chain().focus().toggleOrderedList().run(), editor.isActive("orderedList"))}{tool("Checklist", <CheckSquare size={17} />, () => editor.chain().focus().toggleTaskList().run(), editor.isActive("taskList"))}</div>
+      <details className={es.more}><summary title="Format dan sisipan lainnya" aria-label="Format dan sisipan lainnya"><MoreHorizontal size={19} /></summary><div className={es.morePanel}>
+        <p>Format teks</p><div className={es.extraRow}><Dropdown compact className={es.editorDropdown} label="Jenis huruf" disabled={!editable} onChange={value => { editor.chain().focus().setFontFamily(value).run(); }} value={editor.getAttributes("textStyle").fontFamily || "Inter, sans-serif"} options={fontFamilies.map(font => ({ value: font.value, label: font.name }))} /><Dropdown compact className={es.editorDropdown} label="Ukuran huruf" disabled={!editable} onChange={setFontSizeVal} value={editor.getAttributes("textStyle").fontSize || "15px"} options={fontSizes.map(size => ({ value: size.value, label: size.name }))} /></div>
+        <div className={es.extraRow}>{tool("Coret", <Strikethrough size={17} />, () => editor.chain().focus().toggleStrike().run(), editor.isActive("strike"))}{tool("Kode inline", <Code size={17} />, () => editor.chain().focus().toggleCode().run(), editor.isActive("code"))}{tool("Kutipan", <Quote size={17} />, () => editor.chain().focus().toggleBlockquote().run(), editor.isActive("blockquote"))}<label className={es.color}>Warna<input type="color" aria-label="Warna teks" disabled={!editable} value={editor.getAttributes("textStyle").color || "#284333"} onChange={handleColorChange} /></label><label className={es.color}>Sorot<input type="color" aria-label="Warna sorotan" disabled={!editable} value={editor.getAttributes("highlight").color || "#dce8c8"} onChange={handleHighlightChange} /></label>{tool("Hapus sorotan", <Highlighter size={17} />, () => editor.chain().focus().unsetHighlight().run())}</div>
+        <p>Perataan</p><div className={es.extraRow}>{tool("Rata kiri", <AlignLeft size={17} />, () => editor.chain().focus().setTextAlign("left").run(), editor.isActive({ textAlign: "left" }))}{tool("Rata tengah", <AlignCenter size={17} />, () => editor.chain().focus().setTextAlign("center").run(), editor.isActive({ textAlign: "center" }))}{tool("Rata kanan", <AlignRight size={17} />, () => editor.chain().focus().setTextAlign("right").run(), editor.isActive({ textAlign: "right" }))}{tool("Rata penuh", <AlignJustify size={17} />, () => editor.chain().focus().setTextAlign("justify").run(), editor.isActive({ textAlign: "justify" }))}</div>
+        <p>Sisipkan</p><div className={es.extraRow}>{tool(imageUploading ? "Mengunggah gambar…" : "Gambar", <ImageIcon size={17} />, () => fileInputRef.current?.click(), false, imageUploading)}{tool("Video YouTube", <YoutubeIcon size={17} />, addYoutubeVideo)}{tool("Tabel", <TableIcon size={17} />, () => editor.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run())}{tool("Emoji", <Smile size={17} />, () => setShowEmojiPicker(previous => !previous), showEmojiPicker)}</div>
+        {showEmojiPicker && <div className={es.emojis}>{emojis.map(emoji => <button type="button" key={emoji} disabled={!editable} onMouseDown={event => event.preventDefault()} onClick={() => { editor.chain().focus().insertContent(emoji).run(); setShowEmojiPicker(false); }}>{emoji}</button>)}</div>}
+      </div></details>
+      {insertDialog && <form ref={insertRef} className={es.insertDialog} onSubmit={submitInsert} onKeyDown={event => { if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); setInsertDialog(null); editor.commands.focus(); } }}><header><label htmlFor={`insert-${userId}`}>{insertDialog === "link" ? "Alamat tautan" : "Video YouTube"}</label><button type="button" aria-label="Tutup sisipan" onClick={() => { setInsertDialog(null); editor.commands.focus(); }}><X size={16} /></button></header><input ref={insertInputRef} id={`insert-${userId}`} value={insertUrl} onChange={event => setInsertUrl(event.target.value)} placeholder="https://…" />{insertError && <p role="alert">{insertError}</p>}<button type="submit" className={es.insertSubmit}>{insertDialog === "link" && !insertUrl.trim() ? "Hapus tautan" : "Sisipkan"}</button></form>}
     </div>
-  );
+    {editor.isActive("table") && <div className={es.tableControls} aria-label="Pengaturan tabel">{[
+      ["Kolom sebelum", () => editor.chain().focus().addColumnBefore().run()], ["Kolom sesudah", () => editor.chain().focus().addColumnAfter().run()], ["Hapus kolom", () => editor.chain().focus().deleteColumn().run()], ["Baris sebelum", () => editor.chain().focus().addRowBefore().run()], ["Baris sesudah", () => editor.chain().focus().addRowAfter().run()], ["Hapus baris", () => editor.chain().focus().deleteRow().run()], ["Hapus tabel", () => editor.chain().focus().deleteTable().run()],
+    ].map(([label, action]) => <button key={String(label)} type="button" disabled={!editable} onMouseDown={event => event.preventDefault()} onClick={action as () => void}>{String(label)}</button>)}</div>}
+    <BubbleMenu editor={editor} className={es.bubble}>{styleTools}</BubbleMenu>
+    <div className={es.document}><EditorContent editor={editor} /></div>
+    <input ref={fileInputRef} type="file" accept="image/*" onChange={handleImageUpload} hidden />
+    {imageUploading && <p className={es.uploadStatus} role="status">Mengunggah gambar…</p>}
+  </div>;
 }
