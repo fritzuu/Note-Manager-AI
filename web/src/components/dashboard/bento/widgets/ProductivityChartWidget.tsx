@@ -56,7 +56,7 @@ export function ProductivityChartWidget({ sessions }: ProductivityChartWidgetPro
   const getWidgetTheme = (days: number) => {
     if (days >= 30) {
       return {
-        tierName: "Inferno",
+        tierName: "30+ hari",
         cardBg: "from-white via-amber-50/30 to-orange-50/20",
         badgeGradient: "from-amber-500 via-orange-500 to-yellow-500",
         badgeShadow: "shadow-amber-500/40",
@@ -69,7 +69,7 @@ export function ProductivityChartWidget({ sessions }: ProductivityChartWidgetPro
     }
     if (days >= 14) {
       return {
-        tierName: "Diamond",
+        tierName: "14+ hari",
         cardBg: "from-white via-purple-50/30 to-pink-50/20",
         badgeGradient: "from-purple-600 via-pink-600 to-indigo-600",
         badgeShadow: "shadow-purple-500/40",
@@ -82,7 +82,7 @@ export function ProductivityChartWidget({ sessions }: ProductivityChartWidgetPro
     }
     if (days >= 7) {
       return {
-        tierName: "Scholar",
+        tierName: "7+ hari",
         cardBg: "from-white via-orange-50/30 to-red-50/20",
         badgeGradient: "from-orange-500 to-red-500",
         badgeShadow: "shadow-orange-500/40",
@@ -94,7 +94,7 @@ export function ProductivityChartWidget({ sessions }: ProductivityChartWidgetPro
       };
     }
     return {
-      tierName: "Spark",
+      tierName: "Mulai rutin",
       cardBg: "from-white via-emerald-50/30 to-teal-50/20",
       badgeGradient: "from-emerald-600 to-teal-600",
       badgeShadow: "shadow-emerald-500/40",
@@ -131,7 +131,7 @@ export function ProductivityChartWidget({ sessions }: ProductivityChartWidgetPro
   });
 
   const maxMins = Math.max(60, ...last7Days.map((d) => d.mins));
-  const userName = userDoc?.name || user?.displayName || "Scholar";
+  const userName = userDoc?.name || user?.displayName || "Kamu";
 
   return (
     <>
@@ -237,7 +237,7 @@ export function ProductivityChartWidget({ sessions }: ProductivityChartWidgetPro
             onClick={() => setShareModalOpen(true)}
             className={`flex items-center gap-1 ${theme.accentColor} font-bold hover:underline cursor-pointer`}
           >
-            <Share2 className="w-3 h-3" /> Share Badge ({theme.tierName})
+            <Share2 className="w-3 h-3" /> Bagikan progres ({theme.tierName})
           </button>
           <Link href="/analytics" className="text-gray-400 font-bold hover:text-primary">
             Details →

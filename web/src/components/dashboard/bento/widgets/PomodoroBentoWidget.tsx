@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React from "react";
 import Link from "next/link";
 import {
   Timer,
@@ -11,10 +11,10 @@ import {
   ArrowUpRight,
   Flame,
   Coffee,
-  CheckSquare,
-  ChevronDown,
 } from "lucide-react";
 import { usePomodoro } from "@/contexts/PomodoroContext";
+import { Dropdown } from "@/components/ui/Dropdown";
+import { priorityLabels } from "@/components/tasks/taskPresentation";
 import { Button } from "@/components/ui/Button";
 
 function formatTime(totalSeconds: number): string {
@@ -39,9 +39,10 @@ export function PomodoroBentoWidget() {
     pauseTimer,
     resetTimer,
     endSession,
+    sessionId,
+    isBusy,
+    showProgressPrompt,
   } = usePomodoro();
-
-  const [showTaskDropdown, setShowTaskDropdown] = useState(false);
 
   const activeTasks = tasks.filter((t) => t.status !== "done");
 
@@ -60,9 +61,9 @@ export function PomodoroBentoWidget() {
             <Timer className="w-4 h-4" />
           </div>
           <div>
-            <h4 className="text-xs font-bold text-gray-900">Pomodoro Focus</h4>
+            <h4 className="text-xs font-bold text-gray-900">Sesi fokus</h4>
             <p className="text-[10px] text-gray-400">
-              {fuzzyResult.recommendedMinutes}m focus • {fuzzyResult.breakMinutes}m break
+              {fuzzyResult.recommendedMinutes}m fokus · {fuzzyResult.breakMinutes}m istirahat
             </p>
           </div>
         </div>
@@ -75,66 +76,7 @@ export function PomodoroBentoWidget() {
         </Link>
       </div>
 
-      {/* Task Selector Dropdown Trigger */}
-      <div className="relative mt-2">
-        <button
-          type="button"
-          onClick={() => setShowTaskDropdown(!showTaskDropdown)}
-          className="w-full flex items-center justify-between gap-2 p-2 px-3 bg-white/90 hover:bg-white rounded-xl border border-border/80 shadow-xs text-left transition-all cursor-pointer group/btn"
-        >
-          <div className="flex items-center gap-2 min-w-0">
-            <CheckSquare className="w-3.5 h-3.5 text-primary shrink-0" />
-            <span className="text-xs font-bold text-gray-800 truncate">
-              {selectedTask ? selectedTask.title : "Select Task to Focus..."}
-            </span>
-          </div>
-          <ChevronDown className="w-3.5 h-3.5 text-gray-400 group-hover/btn:text-gray-700 shrink-0" />
-        </button>
-
-        {/* Task Selection Dropdown Menu */}
-        {showTaskDropdown && (
-          <div className="absolute left-0 right-0 top-11 z-50 bg-white rounded-2xl border border-border shadow-xl overflow-hidden animate-scale-in max-h-48 overflow-y-auto p-1.5 space-y-1">
-            <button
-              type="button"
-              onClick={() => {
-                setSelectedTaskId("");
-                setShowTaskDropdown(false);
-              }}
-              className={`w-full text-left p-2 rounded-xl text-xs font-medium flex items-center justify-between transition-colors ${
-                !selectedTaskId ? "bg-primary-50 text-primary font-bold" : "text-gray-600 hover:bg-gray-50"
-              }`}
-            >
-              <span>General Focus Session</span>
-              <span className="text-[10px] text-gray-400">25m default</span>
-            </button>
-
-            {activeTasks.length === 0 ? (
-              <p className="text-[11px] text-gray-400 text-center py-2">No active tasks found</p>
-            ) : (
-              activeTasks.map((t) => (
-                <button
-                  key={t.id}
-                  type="button"
-                  onClick={() => {
-                    setSelectedTaskId(t.id);
-                    setShowTaskDropdown(false);
-                  }}
-                  className={`w-full text-left p-2 rounded-xl text-xs font-medium flex items-center justify-between transition-colors ${
-                    selectedTaskId === t.id
-                      ? "bg-primary-50 text-primary font-bold"
-                      : "text-gray-700 hover:bg-gray-50"
-                  }`}
-                >
-                  <span className="truncate pr-2">{t.title}</span>
-                  <span className="text-[9px] px-1.5 py-0.5 rounded bg-gray-100 text-gray-500 font-bold shrink-0">
-                    {t.priorityLevel || "Med"}
-                  </span>
-                </button>
-              ))
-            )}
-          </div>
-        )}
-      </div>
+      <div className="mt-2"><Dropdown compact label="Tugas untuk fokus" disabled={isBusy || isRunning || !!sessionId || showProgressPrompt || phase === "break"} value={selectedTaskId} onChange={setSelectedTaskId} options={[{ value: "", label: "Sesi tanpa tugas" }, ...activeTasks.map(task => ({ value: task.id, label: task.title, detail: priorityLabels[task.priorityLevel] }))]} /></div>
 
       {/* Main Timer Display */}
       <div className="flex flex-col items-center justify-center my-auto py-1">
@@ -187,7 +129,7 @@ export function PomodoroBentoWidget() {
         <Button
           variant="outline"
           size="sm"
-          onClick={resetTimer}
+          onClick={resetTimer} disabled={isBusy}
           icon={<RotateCcw className="w-3.5 h-3.5" />}
           className="h-8 px-2.5 text-xs"
           title="Reset timer"
@@ -195,16 +137,16 @@ export function PomodoroBentoWidget() {
           Reset
         </Button>
 
-        {isRunning && (
+        {(isRunning || sessionId) && (
           <Button
             variant="outline"
             size="sm"
-            onClick={endSession}
+            onClick={endSession} disabled={isBusy}
             icon={<Square className="w-3 h-3 text-red-500" />}
             className="h-8 px-2.5 text-xs text-red-600 border-red-200 hover:bg-red-50"
-            title="End session early & save progress"
+            title="Akhiri sesi dan catat waktu fokus"
           >
-            End
+            Akhiri
           </Button>
         )}
 
@@ -212,21 +154,21 @@ export function PomodoroBentoWidget() {
           <Button
             variant="primary"
             size="sm"
-            onClick={pauseTimer}
+            onClick={pauseTimer} disabled={isBusy}
             icon={<Pause className="w-3.5 h-3.5" />}
             className="flex-1 h-8 text-xs font-bold"
           >
-            Pause
+            Jeda
           </Button>
         ) : (
           <Button
             variant="primary"
             size="sm"
-            onClick={startTimer}
+            onClick={startTimer} disabled={isBusy}
             icon={<Play className="w-3.5 h-3.5" />}
             className="flex-1 h-8 text-xs font-bold"
           >
-            Start Focus
+            {showProgressPrompt ? "Perbarui progres" : phase === "break" ? "Mulai istirahat" : "Mulai fokus"}
           </Button>
         )}
       </div>
