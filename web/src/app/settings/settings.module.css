@@ -1,0 +1,60 @@
+.page { --ink: #193e32; --muted: #829076; --line: #dce4d2; color: var(--ink); max-width: 1120px; margin: auto; padding-bottom: 32px; }
+.header { margin-bottom: 32px; }
+.header h1 { margin: 0 0 8px; font-size: 34px; font-weight: 500; letter-spacing: -1.2px; }
+.header p, .sectionHeading p { margin: 0; color: var(--muted); font-size: 14px; line-height: 1.7; }
+.section { display: grid; grid-template-columns: 230px minmax(0, 1fr); gap: 32px; padding: 28px 0; border-top: 1px solid var(--line); }
+.sectionHeading { padding-top: 6px; }
+.sectionHeading > svg { color: #809a6d; margin-bottom: 14px; }
+.sectionHeading h2 { font-size: 19px; font-weight: 500; letter-spacing: -.4px; margin: 0 0 8px; }
+.sectionHeading p { font-size: 13px; max-width: 220px; }
+.panel { min-width: 0; border: 1px solid var(--line); border-radius: 22px; padding: 26px; background: #fffef8; }
+.photoRow { display: flex; align-items: center; gap: 20px; padding-bottom: 24px; margin-bottom: 24px; border-bottom: 1px solid #e5eada; }
+.avatar { position: relative; width: 80px; height: 80px; border-radius: 50%; background: #e5edd9; display: grid; place-items: center; overflow: hidden; flex-shrink: 0; font-size: 28px; color: #4d6e40; }
+.avatarImage { object-fit: cover; }
+.uploading { position: absolute; inset: 0; display: grid; place-items: center; background: #193e3266; color: white; }
+.photoDetails strong { font-weight: 500; font-size: 14px; }
+.photoDetails p { font-size: 12px; color: var(--muted); margin: 5px 0 10px; }
+.fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 22px 20px; }
+.form label, .emailField > span { font-size: 13px; font-weight: 400; color: #5d7453; }
+.form input { border-color: #d3deca; background: #fffef8; color: var(--ink); border-radius: 11px; box-shadow: none; }
+.form input::placeholder { color: #9aa68f; }
+.form input:focus { border-color: #839d6c; outline: 2px solid #a2b88d33; box-shadow: none; }
+.emailField > span { display: block; margin-bottom: 6px; }
+.emailField > div { display: flex; align-items: center; gap: 9px; height: 44px; padding: 0 12px; border: 1px solid #e0e6d7; border-radius: 11px; color: #809174; background: #f4f6ee; font-size: 13px; }
+.emailField svg { flex-shrink: 0; }
+.emailField > div span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.emailField small { display: block; color: #97a18b; font-size: 11px; margin-top: 6px; }
+.formFooter { display: flex; justify-content: space-between; align-items: center; gap: 16px; margin-top: 25px; }
+.formFooter > span { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: #6c8754; }
+.primaryButton, .outlineButton, .dangerButton { display: inline-flex; align-items: center; justify-content: center; gap: 8px; font-size: 13px; font-weight: 400; border-radius: 100px; min-height: 40px; padding: 10px 16px; cursor: pointer; transition: background .18s, border-color .18s; text-decoration: none; }
+.primaryButton { background: #204738; color: #fffef8; box-shadow: none; }
+.primaryButton:hover { background: #2c5843; box-shadow: none; }
+.outlineButton { border: 1px solid #cedbc1; color: #4f7040; background: transparent; }
+.outlineButton:hover { background: #edf2e3; border-color: #9ab386; }
+.connectionRow { display: flex; align-items: flex-start; justify-content: space-between; gap: 18px; }
+.panel h3 { font-size: 16px; font-weight: 500; margin: 0 0 7px; letter-spacing: -.2px; }
+.connectionRow p, .accountPanel p { font-size: 13px; line-height: 1.8; color: var(--muted); margin: 0; }
+.badge { display: inline-flex; align-items: center; gap: 6px; flex-shrink: 0; padding: 6px 9px; border-radius: 100px; background: #eaf0df; color: #698452; font-size: 11px; }
+.details { margin-top: 17px; font-size: 12px; color: #7c8e6b; }
+.details summary { cursor: pointer; width: fit-content; }
+.details p { margin: 9px 0 0; overflow-wrap: anywhere; }
+.connectionActions { display: flex; align-items: center; gap: 20px; flex-wrap: wrap; border-top: 1px solid #e5eada; padding-top: 20px; margin-top: 20px; }
+.textLink { display: inline-flex; align-items: center; gap: 7px; color: #7e926b; font-size: 12px; text-decoration: none; }
+.textLink:hover { color: #365b30; }
+.accountPanel { display: flex; align-items: center; gap: 24px; justify-content: space-between; background: #fbf9f2; }
+.dangerButton { flex-shrink: 0; background: transparent; color: #a26d53; border: 1px solid #dec6b7; }
+.dangerButton:hover { background: #f4e9dd; }
+.error { color: #a0694e; font-size: 13px; line-height: 1.7; margin: 12px 0; }
+.page button:disabled { opacity: .5; cursor: default; }
+.page :is(a, button, summary):focus-visible { outline: 2px solid #8ca976; outline-offset: 3px; }
+.modalLayer { position: fixed; inset: 0; z-index: 10010; display: flex; align-items: center; justify-content: center; padding: 20px; }
+.backdrop { position: absolute; inset: 0; background: #193e3266; backdrop-filter: blur(5px); }
+.dialog { position: relative; width: 100%; max-width: 510px; max-height: calc(100dvh - 40px); overflow-y: auto; border: 1px solid #e0d9cb; border-radius: 24px; background: #fffef8; padding: 28px; color: #193e32; box-shadow: 0 24px 80px #193e3226; animation: reveal .18s ease both; }
+.dialog > * + * { margin-top: 22px; }
+.dialog h3 { color: #193e32; font-weight: 500; }
+.dialog :is(input, button) { border-radius: 11px; }
+.dialog input { background: #fffef8; }
+@keyframes reveal { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+@media (max-width: 950px) { .section { grid-template-columns: 190px minmax(0,1fr); gap: 22px; } .panel { padding: 22px; } .connectionRow, .accountPanel { flex-direction: column; align-items: flex-start; gap: 16px; } }
+@media (max-width: 700px) { .header h1 { font-size: 30px; } .section { grid-template-columns: 1fr; gap: 16px; padding: 24px 0; } .sectionHeading { padding-top: 0; } .sectionHeading > svg { display: none; } .sectionHeading p { max-width: none; } .fields { grid-template-columns: 1fr; gap: 18px; } .panel { padding: 20px; } .photoRow { gap: 14px; } .avatar { width: 64px; height: 64px; } .formFooter { flex-wrap: wrap; } .dialog { padding: 24px 20px; } }
+@media (prefers-reduced-motion: reduce) { .dialog { animation: none; } .primaryButton, .outlineButton, .dangerButton { transition: none; } }
