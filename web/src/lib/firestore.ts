@@ -1,3 +1,5 @@
+import { PERFORMANCE_LABELS } from "./learning/engine";
+import { ENGINE_VERSION, validateProfile, profileSignature, type LearningProfile } from "./learning/profile";
 import {
   doc,
   setDoc,
@@ -72,6 +74,7 @@ export async function markAssessmentComplete(uid: string): Promise<void> {
 // ── Academic Assessment ───────────────────────────────────────────────────────
 
 export interface AcademicAssessmentData {
+  schemaVersion?: number;
   userId: string;
   age: number;
   gender: number;
@@ -117,17 +120,33 @@ export interface AcademicInsight {
   userId: string;
   academicScore: number;
   prediction: string;
-  confidence: number;
+  confidence: number | null;
   recommendation: string;
   strengths: string[];
   weaknesses: string[];
   generatedAt?: unknown;
+  source?: "machine_learning" | "heuristic_fallback";
+  engineVersion?: string;
+  scoreKind?: "habit_summary";
+  headline?: string;
+  modelVersion?: string | null;
+  fallbackReason?: string | null;
+  profileSignature?: string;
+  profileSnapshot?: LearningProfile;
 }
 
 export async function saveAcademicInsight(
   userId: string,
   data: Omit<AcademicInsight, "userId" | "generatedAt">
 ): Promise<void> {
+  const profile = validateProfile(data.profileSnapshot);
+  const currentProfile = validateProfile(await getAssessment(userId));
+  if (!profile.ok || !currentProfile.ok || data.engineVersion !== ENGINE_VERSION || data.profileSignature !== profileSignature(profile.data) || data.profileSignature !== profileSignature(currentProfile.data)) {
+    throw new Error("Profil sudah berubah. Perbarui hasil dari jawaban terakhir.");
+  }
+  if (!Number.isFinite(data.academicScore) || data.academicScore < 0 || data.academicScore > 100 || !PERFORMANCE_LABELS.some(label => label === data.prediction) || typeof data.recommendation !== "string" || !Array.isArray(data.strengths) || !Array.isArray(data.weaknesses) || ![...data.strengths, ...data.weaknesses].every(item => typeof item === "string") || (data.source !== "machine_learning" && data.source !== "heuristic_fallback") || (data.source === "machine_learning" ? typeof data.confidence !== "number" || !Number.isFinite(data.confidence) || data.confidence < 0 || data.confidence > 100 : data.confidence !== null)) {
+    throw new Error("Hasil belum lengkap. Coba perbarui lagi.");
+  }
   const insightRef = doc(db, "academic_insights", userId);
   await setDoc(insightRef, {
     ...data,
@@ -142,7 +161,11 @@ export async function getAcademicInsight(
   const insightRef = doc(db, "academic_insights", userId);
   const snap = await getDoc(insightRef);
   if (!snap.exists()) return null;
-  return snap.data() as AcademicInsight;
+  const insight = snap.data() as AcademicInsight;
+  const profile = validateProfile(await getAssessment(userId));
+  // Keep older documents intact, but never feed stale or ambiguous results into tasks/chat.
+  if (!profile.ok || insight.engineVersion !== ENGINE_VERSION || insight.profileSignature !== profileSignature(profile.data)) return null;
+  return insight;
 }
 
 // ── Notes ───────────────────────────────────────────────────────────────────
@@ -311,6 +334,14 @@ export interface NoteSummary {
   userId: string;
   summary: string;
   generatedAt?: unknown;
+  source?: "machine_learning" | "heuristic_fallback";
+  engineVersion?: string;
+  scoreKind?: "habit_summary";
+  headline?: string;
+  modelVersion?: string | null;
+  fallbackReason?: string | null;
+  profileSignature?: string;
+  profileSnapshot?: LearningProfile;
 }
 
 export async function saveNoteSummary(
@@ -605,6 +636,9 @@ export async function markAllNotificationsRead(userId: string): Promise<void> {
 // ── Pomodoro Sessions ─────────────────────────────────────────────────────────
 
 export interface PomodoroSession {
+  outcome?: "full" | "early" | "reset";
+  elapsedSeconds?: number;
+  plannedMinutes?: number;
   id: string;
   userId: string;
   taskId: string;
