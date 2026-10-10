@@ -10,6 +10,8 @@ Outputs:
 """
 
 import os
+import json
+from datetime import datetime, timezone
 import sys
 import warnings
 
@@ -19,6 +21,7 @@ import pandas as pd
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import (
     accuracy_score,
+    confusion_matrix,
     classification_report,
     f1_score,
     precision_score,
@@ -32,29 +35,14 @@ warnings.filterwarnings("ignore")
 # ── Paths ──────────────────────────────────────────────────────────────────────
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 PROJECT_DIR = os.path.dirname(BASE_DIR)  # AI-Project/mindflow-ai
-DATASET_PATH = os.path.join(BASE_DIR, "dataset", "cleaned_student_dataset.csv")
+DATASET_PATH = os.path.join(BASE_DIR, "dataset", "student_habits_performance.csv")
 
 MODEL_PATH = os.path.join(BASE_DIR, "model.pkl")
 ENCODER_PATH = os.path.join(BASE_DIR, "encoder.pkl")
 SCALER_PATH = os.path.join(BASE_DIR, "scaler.pkl")
 
 # ── Feature columns (must match assessment form) ──────────────────────────────
-FEATURE_COLS = [
-    "age",
-    "gender",
-    "study_hours_per_day",
-    "social_media_hours",
-    "netflix_hours",
-    "part_time_job",
-    "attendance_percentage",
-    "sleep_hours",
-    "diet_quality",
-    "exercise_frequency",
-    "parental_education_level",
-    "internet_quality",
-    "mental_health_rating",
-    "extracurricular_participation",
-]
+from profile_contract import FEATURE_COLS
 
 TARGET_COL = "performance_label"
 
@@ -82,29 +70,42 @@ def main() -> None:
     df = pd.read_csv(DATASET_PATH)
     print(f"\n📊 Dataset loaded: {df.shape[0]} rows × {df.shape[1]} columns")
 
-    # ── 2. Clean labels ───────────────────────────────────────────────────────
-    df[TARGET_COL] = df[TARGET_COL].map(LABEL_MAP)
-    df = df.dropna(subset=[TARGET_COL])
-    print(f"   Classes: {df[TARGET_COL].value_counts().to_dict()}")
-
-    # ── 3. Features & target ──────────────────────────────────────────────────
-    X = df[FEATURE_COLS].copy()
-    y = df[TARGET_COL].copy()
+    # Prepare labels/categories from raw data without global imputation or scaling.
+    # Exam scores determine class labels only and are never input features.
+    df[TARGET_COL] = pd.cut(
+        pd.to_numeric(df["exam_score"], errors="coerce"),
+        bins=[-np.inf, 50, 65, 80, np.inf], labels=["Low", "Average", "Good", "Excellent"],
+        right=False,
+    )
+    binary = {"Yes": 1, "No": 0, "Male": 1, "Female": 0}
+    for column in ["gender", "part_time_job", "extracurricular_participation"]:
+        df[column] = df[column].map(binary)
+    df["diet_quality"] = df["diet_quality"].map({"Poor": 0, "Fair": 1, "Good": 2, "Excellent": 3})
+    df["internet_quality"] = df["internet_quality"].map({"Poor": 0, "Average": 1, "Good": 2})
+    df["parental_education_level"] = df["parental_education_level"].map({"High School": 0, "Bachelor": 1, "Master": 2, "PhD": 3})
+    # Never invent binary gender values for unknown categories.
+    df = df.dropna(subset=[TARGET_COL, "gender", "part_time_job", "extracurricular_participation", "diet_quality", "internet_quality"])
+    X = df[FEATURE_COLS].apply(pd.to_numeric, errors="coerce")
+    y = df[TARGET_COL].astype(str)
 
     # ── 4. Encode target ──────────────────────────────────────────────────────
     encoder = LabelEncoder()
     y_encoded = encoder.fit_transform(y)
     print(f"   Label mapping: {dict(zip(encoder.classes_, encoder.transform(encoder.classes_)))}")
 
-    # ── 5. Scale features ─────────────────────────────────────────────────────
-    scaler = StandardScaler()
-    X_scaled = scaler.fit_transform(X)
-
-    # ── 6. Train / Test split ─────────────────────────────────────────────────
-    X_train, X_test, y_train, y_test = train_test_split(
-        X_scaled, y_encoded, test_size=0.2, random_state=42, stratify=y_encoded
+    # Split before fitting preprocessing: test rows never determine scaling.
+    X_train_raw, X_test_raw, y_train, y_test = train_test_split(
+        X, y_encoded, test_size=0.2, random_state=42, stratify=y_encoded
     )
-    print(f"\n🔀 Split: {len(X_train)} train / {len(X_test)} test")
+    # Fill missing values using training rows only. Retain these values as metadata.
+    fill_values = X_train_raw.median().to_dict()
+    fill_values["parental_education_level"] = float(X_train_raw["parental_education_level"].mode().iloc[0])
+    X_train_raw = X_train_raw.fillna(fill_values)
+    X_test_raw = X_test_raw.fillna(fill_values)
+    scaler = StandardScaler()
+    X_train = scaler.fit_transform(X_train_raw)
+    X_test = scaler.transform(X_test_raw)
+    print(f"Split: {len(X_train)} train / {len(X_test)} test")
 
     # ── 7. Train Random Forest ────────────────────────────────────────────────
     print("\n🌲 Training Random Forest Classifier...")
@@ -150,6 +151,21 @@ def main() -> None:
     joblib.dump(model, MODEL_PATH)
     joblib.dump(encoder, ENCODER_PATH)
     joblib.dump(scaler, SCALER_PATH)
+    # Save evidence and input meanings alongside newly trained artifacts.
+    metadata = {
+        "schemaVersion": 2,
+        "modelVersion": "random-forest-" + datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ"),
+        "features": FEATURE_COLS,
+        "categories": {"gender": {"Female": 0, "Male": 1}, "diet_quality": {"Poor": 0, "Fair": 1, "Good": 2, "Excellent": 3}, "internet_quality": {"Poor": 0, "Average": 1, "Good": 2}, "parental_education_level": {"High School": 0, "Bachelor": 1, "Master": 2, "PhD": 3}},
+        "confidenceCalibrated": False,
+        "evaluationScope": "holdout_split_before_imputation_and_scaling",
+        "trainingFillValues": fill_values,
+        "metrics": {"accuracy": float(accuracy), "precision": float(precision), "recall": float(recall), "f1": float(f1)},
+        "classLabels": encoder.classes_.tolist(),
+        "confusionMatrix": confusion_matrix(y_test, y_pred).tolist(),
+    }
+    with open(os.path.join(BASE_DIR, "model_metadata.json"), "w", encoding="utf-8") as file:
+        json.dump(metadata, file, indent=2)
 
     print(f"\n✅ Saved model   → {MODEL_PATH}")
     print(f"✅ Saved encoder → {ENCODER_PATH}")
