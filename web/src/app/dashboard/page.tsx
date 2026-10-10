@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState, Suspense } from "react";
+import React, { useEffect, useState, useRef, Suspense } from "react";
 import { useRouter } from "next/navigation";
 import {
   Plus,
@@ -26,6 +26,8 @@ import { Button } from "@/components/ui/Button";
 import { BentoGrid } from "@/components/dashboard/bento/BentoGrid";
 import { LoadingScreen } from "@/components/ui/LoadingScreen";
 import { ErrorState } from "@/components/ui/ErrorState";
+import { QuickNoteSearch } from "@/components/dashboard/bento/DashboardWidgets";
+import s from "@/components/dashboard/bento/workspace.module.css";
 
 function DashboardContentImpl() {
   const { user, userDoc, loading: authLoading } = useAuth();
@@ -38,6 +40,10 @@ function DashboardContentImpl() {
   const [sessions, setSessions] = useState<PomodoroSession[]>([]);
   const [notifications, setNotifications] = useState<NotificationDocument[]>([]);
   const [showNotifications, setShowNotifications] = useState(false);
+  const notificationsRef = useRef<HTMLDivElement>(null);
+  const notificationButtonRef = useRef<HTMLButtonElement>(null);
+  const [failedData, setFailedData] = useState<string[]>([]);
+  const [partialError, setPartialError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -47,6 +53,8 @@ function DashboardContentImpl() {
     if (!user) return;
     setLoading(true);
     setError(null);
+    setPartialError(null);
+    setFailedData([]);
     try {
       const [
         userNotes,
@@ -55,20 +63,27 @@ function DashboardContentImpl() {
         userTasks,
         userSessions,
         userNotifs,
-      ] = await Promise.all([
+      ] = await Promise.allSettled([
         getUserNotes(user.uid),
         getUserSummariesCount(user.uid),
-        getAcademicInsight(user.uid).catch(() => null),
+        getAcademicInsight(user.uid),
         getUserTasks(user.uid),
         getUserPomodoroSessions(user.uid),
         getUserNotifications(user.uid),
       ]);
-      setNotes(userNotes);
-      setSummariesCount(count);
-      setInsight(userInsight);
-      setTasks(userTasks);
-      setSessions(userSessions);
-      setNotifications(userNotifs);
+      const results = [userNotes, count, userInsight, userTasks, userSessions, userNotifs];
+      if (results.every(result => result.status === "rejected")) throw new Error("Dashboard unavailable");
+      setNotes(userNotes.status === "fulfilled" ? userNotes.value : []);
+      setSummariesCount(count.status === "fulfilled" ? count.value : 0);
+      setInsight(userInsight.status === "fulfilled" ? userInsight.value : null);
+      setTasks(userTasks.status === "fulfilled" ? userTasks.value : []);
+      setSessions(userSessions.status === "fulfilled" ? userSessions.value : []);
+      setNotifications(userNotifs.status === "fulfilled" ? userNotifs.value : []);
+      const labels = ["catatan", "ringkasan", "insight", "tugas", "sesi fokus", "notifikasi"];
+      const keys = ["notes", "summaries", "insight", "tasks", "sessions", "notifications"];
+      setFailedData(results.flatMap((result, index) => result.status === "rejected" ? [keys[index]] : []));
+      const failed = results.flatMap((result, index) => result.status === "rejected" ? [labels[index]] : []);
+      if (failed.length) setPartialError(`Belum bisa memuat ${failed.join(", ")}. Data pada bagian tersebut belum tersedia.`);
     } catch (err) {
       console.error("Failed to load dashboard data:", err);
       setError("Gagal memuat data dashboard. Periksa koneksi internet Anda.");
@@ -86,9 +101,43 @@ function DashboardContentImpl() {
     loadData();
   }, [user, authLoading, router, loadData]);
 
+  useEffect(() => {
+    if (!user) return;
+    const taskUpdated = (event: Event) => {
+      const detail = (event as CustomEvent<{ userId: string; task: TaskDocument }>).detail;
+      if (detail?.userId !== user.uid || detail.task.userId !== user.uid) return;
+      setTasks(previous => previous.some(task => task.id === detail.task.id)
+        ? previous.map(task => task.id === detail.task.id ? detail.task : task)
+        : [...previous, detail.task]);
+    };
+    const sessionUpdated = (event: Event) => {
+      const detail = (event as CustomEvent<{ userId: string; sessionId: string; session: PomodoroSession | null }>).detail;
+      if (detail?.userId !== user.uid) return;
+      const session = detail.session;
+      if (session && session.userId !== user.uid) return;
+      setSessions(previous => !session ? previous.filter(item => item.id !== detail.sessionId)
+        : previous.some(item => item.id === session.id) ? previous.map(item => item.id === session.id ? session : item) : [session, ...previous]);
+    };
+    window.addEventListener("cogniva-focus-task-updated", taskUpdated);
+    window.addEventListener("cogniva-focus-session-updated", sessionUpdated);
+    return () => {
+      window.removeEventListener("cogniva-focus-task-updated", taskUpdated);
+      window.removeEventListener("cogniva-focus-session-updated", sessionUpdated);
+    };
+  }, [user?.uid]);
+
+  useEffect(() => {
+    if (!showNotifications) return;
+    const dismiss = (event: PointerEvent) => { if (!notificationsRef.current?.contains(event.target as Node)) setShowNotifications(false); };
+    const escape = (event: KeyboardEvent) => { if (event.key === "Escape") { setShowNotifications(false); notificationButtonRef.current?.focus(); } };
+    document.addEventListener("pointerdown", dismiss);
+    document.addEventListener("keydown", escape);
+    return () => { document.removeEventListener("pointerdown", dismiss); document.removeEventListener("keydown", escape); };
+  }, [showNotifications]);
+
   if (authLoading || loading) {
     return (
-      <LoadingScreen label="Memuat Dashboard..." subtext="Menyiapkan ringkasan belajar & data terkini" />
+      <LoadingScreen label="Menyiapkan ruang belajarmu" subtext="Menyiapkan ringkasan belajar & data terkini" />
     );
   }
 
@@ -112,30 +161,35 @@ function DashboardContentImpl() {
   };
 
   return (
-    <div className="space-y-6 animate-fade-in" suppressHydrationWarning>
+    <div className={s.page} suppressHydrationWarning>
       {/* Header Greeting & Actions */}
-      <div className="relative z-20 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 animate-slide-up">
-        <div>
-          <h1 className="text-2xl font-bold text-[#1F2937] tracking-tight" suppressHydrationWarning>
-            Good {new Date().getHours() < 12 ? "morning" : new Date().getHours() < 18 ? "afternoon" : "evening"},{" "}
+      <div className={s.header}>
+        <div className={s.greeting}>
+          <h1 suppressHydrationWarning>
+            Selamat {new Date().getHours() < 11 ? "pagi" : new Date().getHours() < 15 ? "siang" : new Date().getHours() < 18 ? "sore" : "malam"},{" "}
             {firstName}
           </h1>
           <p className="text-sm text-gray-500 mt-1">
-            Personalized modular dashboard & study command center
+            Apa yang ingin kamu tuntaskan hari ini?
           </p>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className={s.headerActions}>
+          <QuickNoteSearch notes={notes} />
           {/* Notification Bell */}
-          <div className="relative">
+          <div className="relative" ref={notificationsRef}>
             <button
+              ref={notificationButtonRef}
+              aria-label="Notifikasi"
+              aria-expanded={showNotifications}
+              aria-controls="dashboard-notifications"
               onClick={() => setShowNotifications(!showNotifications)}
-              className="relative p-2.5 rounded-2xl border border-border bg-white text-gray-500 hover:text-primary hover:bg-primary-50 hover:border-primary/30 transition-all cursor-pointer shadow-sm"
-              title="Notifications"
+              className={s.bellButton}
+              title="Notifikasi"
             >
               <Bell className="w-5 h-5" />
               {unreadNotifs.length > 0 && (
-                <span className="absolute -top-1 -right-1 w-4.5 h-4.5 bg-red-500 text-white text-[9px] font-bold rounded-full flex items-center justify-center">
+                <span className="absolute -top-1 -right-1 w-4.5 h-4.5 bg-[#527243] text-white text-[10px] font-bold rounded-full flex items-center justify-center">
                   {unreadNotifs.length}
                 </span>
               )}
@@ -143,21 +197,21 @@ function DashboardContentImpl() {
 
             {/* Notification Dropdown */}
             {showNotifications && (
-              <div className="absolute right-0 top-12 z-50 w-80 bg-white rounded-3xl border border-border shadow-float overflow-hidden animate-scale-in">
+              <div id="dashboard-notifications" className={s.notifications}>
                 <div className="flex items-center justify-between px-4 py-3 border-b border-border">
-                  <span className="text-sm font-bold text-gray-800">Notifications</span>
+                  <span className="text-sm font-bold text-gray-800">Notifikasi</span>
                   {unreadNotifs.length > 0 && (
                     <button
                       onClick={handleMarkAllRead}
                       className="text-xs text-primary font-semibold hover:underline cursor-pointer"
                     >
-                      Mark all read
+                      Tandai dibaca
                     </button>
                   )}
                 </div>
                 <div className="max-h-72 overflow-y-auto">
                   {notifications.slice(0, 8).length === 0 ? (
-                    <p className="text-xs text-gray-400 text-center py-6">No notifications</p>
+                    <p className="text-xs text-gray-400 text-center py-6">Belum ada notifikasi</p>
                   ) : (
                     notifications.slice(0, 8).map((notif) => (
                       <div
@@ -183,20 +237,23 @@ function DashboardContentImpl() {
             size="md"
             href="/notes"
             icon={<Plus className="w-4 h-4" />}
-            className="rounded-2xl shadow-sm font-bold"
+            className={s.primaryButton}
           >
-            New Note
+            Catatan baru
           </Button>
         </div>
       </div>
 
-      {/* 🧩 Modular Bento Grid Component */}
+      {partialError && <div className={s.saveError} role="alert">{partialError}<button onClick={loadData}>Coba lagi</button></div>}
+      {/* Customizable workspace */}
       <BentoGrid
         notes={notes}
         summariesCount={summariesCount}
         insight={insight}
         tasks={tasks}
         sessions={sessions}
+        unavailable={failedData}
+        onRetry={loadData}
       />
     </div>
   );
@@ -212,11 +269,11 @@ export default function DashboardPage() {
   return (
     <DashboardShell>
       {!mounted ? (
-        <LoadingScreen label="Memuat Dashboard..." subtext="Menyiapkan ringkasan belajar & data terkini" />
+        <LoadingScreen label="Menyiapkan ruang belajarmu" subtext="Menyiapkan ringkasan belajar & data terkini" />
       ) : (
         <Suspense
           fallback={
-            <LoadingScreen label="Memuat Dashboard..." subtext="Menyiapkan ringkasan belajar & data terkini" />
+            <LoadingScreen label="Menyiapkan ruang belajarmu" subtext="Menyiapkan ringkasan belajar & data terkini" />
           }
         >
           <DashboardContentImpl />
