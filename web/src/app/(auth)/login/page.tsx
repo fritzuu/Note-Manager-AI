@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { AuthField, AuthSubmit, AuthNotice, AuthDivider } from "@/components/auth/AuthControls";
 import { GoogleButton } from "@/components/auth/GoogleButton";
+import { googleAuthErrorMessage } from "@/lib/authErrors";
 import { AuthFormLoading } from "@/components/auth/AuthLoading";
 import { signInWithEmail, signInWithGoogle } from "@/lib/auth";
 import { getUserDocument } from "@/lib/firestore";
@@ -51,11 +52,11 @@ function LoginForm() {
     if (busy) return;
     setError(null); setGoogleLoading(true);
     try {
-      const { credential, isNewUser } = await signInWithGoogle();
-      setAuthCookie(await credential.user.getIdToken());
-      if (isNewUser) router.push("/assessment"); else await continueToWorkspace(credential.user.uid);
+      const { userDoc } = await signInWithGoogle();
+      // Fresh navigation avoids reusing a protected-route redirect prefetched before login.
+      window.location.assign(userDoc?.assessmentCompleted ? "/dashboard" : "/assessment");
     } catch (err: unknown) {
-      if ((err as { code?: string }).code !== "auth/popup-closed-by-user") setError("Belum berhasil masuk dengan Google. Silakan coba lagi.");
+      setError(googleAuthErrorMessage(err));
     } finally { setGoogleLoading(false); }
   }
 

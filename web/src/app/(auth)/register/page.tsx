@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { MailCheck, RefreshCw } from "lucide-react";
 import { AuthField, AuthSubmit, AuthNotice, AuthDivider } from "@/components/auth/AuthControls";
 import { GoogleButton } from "@/components/auth/GoogleButton";
+import { googleAuthErrorMessage } from "@/lib/authErrors";
 import { signUpWithEmail, signInWithGoogle, sendVerificationEmail } from "@/lib/auth";
 import { getUserDocument } from "@/lib/firestore";
 import { useAuth } from "@/contexts/AuthContext";
@@ -63,12 +64,11 @@ export default function RegisterPage() {
     if (busy) return;
     setError(null); setGoogleLoading(true);
     try {
-      const { credential, isNewUser } = await signInWithGoogle();
-      setAuthCookie(await credential.user.getIdToken());
-      const userDoc = isNewUser ? null : await getUserDocument(credential.user.uid);
-      router.push(userDoc?.assessmentCompleted ? "/dashboard" : "/assessment");
+      const { userDoc } = await signInWithGoogle();
+      // Fresh navigation avoids reusing a protected-route redirect prefetched before login.
+      window.location.assign(userDoc?.assessmentCompleted ? "/dashboard" : "/assessment");
     } catch (err: unknown) {
-      if ((err as { code?: string }).code !== "auth/popup-closed-by-user") setError("Belum berhasil melanjutkan dengan Google. Silakan coba lagi.");
+      setError(googleAuthErrorMessage(err));
     } finally { setGoogleLoading(false); }
   }
 
