@@ -1,358 +1,103 @@
 "use client";
 
-import React, { useState, useRef } from "react";
-import {
-  X,
-  Share2,
-  Copy,
-  Check,
-  Download,
-  Sparkles,
-  Award,
-  Send,
-  MessageCircle,
-} from "lucide-react";
-import { Button } from "@/components/ui/Button";
-import { LivingFlame } from "./LivingFlame";
+import { createPortal } from "react-dom";
 
-interface StreakShareModalProps {
-  isOpen: boolean;
-  onClose: () => void;
-  streakDays: number;
-  todayMinutes: number;
-  totalSessions: number;
-  userName: string;
+import { useState, useEffect } from "react";
+import Image from "next/image";
+import { X, Share2, Copy, Check, Download, MessageCircle, ArrowUpRight, Loader2 } from "lucide-react";
+import { useModalDialog } from "@/components/modals/useModalDialog";
+import s from "@/components/modals/cogniva-modal.module.css";
+import { getStreakStage } from "./streakStages";
+
+interface StreakShareModalProps { isOpen: boolean; onClose: () => void; streakDays: number; todayMinutes: number; totalSessions: number; userName: string }
+const cleanNumber = (value: number) => Number.isFinite(value) ? Math.max(0, Math.floor(value)) : 0;
+const escapeXml = (value: string) => value.replace(/[&<>"']/g, char => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&apos;" }[char]!));
+
+function createCard(days: number, minutes: number, sessions: number, name: string, date: string) {
+  const { stage } = getStreakStage(days);
+  const caption = stage.name;
+  const orbits = Array.from({ length: stage.orbit }, (_, index) => `<circle cx="890" cy="580" r="${370 - index * 44}" fill="none" stroke="${stage.accent}" stroke-opacity=".16" stroke-width="2"/>`).join("");
+  const safeName = escapeXml(Array.from(name || "Kamu").slice(0, 42).join(""));
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="1080" height="1350" viewBox="0 0 1080 1350">
+    <rect width="1080" height="1350" fill="${stage.background}"/>
+    <g transform="translate(72 66) scale(.27)" fill="${stage.foreground}"><path d="M180.72 44.64C146.88 10.08 85.68 3.6 44.64 46.08C8.64 83.52 10.08 144.72 43.2 174.96C50.4 182.88 66.96 182.16 79.92 172.08C97.92 156.96 110.88 133.2 126 115.92C100.8 118.8 83.52 109.44 81.36 94.32C76.32 77.04 90.72 64.08 107.28 63.36C133.92 62.64 156.24 69.84 180.72 44.64Z"/><path d="M52.56 185.76C79.92 207.36 123.12 210.96 153.36 185.76C178.56 164.88 177.12 144.72 194.4 143.28L194.4 113.04C172.8 109.44 152.64 111.6 139.68 122.4C120.24 139.68 108.72 165.6 91.44 179.28C79.92 190.08 64.08 191.52 52.56 185.76Z"/></g>
+    <text x="152" y="108" fill="${stage.foreground}" font-family="Arial,sans-serif" font-size="35" font-weight="600">Cogniva</text>
+    <text x="1000" y="104" fill="${stage.muted}" font-family="Arial,sans-serif" font-size="23" text-anchor="end">${escapeXml(date)}</text>
+    ${orbits}
+    <circle cx="786" cy="224" r="16" fill="${stage.accent}"/>
+    <text x="80" y="255" fill="${stage.accent}" font-family="Arial,sans-serif" font-size="27">${safeName}</text>
+    <text x="68" y="575" fill="${stage.foreground}" font-family="Arial,sans-serif" font-size="${days >= 100 ? 245 : 300}" font-weight="400" letter-spacing="-16">${days}</text>
+    <text x="84" y="652" fill="${stage.accent}" font-family="Arial,sans-serif" font-size="32">hari belajar berturut-turut</text>
+    <text x="80" y="787" fill="${stage.foreground}" font-family="Georgia,serif" font-size="59" font-style="italic">${caption}</text>
+    <rect x="0" y="925" width="1080" height="425" fill="#f0f2e6"/>
+    <line x1="540" x2="540" y1="992" y2="1167" stroke="#cbd5bd" stroke-width="2"/>
+    <text x="80" y="1065" fill="#193d32" font-family="Arial,sans-serif" font-size="78" letter-spacing="-4">${minutes}</text>
+    <text x="80" y="1128" fill="#708261" font-family="Arial,sans-serif" font-size="26">menit aktivitas hari ini</text>
+    <text x="615" y="1065" fill="#193d32" font-family="Arial,sans-serif" font-size="78" letter-spacing="-4">${sessions}</text>
+    <text x="615" y="1128" fill="#708261" font-family="Arial,sans-serif" font-size="26">sesi fokus selesai</text>
+    <text x="80" y="1270" fill="#657956" font-family="Arial,sans-serif" font-size="24">Ruang untuk belajar, dengan caramu.</text>
+    <path d="M961 1238h36v36m-36 0 36-36" fill="none" stroke="#193d32" stroke-width="3"/>
+  </svg>`;
 }
 
-export function StreakShareModal({
-  isOpen,
-  onClose,
-  streakDays,
-  todayMinutes,
-  totalSessions,
-  userName,
-}: StreakShareModalProps) {
+export function StreakShareModal({ isOpen, onClose, streakDays, todayMinutes, totalSessions, userName }: StreakShareModalProps) {
+  const dialogRef = useModalDialog(isOpen, onClose);
   const [copied, setCopied] = useState(false);
   const [downloading, setDownloading] = useState(false);
-  const cardRef = useRef<HTMLDivElement>(null);
-
-  if (!isOpen) return null;
-
-  const currentStreak = Math.max(1, streakDays);
-
-  // Streak Tier styling and title
-  const getStreakTier = (days: number) => {
-    if (days >= 30) {
-      return {
-        title: "Legendary Inferno",
-        subtitle: "Top 1% Consistent Learner",
-        theme: "from-amber-500 via-orange-600 to-red-600",
-        glow: "rgba(245, 158, 11, 0.6)",
-        flameGradient: ["#fef08a", "#f59e0b", "#b45309"],
-      };
-    }
-    if (days >= 14) {
-      return {
-        title: "Diamond Focus",
-        subtitle: "Unbreakable Habit Achieved",
-        theme: "from-purple-600 via-pink-600 to-orange-500",
-        glow: "rgba(168, 85, 247, 0.6)",
-        flameGradient: ["#e9d5ff", "#c084fc", "#7e22ce"],
-      };
-    }
-    if (days >= 7) {
-      return {
-        title: "Blazing Scholar",
-        subtitle: "1 Week Consistency Streak!",
-        theme: "from-orange-500 via-red-500 to-amber-500",
-        glow: "rgba(239, 68, 68, 0.6)",
-        flameGradient: ["#fef08a", "#f97316", "#dc2626"],
-      };
-    }
-    return {
-      title: "Rising Spark",
-      subtitle: "Building the daily focus momentum",
-      theme: "from-emerald-600 via-teal-600 to-primary",
-      glow: "rgba(79, 138, 107, 0.6)",
-      flameGradient: ["#a7f3d0", "#34d399", "#059669"],
-    };
+  const [error, setError] = useState("");
+  useEffect(() => { if (isOpen) { setCopied(false); setError(""); } }, [isOpen]);
+  if (!isOpen || typeof document === "undefined") return null;
+  const days = cleanNumber(streakDays), minutes = cleanNumber(todayMinutes), sessions = cleanNumber(totalSessions);
+  const date = new Date().toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric", timeZone: "Asia/Jakarta" });
+  const svg = createCard(days, minutes, sessions, userName, date);
+  const imageUrl = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svg);
+  const origin = typeof window !== "undefined" && !["localhost", "127.0.0.1", "::1", "[::1]"].includes(window.location.hostname) ? window.location.origin + "/landing" : "";
+  const { stage } = getStreakStage(days);
+  const text = days ? `Aku sudah belajar ${days} hari berturut-turut di Cogniva — ${stage.name}. Hari ini: ${minutes} menit aktivitas belajar.` : `Aku mulai mencatat ritme belajarku di Cogniva. Hari ini: ${minutes} menit aktivitas belajar.`;
+  const shareText = text + (origin ? "\n" + origin : "");
+  const pngFile = async () => {
+    const image = new window.Image();
+    image.src = imageUrl;
+    await image.decode();
+    const canvas = document.createElement("canvas"); canvas.width = 1080; canvas.height = 1350;
+    const context = canvas.getContext("2d");
+    if (!context) throw new Error("Canvas unavailable");
+    context.drawImage(image, 0, 0, 1080, 1350);
+    const blob = await new Promise<Blob>((resolve, reject) => canvas.toBlob(value => value ? resolve(value) : reject(new Error("Image unavailable")), "image/png"));
+    return new File([blob], `cogniva-progres-${days}-hari.png`, { type: "image/png" });
   };
-
-  const tier = getStreakTier(currentStreak);
-  const shareUrl = typeof window !== "undefined" ? window.location.origin : "https://mindflow.ai";
-  const shareText = `I am on a ${currentStreak}-day study streak on MindFlow AI! I just completed ${todayMinutes} focus minutes today. Join me and boost your productivity! ${shareUrl}`;
-
-  const handleCopyLink = async () => {
+  const copy = async () => {
+    setError("");
+    try { await navigator.clipboard.writeText(shareText); setCopied(true); }
+    catch { setError("Teks belum bisa disalin. Izinkan akses clipboard atau gunakan tombol Bagikan."); }
+  };
+  const download = async () => {
+    if (downloading) return;
+    setDownloading(true); setError("");
     try {
-      await navigator.clipboard.writeText(shareText);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2500);
-    } catch {
-      // Fallback
-    }
+      const file = await pngFile();
+      const url = URL.createObjectURL(file);
+      const anchor = document.createElement("a"); anchor.href = url; anchor.download = file.name;
+      document.body.appendChild(anchor); anchor.click(); anchor.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 10000);
+    } catch { setError("Gambar belum bisa disimpan. Coba lagi melalui browser lain."); }
+    finally { setDownloading(false); }
   };
-
-  const handleNativeShare = async () => {
-    if (navigator.share) {
-      try {
-        await navigator.share({
-          title: `${userName}'s ${currentStreak}-Day Learning Streak on MindFlow AI`,
-          text: shareText,
-          url: shareUrl,
-        });
-      } catch {
-        // Ignore user cancel
-      }
-    } else {
-      handleCopyLink();
-    }
+  const nativeShare = async () => {
+    setError("");
+    if (!navigator.share) { await copy(); return; }
+    try { await navigator.share({ title: "Progres belajar di Cogniva", text, ...(origin ? { url: origin } : {}) }); }
+    catch (failure) { if (!(failure instanceof Error && failure.name === "AbortError")) setError("Belum bisa membagikan. Simpan gambar atau salin teksnya."); }
   };
-
-  const handleWhatsAppShare = () => {
-    const url = `https://api.whatsapp.com/send?text=${encodeURIComponent(shareText)}`;
-    window.open(url, "_blank");
-  };
-
-  const handleTwitterShare = () => {
-    const url = `https://twitter.com/intent/tweet?text=${encodeURIComponent(shareText)}`;
-    window.open(url, "_blank");
-  };
-
-  // Download Card as high-quality Canvas PNG
-  const handleDownloadCard = async () => {
-    setDownloading(true);
-    try {
-      const canvas = document.createElement("canvas");
-      const ctx = canvas.getContext("2d");
-      if (!ctx) return;
-
-      canvas.width = 1080;
-      canvas.height = 1350;
-
-      // Draw background gradient
-      const grad = ctx.createLinearGradient(0, 0, 1080, 1350);
-      grad.addColorStop(0, "#0f172a");
-      grad.addColorStop(0.5, "#1e293b");
-      grad.addColorStop(1, "#020617");
-      ctx.fillStyle = grad;
-      ctx.fillRect(0, 0, 1080, 1350);
-
-      // Glow circle
-      const glowGrad = ctx.createRadialGradient(540, 500, 50, 540, 500, 450);
-      glowGrad.addColorStop(0, "rgba(249, 115, 22, 0.4)");
-      glowGrad.addColorStop(1, "rgba(0,0,0,0)");
-      ctx.fillStyle = glowGrad;
-      ctx.beginPath();
-      ctx.arc(540, 500, 450, 0, Math.PI * 2);
-      ctx.fill();
-
-      // Card Container
-      ctx.fillStyle = "rgba(255, 255, 255, 0.07)";
-      ctx.strokeStyle = "rgba(255, 255, 255, 0.18)";
-      ctx.lineWidth = 4;
-      ctx.beginPath();
-      ctx.roundRect(90, 90, 900, 1170, 48);
-      ctx.fill();
-      ctx.stroke();
-
-      // App Brand
-      ctx.font = "bold 36px Inter, sans-serif";
-      ctx.fillStyle = "#ffffff";
-      ctx.textAlign = "center";
-      ctx.fillText("MINDFLOW AI", 540, 190);
-
-      ctx.font = "24px Inter, sans-serif";
-      ctx.fillStyle = "rgba(255,255,255,0.6)";
-      ctx.fillText("Smart AI Study & Focus Command Center", 540, 235);
-
-      // Flame emoji / icon
-      ctx.font = "140px serif";
-      ctx.fillText("🔥", 540, 430);
-
-      // Streak number
-      ctx.font = "900 160px Inter, sans-serif";
-      ctx.fillStyle = "#ffffff";
-      ctx.fillText(`${currentStreak}`, 540, 610);
-
-      ctx.font = "bold 38px Inter, sans-serif";
-      ctx.fillStyle = "#f97316";
-      ctx.fillText("DAYS STREAK ON FIRE!", 540, 680);
-
-      // Tier badge
-      ctx.font = "600 28px Inter, sans-serif";
-      ctx.fillStyle = "rgba(255,255,255,0.85)";
-      ctx.fillText(`★ ${tier.title} • ${userName} ★`, 540, 750);
-
-      // Divider
-      ctx.strokeStyle = "rgba(255,255,255,0.15)";
-      ctx.beginPath();
-      ctx.moveTo(180, 810);
-      ctx.lineTo(900, 810);
-      ctx.stroke();
-
-      // Stats boxes
-      ctx.font = "bold 48px Inter, sans-serif";
-      ctx.fillStyle = "#ffffff";
-      ctx.fillText(`${todayMinutes}m`, 340, 900);
-      ctx.fillText(`${totalSessions}`, 740, 900);
-
-      ctx.font = "24px Inter, sans-serif";
-      ctx.fillStyle = "rgba(255,255,255,0.6)";
-      ctx.fillText("Focus Today", 340, 945);
-      ctx.fillText("Sessions Done", 740, 945);
-
-      // Motivational footer
-      ctx.font = "italic 26px Inter, sans-serif";
-      ctx.fillStyle = "#cbd5e1";
-      ctx.fillText('"Consistency is the key to mastery."', 540, 1070);
-
-      ctx.font = "bold 24px Inter, sans-serif";
-      ctx.fillStyle = "#4ade80";
-      ctx.fillText("Join the challenge at mindflow.ai", 540, 1170);
-
-      // Download
-      const dataUrl = canvas.toDataURL("image/png");
-      const a = document.createElement("a");
-      a.href = dataUrl;
-      a.download = `mindflow-streak-${currentStreak}-days.png`;
-      a.click();
-    } finally {
-      setDownloading(false);
-    }
-  };
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-md animate-fade-in">
-      <div
-        className="bg-white rounded-3xl border border-border shadow-2xl w-full max-w-lg overflow-hidden animate-scale-in flex flex-col relative max-h-[92vh]"
-        onClick={(e) => e.stopPropagation()}
-      >
-        {/* Close Button */}
-        <button
-          onClick={onClose}
-          className="absolute top-4 right-4 z-20 p-2 text-white/80 hover:text-white bg-black/30 hover:bg-black/50 rounded-full backdrop-blur-sm transition-colors cursor-pointer"
-        >
-          <X className="w-4 h-4" />
-        </button>
-
-        {/* 🎨 Top Visual Card Centerpiece (Instagram/Duolingo Style) */}
-        <div
-          ref={cardRef}
-          className={`p-8 pb-9 bg-gradient-to-br ${tier.theme} text-white flex flex-col items-center text-center relative overflow-hidden transition-all duration-500`}
-        >
-          {/* Floating Embers / Sparkles Background */}
-          <div className="absolute inset-0 pointer-events-none overflow-hidden">
-            <div className="absolute top-6 left-12 w-2 h-2 rounded-full bg-yellow-300 animate-sparkle-float" />
-            <div className="absolute top-16 right-16 w-3 h-3 rounded-full bg-orange-300 animate-sparkle-float delay-300" />
-            <div className="absolute bottom-12 left-1/4 w-2 h-2 rounded-full bg-white animate-sparkle-float delay-700" />
-            <div className="absolute top-1/2 right-10 w-2.5 h-2.5 rounded-full bg-amber-200 animate-sparkle-float delay-500" />
-          </div>
-
-          {/* User & App Tag */}
-          <div className="flex items-center gap-2 bg-black/25 backdrop-blur-md px-3.5 py-1 rounded-full border border-white/20 text-[11px] font-bold tracking-wide uppercase mb-3">
-            <Sparkles className="w-3.5 h-3.5 text-yellow-300" />
-            <span>MindFlow AI • {userName}</span>
-          </div>
-
-          {/* Animated Living Flame Centerpiece */}
-          <div className="relative my-3">
-            <LivingFlame streakDays={currentStreak} size="xl" className="scale-125" />
-          </div>
-
-          {/* Massive Number Counter */}
-          <div className="space-y-0.5 mt-1">
-            <p className="text-6xl font-black font-mono tracking-tight text-white drop-shadow-md">
-              {currentStreak}
-            </p>
-            <h3 className="text-lg font-extrabold uppercase tracking-wider text-yellow-200">
-              Days Streak On Fire!
-            </h3>
-          </div>
-
-          {/* Tier Badge */}
-          <div className="mt-3 px-4 py-1.5 rounded-full bg-white/20 backdrop-blur-md border border-white/30 text-xs font-extrabold tracking-wide flex items-center gap-1.5 shadow-sm">
-            <Award className="w-3.5 h-3.5 text-yellow-300" />
-            <span>{tier.title}</span>
-          </div>
-
-          {/* Stats Bar */}
-          <div className="grid grid-cols-2 gap-3 w-full mt-5 bg-black/25 backdrop-blur-md p-3 rounded-2xl border border-white/15">
-            <div className="text-center border-r border-white/20 pr-2">
-              <p className="text-xl font-extrabold text-white">{todayMinutes}m</p>
-              <p className="text-[10px] text-white/75 font-semibold">Today&apos;s Focus</p>
-            </div>
-            <div className="text-center pl-2">
-              <p className="text-xl font-extrabold text-white">{totalSessions}</p>
-              <p className="text-[10px] text-white/75 font-semibold">Sessions Done</p>
-            </div>
-          </div>
-        </div>
-
-        {/* 🚀 Social Share Actions Bottom Area */}
-        <div className="p-6 bg-white space-y-4 overflow-y-auto">
-          <div className="text-center space-y-0.5">
-            <h4 className="text-xs font-bold text-gray-900">
-              Bagikan pencapaian & inspirasi teman belajarmu
-            </h4>
-            <p className="text-[11px] text-gray-500">
-              Simpan kartu grafis atau undang teman untuk bergabung.
-            </p>
-          </div>
-
-          {/* Social Buttons Grid */}
-          <div className="grid grid-cols-3 gap-2.5">
-            <button
-              onClick={handleWhatsAppShare}
-              className="flex flex-col items-center justify-center p-3 rounded-2xl border border-border hover:border-emerald-400 bg-emerald-50/50 hover:bg-emerald-50 text-emerald-700 transition-all cursor-pointer group"
-            >
-              <MessageCircle className="w-4 h-4 text-emerald-600 group-hover:scale-110 transition-transform" />
-              <span className="text-[11px] font-bold mt-1">WhatsApp</span>
-            </button>
-
-            <button
-              onClick={handleTwitterShare}
-              className="flex flex-col items-center justify-center p-3 rounded-2xl border border-border hover:border-blue-400 bg-blue-50/50 hover:bg-blue-50 text-blue-700 transition-all cursor-pointer group"
-            >
-              <Send className="w-4 h-4 text-blue-600 group-hover:scale-110 transition-transform" />
-              <span className="text-[11px] font-bold mt-1">X / Twitter</span>
-            </button>
-
-            <button
-              onClick={handleNativeShare}
-              className="flex flex-col items-center justify-center p-3 rounded-2xl border border-border hover:border-primary bg-primary-50/50 hover:bg-primary-50 text-primary transition-all cursor-pointer group"
-            >
-              <Share2 className="w-4 h-4 text-primary group-hover:scale-110 transition-transform" />
-              <span className="text-[11px] font-bold mt-1">Share...</span>
-            </button>
-          </div>
-
-          {/* Download Card & Copy Link Actions */}
-          <div className="flex items-center gap-2 pt-1">
-            <Button
-              variant="outline"
-              size="md"
-              onClick={handleDownloadCard}
-              disabled={downloading}
-              icon={<Download className="w-4 h-4" />}
-              className="flex-1 text-xs font-bold border-border"
-            >
-              {downloading ? "Exporting..." : "Save Image Card"}
-            </Button>
-
-            <Button
-              variant="primary"
-              size="md"
-              onClick={handleCopyLink}
-              icon={copied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
-              className={`flex-1 text-xs font-bold shadow-sm transition-all ${
-                copied ? "bg-emerald-600 hover:bg-emerald-700" : ""
-              }`}
-            >
-              {copied ? "Copied Link!" : "Copy Share Link"}
-            </Button>
-          </div>
-        </div>
+  return createPortal(<div className={s.backdrop} onClick={event => { if (event.target === event.currentTarget) onClose(); }}>
+    <div ref={dialogRef} tabIndex={-1} role="dialog" aria-modal="true" aria-labelledby="share-progress-title" className={`${s.modal} ${s.shareModal}`}>
+      <header className={s.header}><div><h2 id="share-progress-title">Bagikan progresmu</h2><p>Catatan kecil dari waktu yang sudah kamu luangkan.</p></div><button className={s.iconButton} onClick={onClose} aria-label="Tutup kartu progres"><X size={20} /></button></header>
+      <div className={s.shareBody}><div className={s.cardPreview}><Image unoptimized src={imageUrl} width={1080} height={1350} alt={`Kartu progres ${userName}, ${stage.name}: ${days} hari belajar berturut-turut, ${minutes} menit aktivitas hari ini, ${sessions} sesi fokus selesai.`} /></div><p className={s.exportNote}>Gambar PNG · 1080 × 1350</p>
+        <div className={s.socialActions}><button className={s.secondary} onClick={() => window.open("https://api.whatsapp.com/send?text=" + encodeURIComponent(shareText), "_blank", "noopener,noreferrer")}><MessageCircle size={16} />WhatsApp</button><button className={s.secondary} onClick={() => window.open("https://twitter.com/intent/tweet?text=" + encodeURIComponent(shareText), "_blank", "noopener,noreferrer")}><ArrowUpRight size={16} />X</button><button className={s.secondary} onClick={nativeShare}><Share2 size={16} />Bagikan</button></div>
+        {error && <p className={s.error} role="alert">{error}</p>}
+        {copied && <p className={s.saved} role="status"><Check size={16} />Teks progres disalin.</p>}
       </div>
+      <footer className={s.footer}><button className={s.secondary} onClick={copy}><Copy size={16} />Salin teks</button><button className={s.primary} disabled={downloading} onClick={download}>{downloading ? <Loader2 size={16} className={s.spinner} /> : <Download size={16} />}{downloading ? "Menyiapkan…" : "Simpan gambar"}</button></footer>
     </div>
-  );
+  </div>, document.body);
 }
