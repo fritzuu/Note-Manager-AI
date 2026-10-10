@@ -11,21 +11,9 @@ export { aggregateRules, argmaxLevel } from "./fuzzy/aggregation";
 export { defuzzify } from "./fuzzy/defuzzification";
 export { buildReasoning, deriveRiskLevel, estimateFocusMinutes } from "./fuzzy/reasoning";
 
-/**
- * Derive academic risk (0–100) from AI-generated academic insight.
- * Lower academic score + poor prediction label = higher risk.
- */
-export function deriveAcademicRiskFromInsight(academicScore?: number | null, prediction?: string | null): number {
-  const score = typeof academicScore === "number" && !isNaN(academicScore) ? academicScore : 60;
-  let risk = Math.round(100 - score);
-  const label = (prediction || "").toLowerCase();
-  if      (label.includes("excellent") || label.includes("very high") || label.includes("high performer"))
-    risk = Math.max(0, risk - 20);
-  else if (label.includes("above average") || label.includes("good"))
-    risk = Math.max(0, risk - 10);
-  else if (label.includes("below average") || label.includes("at risk"))
-    risk = Math.min(100, risk + 15);
-  else if (label.includes("fail") || label.includes("poor") || label.includes("critical") || label.includes("low"))
-    risk = Math.min(100, risk + 25);
-  return Math.max(0, Math.min(100, risk));
+/** A bounded secondary profile signal; label wording and provider do not change it. */
+export function deriveAcademicRiskFromInsight(academicScore?: number | null, _prediction?: string | null): number {
+  if (typeof academicScore !== "number" || !Number.isFinite(academicScore)) return 40;
+  const score = Math.max(0, Math.min(100, academicScore));
+  return Math.round(Math.max(20, Math.min(70, 40 + (60 - score) * 0.5)));
 }
