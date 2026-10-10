@@ -3,7 +3,7 @@
 import React, { useEffect, useState, useMemo, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Search, Plus, Trash2, X, FileText, Star, LayoutGrid, List as ListIcon, Copy, ArrowRight, Archive, Undo2, MoreHorizontal, Loader2 } from "lucide-react";
+import { Search, Plus, Trash2, X, FileText, Star, LayoutGrid, List as ListIcon, Check, Copy, ArrowRight, Archive, Undo2, MoreHorizontal, Loader2 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import {
   getUserNotes,
