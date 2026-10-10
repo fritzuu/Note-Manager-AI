@@ -27,8 +27,8 @@ export default function RootPage() {
   return (
     <div className="min-h-screen w-full flex items-center justify-center bg-background" suppressHydrationWarning>
       <LoadingScreen
-        label="Membuka MindFlow AI..."
-        subtext="Mengalihkan ke landing page"
+        label="Membuka Cogniva"
+        subtext="Menyiapkan ruang belajarmu."
         fullHeight
       />
     </div>

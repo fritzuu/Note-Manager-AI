@@ -21,7 +21,7 @@ function AnimatedScore({ value }: { value: number }) {
   return <span aria-hidden="true">{display}</span>;
 }
 
-const LEVELS = { Low: "Rendah", Medium: "Sedang", High: "Tinggi", Critical: "Kritis" };
+const LEVELS = { Low: "Bisa nanti", Medium: "Berikutnya", High: "Utamakan", Critical: "Segera kerjakan" };
 const DEFAULTS = { deadline: 3, difficulty: 7 };
 
 export function PriorityDemo() {
@@ -73,13 +73,13 @@ export function PriorityDemo() {
     <div className={s.demoControls}><div className={s.demoTopline}><span>Demo interaktif</span><button onClick={() => { setDeadline(DEFAULTS.deadline); setDifficulty(DEFAULTS.difficulty); resetTimer(); setPhase("focus"); setSeconds(focus.recommendedMinutes * 60); }}><RotateCcw size={14} /> Reset demo</button></div><h3>Laporan praktikum</h3><p>Ubah dua hal ini.<br />Lihat langkah berikutnya menjadi lebih jelas.</p>
       <div className={s.nativeSlider}><Slider id="demo-deadline" label="Sisa waktu menuju deadline" min={0} max={14} value={deadline} onChange={setDeadline} displayValue={(value) => value === 0 ? "Hari ini" : `${value} hari`} /></div>
       <div className={s.nativeSlider}><Slider id="demo-difficulty" label="Kesulitan tugas" min={1} max={10} value={difficulty} onChange={setDifficulty} displayValue={(value) => `${value} / 10`} /></div>
-      <div className={s.fixedInputs}><p>Kepentingan <strong>8/10</strong><span>·</span>Progres <strong>20%</strong><span>·</span>Risiko akademik <strong>40/100</strong></p></div>
+      <div className={s.fixedInputs}><p>Kepentingan <strong>8/10</strong><span>·</span>Progres <strong>20%</strong></p></div>
     </div>
 
     <div className={s.demoResults}>
       <div className={s.scoreRow}><div><p>Prioritas tugas</p><div className={s.scoreValue} aria-label={`Skor prioritas ${result.priorityScore} dari 100`}><AnimatedScore value={result.priorityScore} /><span>/100</span></div></div><motion.span className={s.resultLevel} key={result.priorityLevel} data-level={result.priorityLevel} initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: reduced ? 0 : 0.2 }}>{LEVELS[result.priorityLevel]} <ArrowUpRight size={14} /></motion.span></div>
       <div className={s.scoreTrack}><motion.span animate={{ width: `${result.priorityScore}%` }} transition={{ duration: reduced ? 0 : 0.35 }} /></div>
-      <div className={s.scoreLabels}><span>Rendah</span><span>Sedang</span><span>Tinggi</span><span>Kritis</span></div>
+      <div className={s.scoreLabels}><span>Bisa nanti</span><span>Berikutnya</span><span>Utamakan</span><span>Segera</span></div>
       <p className={s.reasoning}>{result.reasoning}</p>
       <div className={s.focusRecommendation}><Timer size={18} /><div><p><strong>{focus.recommendedMinutes} menit fokus</strong><ArrowRight size={15} />{focus.breakMinutes} menit jeda</p></div></div>
       <div className={s.timerDemo}><div className={s.timerDial}><svg viewBox="0 0 100 100" aria-hidden="true"><circle cx="50" cy="50" r="44" fill="none" stroke="#e5e7eb" strokeWidth="5" /><motion.circle cx="50" cy="50" r="44" fill="none" stroke="#4f8a6b" strokeWidth="5" strokeLinecap="round" strokeDasharray="276.46" strokeDashoffset={0} initial={false} animate={{ strokeDashoffset: 276.46 * (1 - seconds / total) }} transition={{ duration: reduced ? 0 : 0.2 }} transform="rotate(-90 50 50)" /></svg><div><span>{phase === "focus" ? "FOKUS" : "JEDA"}</span><strong role="timer" aria-label={`Sisa waktu ${time}`}>{time}</strong></div></div>

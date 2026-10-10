@@ -50,7 +50,6 @@ export default function LandingPage() {
   const { scrollYProgress: journeyProgress } = useScroll({ target: journeyRef, offset: ["start end", "end start"] });
   const copyY = useTransform(scrollYProgress, [0, 1], [0, -45]);
   const watermarkX = useTransform(journeyProgress, [0, 1], [100, -160]);
-  const [selected, setSelected] = useState<"notes" | "tasks" | "focus">("notes");
   const [menuOpen, setMenuOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
   const [activeFeature, setActiveFeature] = useState(0);
@@ -106,11 +105,10 @@ export default function LandingPage() {
               <Reveal delay={.2} className={s.heroActions}><Link className={s.primaryButton} href="/register">Temukan alurmu <ArrowUpRight size={20} /></Link><a className={s.textButton} href="#fitur">Lihat cara kerjanya <ArrowRight size={17} /></a></Reveal>
             </motion.div>
             <div className={s.worldWrap}>
-              <CognivaWorld progress={scrollYProgress} onSelect={setSelected} />
+              <CognivaWorld progress={scrollYProgress} onSelect={explore} />
             </div>
             <div className={s.heroBottom}>
               <a className={s.scrollCue} href="#cara-kerja" aria-label="Jelajahi alur belajar"><span><ArrowDown size={18} /></span></a>
-              <div className={s.sceneChoices} aria-label="Jelajahi objek ruang belajar">{CHAPTERS.map((item) => <button key={item.id} aria-pressed={selected === item.id} onClick={() => { setSelected(item.id); explore(item.id); }}>{item.short}<ArrowUpRight size={14} /></button>)}</div>
             </div>
           </div>
           <motion.div className={s.heroProgress} style={{ scaleX: scrollYProgress }} />

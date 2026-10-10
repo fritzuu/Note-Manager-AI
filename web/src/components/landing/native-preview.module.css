@@ -339,3 +339,122 @@
 .compactShell .fullBrand { display: none; }
 .compactShell .appBrand .cognivaMark { display: grid; }
 @media (max-width: 1120px) { .fullBrand { display: none; } .appBrand .cognivaMark { display: grid; } }
+
+/* Use the same cream, sage and forest surfaces as the signed-in workspace. */
+.nativeFrame { --color-primary: #204738; --color-primary-600: #2d5943; --color-primary-50: #edf2e3; --color-border: #dce4d2; color: #193e32; background: #f6f5ee; border-color: #d7dfcc; border-radius: 24px; }
+.frameBar, .heroTabs { background: #fbfaf4; border-color: #dce4d2; }
+.playbackControls button { border-color: #d7dfcc; background: transparent; color: #7c9169; border-radius: 50%; }
+.nativeShell { grid-template-columns: 190px minmax(0, 1fr); transition: grid-template-columns .25s ease; }
+.appSidebar { position: relative; background: #eef1e6; border-color: #dfe5d5; padding: 26px 12px 16px; gap: 24px; }
+.appSidebar nav button { color: #6d7d61; font-weight: 400; border-radius: 11px; gap: 10px; }
+.appSidebar nav button svg { color: #8a9b79; stroke-width: 1.65; flex-shrink: 0; }
+.appSidebar nav .activeNav { background: #dfe8d0; color: #1d4330; box-shadow: none; }
+.appSidebar nav .activeNav svg { color: #526f40; }
+.appSidebar nav button:hover { background: #e3ead7; }
+.navGroupLabel { color: #8a967e; font-size: 10px; padding: 0 12px 8px; }
+.collapseDemo { position: absolute; right: -12px; top: 35px; display: grid; place-items: center; width: 24px; height: 24px; border: 1px solid #d2ddc4; border-radius: 50%; color: #70855d; background: #f6f8ef; z-index: 2; }
+.nativeShell[data-collapsed=true] { grid-template-columns: 58px minmax(0, 1fr); }
+.nativeShell[data-collapsed=true] .fullBrand, .nativeShell[data-collapsed=true] .appSidebar nav button > span, .nativeShell[data-collapsed=true] .demoProfile, .nativeShell[data-collapsed=true] .navGroupLabel { display: none; }
+.nativeShell[data-collapsed=true] .appBrand .cognivaMark { display: grid; }
+.nativeShell[data-collapsed=true] .appSidebar { padding-inline: 7px; }
+.nativeShell[data-collapsed=true] .appSidebar nav button { padding: 10px; }
+.appBrand .cognivaMark { background: transparent !important; }
+.demoProfile { color: #274835; border-color: #dce3cf; }
+.demoProfile > span { background: #d7e2c8; color: #486336; }
+.screenViewport { background: #f6f5ee; }
+.nativeGreeting { margin-bottom: 28px; }
+.nativeGreeting p { color: #193e32; font-weight: 450; font-size: 27px; letter-spacing: -1px; }
+.nativeGreeting div > span { display: block; color: #829076; margin-top: 8px; font-size: 12px; }
+.notification { background: transparent; border-color: #d3ddc7; color: #829076; border-radius: 50%; }
+.bentoControls { background: transparent; border: 0; border-bottom: 1px solid #dce4d2; border-radius: 0; padding: 0 0 20px; margin-bottom: 22px; }
+.bentoControls p { color: #193e32; font-size: 18px; font-weight: 450; }
+.demoOutline { display: inline-flex; gap: 7px; align-items: center; border: 1px solid #cdd8c1; border-radius: 100px; min-height: 36px; padding: 8px 12px; color: #406139; background: transparent; font-size: 11px !important; cursor: pointer; }
+.demoOutline:hover { background: #e9efdd; }
+.dashboardGrid { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 18px; }
+.nativeWidget { min-height: 210px; background: #fffef8; border-color: #dce4d2; border-radius: 22px; box-shadow: none; }
+.nativeWidget[data-widget=notes], .nativeWidget[data-widget=priority], .nativeWidget[data-widget=focus] { grid-column: span 2; }
+.clockWidget { background: #e5edd9; border: 0; }
+.focusWidget { background: #193e32; }
+.focusWidget .nativeFocus { background: #193e32; color: #f6f5ee; }
+.focusWidget .nativeWidgetHeader p, .focusWidget .nativeRing strong { color: #f6f5ee; }
+.focusWidget .nativeWidgetHeader div > span, .focusWidget .nativeRing div span { color: #b6c6a6; }
+.focusWidget .modeBadge { background: #2a4f3d; color: #cbdab4; border-color: #4a6950; }
+.focusWidget .focusButtons > button { border-radius: 100px; box-shadow: none; }
+.focusWidget .focusButtons > button:first-child { background: transparent; border-color: #658163; color: #d1dfba; }
+.focusWidget .focusButtons > button:last-child { background: #d8e8bc; color: #254932; }
+.nativeFocus { background: #fffef8; border-color: #dce4d2; box-shadow: none; }
+.nativeWidgetHeader p, .nativePageHeading p { color: #193e32; font-weight: 450; }
+.nativeWidgetHeader div > span, .nativePageHeading div div > span { color: #829076; }
+.pageIcon, .timerIcon { background: #e7eddc; color: #80976c; border-radius: 50%; }
+.nativeRing strong { color: #193e32; font-weight: 450; }
+.modeBadge { color: #6f865c; border-color: #d9e2cc; background: #edf2e3; border-radius: 100px; }
+.taskSelect { border: 0; padding: 0; }
+.focusButtons button { border-radius: 100px; box-shadow: none; font-weight: 400; }
+.notesSidebar, .editorPaper, .aiSummary { background: #fffef8; border-color: #dce4d2; border-radius: 20px; }
+.notesSidebar > .selectedNote { background: #eaf0df; border-color: #ccd9bb; }
+.notesSidebar > button strong, .noteTitleRow > p, .summaryBody p { color: #193e32; font-weight: 500; }
+.notesSidebar > button > span { color: #88967d; }
+.notesSidebar > button i, .noteTags > span { background: #eaf0df; color: #6d8657; }
+.editorActions button { border-radius: 100px; background: transparent; border-color: #d3ddc7; color: #657e52; }
+.aiSummary > div:first-child { background: #edf2e3; color: #547344; border-color: #dce4d2; font-weight: 400; }
+.conceptTags span { background: #edf2e3; color: #6b8355; border-color: #dbe4cc; }
+.summaryBody ul { color: #829076; }
+.practiceQuestion, .summaryEmpty > span:first-child { background: #edf2e3; }
+.noteTitleRow > p { font-weight: 450; }
+.workspacePill { background: transparent; border-color: #cfdac2; color: #617952; border-radius: 100px; }
+.boardColumn, .doingColumn, .doneColumn { background: transparent; border: 0; border-radius: 0; padding: 10px 5px; }
+.columnHeading { padding-bottom: 14px; border-bottom: 1px solid #d8e1cd; font-weight: 400; color: #617852; }
+.columnHeading > span:last-child { background: #eaf0df; border-radius: 100px; color: #819470; }
+.nativeTaskCard { background: #fffef8; border-color: #dce4d2; border-radius: 20px; box-shadow: none; }
+.nativeTaskCard > p { font-weight: 500; color: #193e32; }
+.nativeTaskCard > span, .boardEmpty { color: #8c9a80; }
+.nativePriority { color: #a07650; background: #f5ecdf; border: 0; border-radius: 100px; }
+.priorityDone { color: #6c8855; background: #eaf0df; }
+.taskProgress { background: transparent; border: 0; padding: 0; border-radius: 0; }
+.taskProgress > div:last-child { background: #e4ebd9; height: 3px; }
+.insightHero { background: #193e32; border-radius: 24px; padding: 28px; color: #f6f5ee; }
+.insightHero > span { font-size: 11px; color: #b2c49e; }
+.insightHero h2 { margin: 16px 0 12px; font-size: 28px; line-height: 1.2; letter-spacing: -.8px; font-weight: 450; }
+.insightHero p { color: #c5d1b7; font-size: 13px; line-height: 1.8; max-width: 510px; }
+.insightStrengths > div { background: #fffef8; border-color: #dce4d2; border-radius: 20px; }
+.insightStrengths p { color: #193e32; font-weight: 500; }
+.insightStrengths span { color: #829076; line-height: 1.7; }
+.originalInsightWidget { margin-top: 18px; border-color: #dce4d2; border-radius: 20px; background: #fffef8; }
+.assistantLayout > aside { background: transparent; border: 0; padding: 10px 0; }
+.assistantLayout aside > .purplePrompt, .assistantLayout aside > .bluePrompt { color: #6b8456; background: transparent; border: 0; border-top: 1px solid #dce4d2; border-radius: 0; }
+.contextCard { border: 0; background: #e9efde; color: #698353; border-radius: 16px; }
+.chatPanel { background: #fffef8; border-color: #dce4d2; border-radius: 22px; }
+.chatPanel > .assistantContext { background: #f3f6ec; padding: 12px 16px; gap: 10px; color: #6b8357; }
+.assistantContext > span { flex: 1; }
+.assistantContext > div { max-width: 60%; }
+.userMessage { background: #204738; font-weight: 400; }
+.aiMessage p { background: transparent; border: 0; padding: 0; color: #536a48; }
+.chatComposer { border-color: #d5e0c7; background: #f3f6ec; border-radius: 16px; }
+.chatComposer > span:last-child { background: #214a37; border-radius: 50%; }
+.heroTabs button { color: #89977b; }
+.heroTabs button[aria-selected=true] { color: #3d6036; font-weight: 400; }
+.heroTabs button > span { background: #79945f; }
+.compactShell .navGroupLabel, .compactShell .collapseDemo { display: none; }
+.compactShell .dashboardGrid { grid-template-columns: repeat(4, minmax(0,1fr)); gap: 10px; }
+.compactShell .nativeWidget { min-height: 135px; border-radius: 16px; }
+.compactShell .nativeWidget[data-widget=priority], .compactShell .nativeWidget[data-widget=focus] { min-height: 260px; }
+.compactShell .nativeWidget h2 { font-size: 12px; line-height: 1.5; }
+.compactShell .nativeWidget h3 { font-size: 11px; }
+.compactShell .nativeWidget a, .compactShell .nativeWidget p, .compactShell .nativeWidget span { font-size: 10px; }
+.compactShell .clockWidget { grid-column: span 2; }
+.compactShell .nativeWidget[data-widget=stat] { grid-column: span 2; }
+.compactShell .nativeGreeting p { font-weight: 450; }
+.compactShell .bentoControls { padding: 0 0 12px; background: transparent; }
+.compactShell .bentoControls p { font-size: 12px; }
+.compactShell .appSidebar { background: #eef1e6; }
+.compactShell .nativeTaskCard { border-radius: 14px; }
+@media (max-width: 1120px) { .nativeShell { grid-template-columns: 64px minmax(0,1fr); } .navGroupLabel, .collapseDemo { display: none; } .compactShell { grid-template-columns: 54px minmax(0,1fr); } }
+@media (max-width: 700px) { .dashboardGrid { grid-template-columns: repeat(2,minmax(0,1fr)); } .nativeWidget[data-widget=notes], .nativeWidget[data-widget=priority], .nativeWidget[data-widget=focus] { grid-column: span 2; } .assistantLayout > aside { padding: 0; } .assistantContext { flex-wrap: wrap; } .nativeShell:not(.compactShell) .appSidebar nav > p { display: none; } }
+@media (max-width: 420px) { .compactShell { grid-template-columns: 40px minmax(0,1fr); } .compactShell .dashboardGrid { grid-template-columns: repeat(2,minmax(0,1fr)); } .compactShell .nativeWidget { grid-column: span 2; } .compactShell .nativeWidget[data-widget=stat] { display: none; } }
+@media (prefers-reduced-motion: reduce) { .nativeShell { transition: none; } }
+
+.compactShell { grid-template-columns: 54px minmax(0,1fr); }
+.workspacePicker { width: 135px; flex-shrink: 0; }
+.nativeFrame button { cursor: pointer; }
+.nativeFrame :is(button, a):focus-visible { outline: 2px solid #8ca976; outline-offset: 3px; }
+@media(max-width:420px) { .compactShell { grid-template-columns: 40px minmax(0,1fr); } .compactShell .workspacePicker { width: 105px; } }
