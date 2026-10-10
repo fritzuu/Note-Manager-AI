@@ -458,3 +458,6 @@
 .nativeFrame button { cursor: pointer; }
 .nativeFrame :is(button, a):focus-visible { outline: 2px solid #8ca976; outline-offset: 3px; }
 @media(max-width:420px) { .compactShell { grid-template-columns: 40px minmax(0,1fr); } .compactShell .workspacePicker { width: 105px; } }
+
+.heroTabs { overflow-x: auto; scrollbar-width: thin; }
+.heroTabs button { flex-shrink: 0; white-space: nowrap; }

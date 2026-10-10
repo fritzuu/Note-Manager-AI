@@ -66,3 +66,6 @@
   .workspace { flex: none; }
   .conversation { height: 420px; }
 }
+
+/* The hidden history panel does not occupy a grid cell. Keep the chat in the visible column. */
+.workspace:not([data-history="true"]) > .conversation { grid-column: 2; }
