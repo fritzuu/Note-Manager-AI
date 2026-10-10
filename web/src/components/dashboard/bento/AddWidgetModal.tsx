@@ -1,241 +1,53 @@
 "use client";
 
-import React, { useState } from "react";
-import {
-  X,
-  Plus,
-  Check,
-  LayoutGrid,
-  Search,
-  Sparkles,
-  FileText,
-  TrendingUp,
-  Timer,
-  CheckSquare,
-  Brain,
-  Calendar,
-  Clock,
-  Flame,
-  Layers,
-} from "lucide-react";
-import {
-  WIDGET_LIBRARY,
-  WidgetDefinition,
-  WidgetSize,
-  BentoWidgetConfig,
-} from "./types";
-import { Button } from "@/components/ui/Button";
+import { useEffect, useRef, useState } from "react";
+import { X, Plus, Check, Search } from "lucide-react";
+import { WIDGET_LIBRARY, type BentoWidgetConfig, type WidgetSize } from "./types";
+import s from "./workspace.module.css";
+import { WidgetSizePicker } from "./WidgetSizePicker";
 
-interface AddWidgetModalProps {
-  isOpen: boolean;
-  onClose: () => void;
-  activeWidgetIds: string[];
-  onAddWidget: (widget: BentoWidgetConfig) => void;
-}
-
-const ICON_MAP: Record<string, React.ElementType> = {
-  FileText,
-  Sparkles,
-  TrendingUp,
-  Timer,
-  CheckSquare,
-  Brain,
-  Calendar,
-  Clock,
-  Flame,
-};
-
-export function AddWidgetModal({
-  isOpen,
-  onClose,
-  activeWidgetIds,
-  onAddWidget,
-}: AddWidgetModalProps) {
-  const [selectedCategory, setSelectedCategory] = useState<string>("All");
-  const [searchQuery, setSearchQuery] = useState("");
+interface AddWidgetModalProps { isOpen: boolean; onClose: () => void; activeWidgetIds: string[]; onAddWidget: (widget: BentoWidgetConfig) => void }
+const categories = [
+  { id: "All", label: "Semua" }, { id: "General", label: "Pribadi" },
+  { id: "Focus & Study", label: "Fokus" }, { id: "AI Tools", label: "Insight & AI" }, { id: "Planning", label: "Rencana" },
+];
+export function AddWidgetModal({ isOpen, onClose, activeWidgetIds, onAddWidget }: AddWidgetModalProps) {
+  const [category, setCategory] = useState("All");
+  const [query, setQuery] = useState("");
   const [selectedSizes, setSelectedSizes] = useState<Record<string, WidgetSize>>({});
+  const dialogRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!isOpen) return;
+    const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const overflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    dialogRef.current?.querySelector<HTMLInputElement>("input")?.focus();
+    return () => { document.body.style.overflow = overflow; previous?.focus(); };
+  }, [isOpen]);
 
   if (!isOpen) return null;
-
-  const categories = ["All", "General", "Focus & Study", "AI Tools", "Planning"];
-
-  const filteredWidgets = WIDGET_LIBRARY.filter((w) => {
-    const matchesCategory =
-      selectedCategory === "All" || w.category === selectedCategory;
-    const matchesSearch =
-      w.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      w.description.toLowerCase().includes(searchQuery.toLowerCase());
-    return matchesCategory && matchesSearch;
-  });
-
-  const handleSizeChange = (widgetId: string, size: WidgetSize) => {
-    setSelectedSizes((prev) => ({ ...prev, [widgetId]: size }));
-  };
-
-  const handleAdd = (definition: WidgetDefinition) => {
-    const chosenSize = selectedSizes[definition.id] || definition.defaultSize;
-    onAddWidget({
-      id: definition.id,
-      title: definition.title,
-      size: chosenSize,
-    });
-  };
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-fade-in">
-      <div
-        className="bg-white rounded-3xl border border-border shadow-2xl w-full max-w-2xl overflow-hidden animate-scale-in flex flex-col max-h-[85vh]"
-        onClick={(e) => e.stopPropagation()}
-      >
-        {/* Header */}
-        <div className="p-6 bg-gradient-to-br from-primary/5 via-primary/10 to-transparent border-b border-border flex items-start justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-11 h-11 rounded-2xl bg-primary text-white flex items-center justify-center shadow-md shadow-primary/20 shrink-0">
-              <LayoutGrid className="w-6 h-6" />
-            </div>
-            <div>
-              <h2 className="text-xl font-bold text-gray-900 tracking-tight flex items-center gap-2">
-                Widget Library
-                <span className="text-[10px] font-bold uppercase tracking-wider bg-primary-100 text-primary-700 px-2 py-0.5 rounded-full">
-                  Bento Grid
-                </span>
-              </h2>
-              <p className="text-xs text-gray-500 mt-0.5">
-                Choose and customize modular widgets to add to your personal dashboard.
-              </p>
-            </div>
-          </div>
-          <button
-            onClick={onClose}
-            className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-xl transition-colors cursor-pointer"
-          >
-            <X className="w-5 h-5" />
-          </button>
-        </div>
-
-        {/* Search & Categories Bar */}
-        <div className="p-4 border-b border-border bg-gray-50/60 space-y-3">
-          <div className="relative">
-            <Search className="w-4 h-4 text-gray-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search available widgets..."
-              className="w-full h-10 pl-9 pr-4 rounded-xl border border-border bg-white text-xs text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all"
-            />
-          </div>
-
-          <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
-            {categories.map((cat) => (
-              <button
-                key={cat}
-                onClick={() => setSelectedCategory(cat)}
-                className={`px-3 py-1 rounded-xl text-xs font-semibold whitespace-nowrap transition-all cursor-pointer ${
-                  selectedCategory === cat
-                    ? "bg-primary text-white shadow-xs"
-                    : "bg-white text-gray-600 border border-border hover:bg-gray-100"
-                }`}
-              >
-                {cat}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* Widget Grid List */}
-        <div className="p-6 overflow-y-auto space-y-3.5 flex-1">
-          {filteredWidgets.length === 0 ? (
-            <div className="text-center py-12 space-y-2">
-              <Layers className="w-8 h-8 text-gray-300 mx-auto" />
-              <p className="text-xs font-semibold text-gray-500">No matching widgets found</p>
-            </div>
-          ) : (
-            filteredWidgets.map((item) => {
-              const Icon = ICON_MAP[item.icon] || LayoutGrid;
-              const isAlreadyAdded = activeWidgetIds.includes(item.id);
-              const currentChosenSize = selectedSizes[item.id] || item.defaultSize;
-
-              return (
-                <div
-                  key={item.id}
-                  className={`p-4 rounded-2xl border transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-4 ${
-                    isAlreadyAdded
-                      ? "bg-gray-50/60 border-border/80 opacity-75"
-                      : "bg-white border-border hover:border-primary/50 hover:shadow-sm"
-                  }`}
-                >
-                  {/* Left info */}
-                  <div className="flex items-start gap-3 min-w-0">
-                    <div className="w-10 h-10 rounded-2xl bg-primary/10 text-primary flex items-center justify-center shrink-0">
-                      <Icon className="w-5 h-5" />
-                    </div>
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-2">
-                        <h4 className="text-xs font-bold text-gray-900">{item.title}</h4>
-                        <span className="text-[9px] bg-gray-100 text-gray-500 font-semibold px-2 py-0.2 rounded-full">
-                          {item.category}
-                        </span>
-                      </div>
-                      <p className="text-[11px] text-gray-500 mt-0.5 line-clamp-1">
-                        {item.description}
-                      </p>
-                    </div>
-                  </div>
-
-                  {/* Right actions (Size selector & Add button) */}
-                  <div className="flex items-center gap-3 shrink-0 self-end sm:self-center">
-                    {/* Size Selector Pill */}
-                    <div className="flex items-center gap-1 bg-gray-100/80 p-1 rounded-xl border border-border/50">
-                      {item.allowedSizes.map((size) => (
-                        <button
-                          key={size}
-                          onClick={() => handleSizeChange(item.id, size)}
-                          className={`px-2 py-1 rounded-lg text-[10px] font-bold font-mono transition-all cursor-pointer ${
-                            currentChosenSize === size
-                              ? "bg-white text-primary shadow-xs border border-border/60"
-                              : "text-gray-400 hover:text-gray-700"
-                          }`}
-                          title={`Select ratio ${size}`}
-                        >
-                          {size}
-                        </button>
-                      ))}
-                    </div>
-
-                    {isAlreadyAdded ? (
-                      <div className="flex items-center gap-1 text-xs font-bold text-emerald-600 bg-emerald-50 px-3 py-2 rounded-xl border border-emerald-200">
-                        <Check className="w-3.5 h-3.5" />
-                        <span>Added</span>
-                      </div>
-                    ) : (
-                      <Button
-                        variant="primary"
-                        size="sm"
-                        onClick={() => handleAdd(item)}
-                        icon={<Plus className="w-3.5 h-3.5" />}
-                        className="text-xs h-9 px-4 font-bold"
-                      >
-                        Add Widget
-                      </Button>
-                    )}
-                  </div>
-                </div>
-              );
-            })
-          )}
-        </div>
-
-        {/* Footer */}
-        <div className="p-4 px-6 bg-gray-50 border-t border-border flex items-center justify-between">
-          <p className="text-xs text-gray-400">
-            Active in Dashboard: <strong className="text-gray-700">{activeWidgetIds.length}</strong> / {WIDGET_LIBRARY.length}
-          </p>
-          <Button variant="outline" size="sm" onClick={onClose} className="text-xs">
-            Done
-          </Button>
-        </div>
+  const filtered = WIDGET_LIBRARY.filter(widget => (category === "All" || widget.category === category) && `${widget.title} ${widget.description}`.toLowerCase().includes(query.toLowerCase()));
+  return <div className={s.modalBackdrop} onClick={event => { if (event.target === event.currentTarget) onClose(); }}>
+    <div ref={dialogRef} className={s.modal} role="dialog" aria-modal="true" aria-labelledby="widget-library-title" onKeyDown={event => {
+      if (event.key === "Escape") { event.stopPropagation(); onClose(); }
+      if (event.key !== "Tab") return;
+      const elements = Array.from(event.currentTarget.querySelectorAll<HTMLElement>('button:not(:disabled), input, select, a[href], [tabindex="0"]'));
+      const first = elements[0], last = elements[elements.length - 1];
+      if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
+      else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
+    }}>
+      <div className={s.modalHeader}><div><h2 id="widget-library-title">Apa yang kamu butuhkan?</h2><p>Pilih alat yang ingin kamu lihat di ruang belajarmu.</p></div><button className={s.iconButton} onClick={onClose} aria-label="Tutup pilihan widget"><X size={20} /></button></div>
+      <div className={s.librarySearch}><Search size={17} /><input aria-label="Cari widget" placeholder="Cari widget…" value={query} onChange={event => setQuery(event.target.value)} /></div>
+      <div className={s.categories}>{categories.map(item => <button key={item.id} aria-pressed={category === item.id} onClick={() => setCategory(item.id)}>{item.label}</button>)}</div>
+      <div className={s.libraryList}>
+        {!filtered.length && <p className={s.muted}>Tidak ada widget yang cocok.</p>}
+        {filtered.map(widget => {
+          const added = activeWidgetIds.includes(widget.id);
+          const size = selectedSizes[widget.id] || widget.defaultSize;
+          return <div key={widget.id} className={s.libraryRow}><div><h3>{widget.title}</h3><p>{widget.description}</p></div><div className={s.libraryActions}><WidgetSizePicker label={`Ukuran ${widget.title}`} disabled={added} value={size} sizes={widget.allowedSizes} onChange={value => setSelectedSizes(previous => ({ ...previous, [widget.id]: value }))} /><button className={added ? s.secondaryButton : s.primaryButton} disabled={added} aria-label={`${added ? "Sudah ditambahkan" : "Tambahkan"}: ${widget.title}`} onClick={() => onAddWidget({ id: widget.id, title: widget.title, size })}>{added ? <Check size={16} /> : <Plus size={16} />}{added ? "Ditambahkan" : "Tambah"}</button></div></div>;
+        })}
       </div>
+      <div className={s.modalFooter}><span>{activeWidgetIds.length} widget di dashboardmu</span><button className={s.primaryButton} onClick={onClose}>Selesai</button></div>
     </div>
-  );
+  </div>;
 }

@@ -1,233 +1,123 @@
 "use client";
 
-import React, { useState, useRef } from "react";
+import React, { useEffect, useId, useRef, useState } from "react";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { GripVertical, Trash2, Maximize2, MoveDiagonal2 } from "lucide-react";
-import {
-  BentoWidgetConfig,
-  SIZE_CLASS_MAP,
-  WIDGET_LIBRARY,
-  WidgetSize,
-} from "./types";
-import { cn } from "@/lib/utils";
+import { GripVertical, EyeOff, ArrowUp, ArrowDown, MoveDiagonal2, SlidersHorizontal } from "lucide-react";
+import { WIDGET_LIBRARY, type BentoWidgetConfig, type WidgetSize } from "./types";
+import s from "./workspace.module.css";
+import { WidgetSizePicker } from "./WidgetSizePicker";
 
 interface BentoItemWrapperProps {
   widget: BentoWidgetConfig;
   isEditMode: boolean;
   index: number;
-  onResize: (id: string, newSize: WidgetSize) => void;
+  count: number;
+  onMove: (id: string, direction: -1 | 1) => void;
+  onResize: (id: string, size: WidgetSize) => void;
   onRemove: (id: string) => void;
   children: React.ReactNode;
 }
-
-export function BentoItemWrapper({
-  widget,
-  isEditMode,
-  index,
-  onResize,
-  onRemove,
-  children,
-}: BentoItemWrapperProps) {
-  const {
-    attributes,
-    listeners,
-    setNodeRef,
-    transform,
-    transition,
-    isDragging,
-  } = useSortable({
-    id: widget.id,
-    disabled: !isEditMode,
-  });
-
-  const [isResizing, setIsResizing] = useState(false);
-  const [liveResizeTarget, setLiveResizeTarget] = useState<WidgetSize | null>(null);
-  const dragStartRef = useRef<{ x: number; y: number; startSize: WidgetSize } | null>(null);
-
-  const widgetDef = WIDGET_LIBRARY.find((w) => w.id === widget.id);
-  const allowedSizes = widgetDef?.allowedSizes || ["1x1", "2x1", "2x2"];
-
-  const style: React.CSSProperties = {
-    transform: CSS.Transform.toString(transform),
-    transition: isResizing ? "none" : transition || undefined,
-    animationDelay: isEditMode && !isResizing ? `${(index % 4) * 0.07}s` : undefined,
-  };
-
-  const currentSize = liveResizeTarget || widget.size;
-  const sizeClass = SIZE_CLASS_MAP[currentSize] || "col-span-1 row-span-1";
-
-  // Seamless Drag-to-Resize Pointer Handler
-  const handleResizePointerDown = (e: React.PointerEvent) => {
-    e.stopPropagation();
-    e.preventDefault();
-    (e.target as HTMLElement).setPointerCapture(e.pointerId);
-
-    setIsResizing(true);
-    dragStartRef.current = {
-      x: e.clientX,
-      y: e.clientY,
-      startSize: widget.size,
+export function BentoItemWrapper({ widget, isEditMode, index, count, onMove, onResize, onRemove, children }: BentoItemWrapperProps) {
+  const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging } = useSortable({ id: widget.id, disabled: !isEditMode });
+  const allowedSizes: WidgetSize[] = WIDGET_LIBRARY.find(w => w.id === widget.id)?.allowedSizes || ["1x1", "2x1", "2x2"];
+  const [resizePreview, setResizePreview] = useState<WidgetSize | null>(null);
+  const resizeRef = useRef<{ x: number; y: number; columns: number; rows: number; columnStep: number; target: WidgetSize } | null>(null);
+  const [toolsOpen, setToolsOpen] = useState(false);
+  const toolsRef = useRef<HTMLDivElement>(null);
+  const settingsRef = useRef<HTMLButtonElement>(null);
+  const panelId = useId();
+  useEffect(() => {
+    if (!isEditMode) setToolsOpen(false);
+  }, [isEditMode]);
+  useEffect(() => {
+    if (!toolsOpen) return;
+    const outside = (event: PointerEvent) => {
+      const target = event.target;
+      if (target instanceof Element && !toolsRef.current?.contains(target) && !target.closest('[role="listbox"]')) setToolsOpen(false);
     };
+    const escape = (event: KeyboardEvent) => {
+      if (event.key !== "Escape" || event.defaultPrevented) return;
+      setToolsOpen(false);
+      settingsRef.current?.focus({ preventScroll: true });
+    };
+    document.addEventListener("pointerdown", outside);
+    document.addEventListener("keydown", escape);
+    return () => { document.removeEventListener("pointerdown", outside); document.removeEventListener("keydown", escape); };
+  }, [toolsOpen]);
+  const currentSize = resizePreview || widget.size;
+  const nearestSize = (columns: number, rows: number, previous: WidgetSize) => {
+    const distance = (size: WidgetSize) => {
+      const [width, height] = size.split("x").map(Number);
+      return (width - columns) ** 2 + (height - rows) ** 2;
+    };
+    return allowedSizes.reduce((best, size) => distance(size) < distance(best) ? size : best, previous);
   };
-
-  const handleResizePointerMove = (e: React.PointerEvent) => {
-    if (!isResizing || !dragStartRef.current) return;
-    e.stopPropagation();
-
-    const deltaX = e.clientX - dragStartRef.current.x;
-    const deltaY = e.clientY - dragStartRef.current.y;
-
-    // Thresholds for snapping to different column/row ratios
-    let targetSize: WidgetSize = dragStartRef.current.startSize;
-
-    // Calculate desired width & height steps
-    const isWider = deltaX > 60;
-    const isNarrower = deltaX < -60;
-    const isTaller = deltaY > 60;
-    const isShorter = deltaY < -60;
-
-    if (isWider && isTaller && allowedSizes.includes("2x2")) {
-      targetSize = "2x2";
-    } else if (isWider && allowedSizes.includes("2x1")) {
-      targetSize = "2x1";
-    } else if (isTaller && allowedSizes.includes("2x2")) {
-      targetSize = "2x2";
-    } else if (isNarrower && isShorter && allowedSizes.includes("1x1")) {
-      targetSize = "1x1";
-    } else if (isNarrower && allowedSizes.includes("1x1")) {
-      targetSize = "1x1";
-    } else if (isShorter && allowedSizes.includes("2x1")) {
-      targetSize = "2x1";
-    }
-
-    if (deltaX > 160 && allowedSizes.includes("4x1")) {
-      targetSize = "4x1";
-    }
-    if (deltaX > 160 && deltaY > 100 && allowedSizes.includes("4x2")) {
-      targetSize = "4x2";
-    }
-
-    if (allowedSizes.includes(targetSize)) {
-      setLiveResizeTarget(targetSize);
-    }
+  const beginResize = (event: React.PointerEvent<HTMLButtonElement>) => {
+    if (!event.isPrimary || event.button !== 0) return;
+    event.preventDefault(); event.stopPropagation();
+    const article = event.currentTarget.closest("article");
+    const grid = article?.parentElement;
+    if (!grid) return;
+    const gridStyle = window.getComputedStyle(grid);
+    const tracks = gridStyle.gridTemplateColumns.split(/\s+/).filter(Boolean);
+    const gap = parseFloat(gridStyle.columnGap) || 0;
+    const columnStep = (grid.getBoundingClientRect().width + gap) / Math.max(1, tracks.length);
+    const [columns, rows] = widget.size.split("x").map(Number);
+    resizeRef.current = { x: event.clientX, y: event.clientY, columns, rows, columnStep, target: widget.size };
+    setResizePreview(widget.size);
+    event.currentTarget.setPointerCapture(event.pointerId);
   };
-
-  const handleResizePointerUp = (e: React.PointerEvent) => {
-    if (!isResizing) return;
-    e.stopPropagation();
-    try {
-      (e.target as HTMLElement).releasePointerCapture(e.pointerId);
-    } catch {
-      // Ignore
-    }
-
-    if (liveResizeTarget && liveResizeTarget !== widget.size) {
-      onResize(widget.id, liveResizeTarget);
-    }
-    setIsResizing(false);
-    setLiveResizeTarget(null);
-    dragStartRef.current = null;
+  const moveResize = (event: React.PointerEvent<HTMLButtonElement>) => {
+    const start = resizeRef.current;
+    if (!start) return;
+    event.stopPropagation();
+    const columns = Math.max(1, Math.min(4, start.columns + (event.clientX - start.x) / start.columnStep));
+    const rows = Math.max(1, Math.min(2, start.rows + (event.clientY - start.y) / 235));
+    start.target = nearestSize(columns, rows, start.target);
+    setResizePreview(start.target);
   };
-
-  const handleCycleSize = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    const currentIndex = allowedSizes.indexOf(widget.size);
-    const nextIndex = (currentIndex + 1) % allowedSizes.length;
-    onResize(widget.id, allowedSizes[nextIndex]);
+  const endResize = (event: React.PointerEvent<HTMLButtonElement>, commit: boolean) => {
+    const start = resizeRef.current;
+    if (!start) return;
+    event.stopPropagation();
+    resizeRef.current = null;
+    setResizePreview(null);
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
+    if (commit && start.target !== widget.size) onResize(widget.id, start.target);
   };
-
-  return (
-    <div
-      ref={setNodeRef}
-      style={style}
-      className={cn(
-        sizeClass,
-        "flex flex-col min-h-[160px] transition-all duration-200 relative group/wrapper",
-        isEditMode && !isResizing
-          ? "cursor-grab active:cursor-grabbing animate-wobble"
-          : "cursor-default",
-        isResizing && "ring-4 ring-primary/40 shadow-2xl z-40 scale-[1.01]"
-      )}
-    >
-      <div
-        className={cn(
-          "w-full h-full rounded-3xl transition-all duration-200 relative flex flex-col justify-between overflow-hidden",
-          isEditMode
-            ? "border-2 border-dashed border-primary/60 bg-white/95 shadow-md hover:border-primary hover:shadow-lg"
-            : "border border-border/80 bg-white shadow-card hover:shadow-card-hover",
-          isDragging && "opacity-40 scale-[0.98] ring-4 ring-primary/20 shadow-2xl"
-        )}
-      >
-        {/* Edit Mode Top Toolbar */}
-        {isEditMode && (
-          <div className="absolute top-2 inset-x-2 z-30 flex items-center justify-between pointer-events-auto">
-            {/* Top Left: Quick Size Pill */}
-            <div className="relative">
-              <button
-                type="button"
-                onClick={handleCycleSize}
-                onMouseDown={(e) => e.stopPropagation()}
-                title={`Click to cycle or drag bottom-right corner to resize. Allowed: ${allowedSizes.join(", ")}`}
-                className="flex items-center gap-1 px-2.5 py-1 bg-white hover:bg-gray-100 text-gray-700 hover:text-primary text-[10px] font-bold font-mono rounded-full shadow-md border border-border transition-all cursor-pointer"
-              >
-                <Maximize2 className="w-2.5 h-2.5 text-primary" />
-                <span>{currentSize}</span>
-              </button>
-            </div>
-
-            {/* Top Center: Drag Handle */}
-            <div
-              {...attributes}
-              {...listeners}
-              className="flex items-center gap-1.5 px-3 py-1 bg-primary/90 hover:bg-primary text-white text-[10px] font-bold rounded-full shadow-md backdrop-blur-sm cursor-grab active:cursor-grabbing select-none"
-            >
-              <GripVertical className="w-3.5 h-3.5 opacity-80" />
-              <span className="truncate max-w-[90px]">{widget.title}</span>
-            </div>
-
-            {/* Top Right: Delete / Remove Button */}
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                onRemove(widget.id);
-              }}
-              onMouseDown={(e) => e.stopPropagation()}
-              title="Remove widget from dashboard"
-              className="p-1 bg-white hover:bg-red-50 text-gray-400 hover:text-red-600 rounded-full shadow-md border border-border transition-colors cursor-pointer"
-            >
-              <Trash2 className="w-3.5 h-3.5" />
-            </button>
-          </div>
-        )}
-
-        {/* Seamless Drag-to-Resize Corner Handle at Bottom-Right */}
-        {isEditMode && (
-          <div
-            onPointerDown={handleResizePointerDown}
-            onPointerMove={handleResizePointerMove}
-            onPointerUp={handleResizePointerUp}
-            title="Press and drag this corner to seamlessly resize widget"
-            className="absolute bottom-1 right-1 z-40 w-7 h-7 flex items-end justify-end p-1.5 cursor-nwse-resize select-none group/resize"
-          >
-            <div className="w-4 h-4 rounded-br-xl rounded-tl-md bg-primary/80 group-hover/resize:bg-primary group-hover/resize:scale-125 text-white flex items-center justify-center shadow-md transition-transform">
-              <MoveDiagonal2 className="w-2.5 h-2.5 rotate-90" />
-            </div>
-          </div>
-        )}
-
-        {/* Widget Child Component */}
-        <div
-          {...(isEditMode && !isResizing ? { ...attributes, ...listeners } : {})}
-          className={cn(
-            "w-full h-full flex flex-col flex-1",
-            isEditMode && "select-none opacity-90 pt-6 cursor-grab active:cursor-grabbing"
-          )}
-        >
-          {children}
-        </div>
+  const keyboardResize = (event: React.KeyboardEvent<HTMLButtonElement>) => {
+    const directions: Record<string, [number, number]> = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] };
+    const direction = directions[event.key];
+    if (!direction) return;
+    event.preventDefault(); event.stopPropagation();
+    const [columns, rows] = widget.size.split("x").map(Number);
+    const candidates = allowedSizes.filter(size => {
+      const [width, height] = size.split("x").map(Number);
+      return direction[0] ? (width - columns) * direction[0] > 0 : (height - rows) * direction[1] > 0;
+    });
+    if (!candidates.length) return;
+    const size = candidates.reduce((best, candidate) => {
+      const distance = (value: WidgetSize) => { const [w, h] = value.split("x").map(Number); return (w - columns) ** 2 + (h - rows) ** 2; };
+      return distance(candidate) < distance(best) ? candidate : best;
+    }, candidates[0]);
+    if (size !== widget.size) onResize(widget.id, size);
+  };
+  const style: React.CSSProperties = { transform: CSS.Transform.toString(transform), transition: resizePreview ? "none" : transition || undefined };
+  return <article ref={setNodeRef} style={style} className={s.widget} data-size={currentSize} data-resizing={resizePreview !== null} data-kind={widget.id} data-editing={isEditMode} data-tools-open={toolsOpen} data-dragging={isDragging} aria-label={widget.title}>
+    {isEditMode && <div ref={toolsRef} className={s.widgetTools}>
+      <button ref={setActivatorNodeRef} {...attributes} {...listeners} type="button" className={s.dragHandle} aria-label={`Pindahkan ${widget.title}`}><GripVertical size={17} /></button>
+      <button ref={settingsRef} type="button" className={s.widgetSettings} aria-label={`Atur ${widget.title}`} aria-expanded={toolsOpen} aria-controls={toolsOpen ? panelId : undefined} onClick={() => setToolsOpen(open => !open)}><SlidersHorizontal size={16} /></button>
+      {toolsOpen && <div id={panelId} className={s.widgetSettingsPanel}><h3>{widget.title}</h3>
+      <div className={s.sizeControl}><span>Ukuran</span><WidgetSizePicker label={`Ukuran ${widget.title}`} value={currentSize} sizes={allowedSizes} onChange={size => onResize(widget.id, size)} /></div>
+      <div className={s.widgetToolActions}>
+        <button type="button" disabled={index === 0} onClick={() => onMove(widget.id, -1)} aria-label={`Pindahkan ${widget.title} ke atas`} title="Pindah ke atas"><ArrowUp size={16} /></button>
+        <button type="button" disabled={index === count - 1} onClick={() => onMove(widget.id, 1)} aria-label={`Pindahkan ${widget.title} ke bawah`} title="Pindah ke bawah"><ArrowDown size={16} /></button>
+        <button type="button" onClick={() => onRemove(widget.id)} aria-label={`Sembunyikan ${widget.title}`} title="Sembunyikan widget"><EyeOff size={16} /></button>
       </div>
-    </div>
-  );
+      </div>}
+    </div>}
+    <div className={s.widgetBody}>{children}</div>
+    {isEditMode && <button type="button" className={s.resizeHandle} aria-label={`Ubah ukuran ${widget.title}: tarik sudut atau gunakan tombol panah`} title="Tarik untuk mengubah ukuran" onPointerDown={beginResize} onPointerMove={moveResize} onPointerUp={event => endResize(event, true)} onPointerCancel={event => endResize(event, false)} onLostPointerCapture={event => endResize(event, false)} onKeyDown={keyboardResize}><MoveDiagonal2 size={17} /></button>}
+  </article>;
 }

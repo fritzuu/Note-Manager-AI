@@ -1,352 +1,172 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
-import {
-  DndContext,
-  closestCenter,
-  KeyboardSensor,
-  PointerSensor,
-  useSensor,
-  useSensors,
-  DragEndEvent,
-  DragStartEvent,
-  DragOverlay,
-} from "@dnd-kit/core";
-import {
-  arrayMove,
-  SortableContext,
-  sortableKeyboardCoordinates,
-  rectSortingStrategy,
-} from "@dnd-kit/sortable";
-import {
-  SlidersHorizontal,
-  Check,
-  RotateCcw,
-  Plus,
-  LayoutGrid,
-  Info,
-} from "lucide-react";
-import { Button } from "@/components/ui/Button";
+import { useEffect, useState } from "react";
+import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors, DragOverlay, type DragEndEvent } from "@dnd-kit/core";
+import { arrayMove, SortableContext, sortableKeyboardCoordinates, rectSortingStrategy } from "@dnd-kit/sortable";
+import { SlidersHorizontal, Check, RotateCcw, Plus } from "lucide-react";
+import { useAuth } from "@/contexts/AuthContext";
 import { BentoItemWrapper } from "./BentoItemWrapper";
+import { usePackedWidgetGrid } from "./usePackedWidgetGrid";
 import { AddWidgetModal } from "./AddWidgetModal";
-import {
-  BentoWidgetConfig,
-  DEFAULT_BENTO_LAYOUT,
-  SIZE_CLASS_MAP,
-  WidgetSize,
-} from "./types";
-import { NotesStatWidget } from "./widgets/NotesStatWidget";
-import { AiSummariesStatWidget } from "./widgets/AiSummariesStatWidget";
-import { ProductivityChartWidget } from "./widgets/ProductivityChartWidget";
+import { DEFAULT_BENTO_LAYOUT, WIDGET_LIBRARY, type BentoWidgetConfig, type WidgetSize } from "./types";
+import { DailyFocus, OpenNotes, OpenTasks, StudyRhythm, QuietInsight, QuietStat } from "./DashboardWidgets";
 import { PomodoroBentoWidget } from "./widgets/PomodoroBentoWidget";
-import { PriorityTasksWidget } from "./widgets/PriorityTasksWidget";
-import { AcademicInsightWidget } from "./widgets/AcademicInsightWidget";
-import { RecentNotesBentoWidget } from "./widgets/RecentNotesBentoWidget";
-import { UpcomingDeadlinesBentoWidget } from "./widgets/UpcomingDeadlinesBentoWidget";
 import { ClockBentoWidget } from "./widgets/ClockBentoWidget";
 import { CalendarBentoWidget } from "./widgets/CalendarBentoWidget";
 import { StreakBentoWidget } from "./widgets/StreakBentoWidget";
-import {
-  NoteDocument,
-  AcademicInsight,
-  TaskDocument,
-  PomodoroSession,
-} from "@/lib/firestore";
+import type { NoteDocument, AcademicInsight, TaskDocument, PomodoroSession } from "@/lib/firestore";
+import s from "./workspace.module.css";
 
-const STORAGE_KEY = "mindflow_bento_dashboard_layout_v3";
+const LEGACY_KEY = "mindflow_bento_dashboard_layout_v3";
+const LEGACY_OWNER = "cogniva_dashboard_legacy_owner";
+const OLD_DEFAULT = ["notes-stat", "clock", "productivity-chart", "pomodoro-timer", "calendar", "priority-tasks", "academic-insight"];
+const OLD_SIZES = ["1x1", "1x1", "2x1", "2x2", "2x2", "2x2", "2x1"];
 
-interface BentoGridProps {
-  notes: NoteDocument[];
-  summariesCount: number;
-  insight: AcademicInsight | null;
-  tasks: TaskDocument[];
-  sessions: PomodoroSession[];
+function restoreLayout(raw: string): BentoWidgetConfig[] | null {
+  const parsed: unknown = JSON.parse(raw);
+  const list = Array.isArray(parsed) ? parsed : parsed && typeof parsed === "object" && "widgets" in parsed ? parsed.widgets : null;
+  if (!Array.isArray(list)) return null;
+  const seen = new Set<string>();
+  return list.flatMap(item => {
+    if (!item || typeof item !== "object" || typeof item.id !== "string" || seen.has(item.id)) return [];
+    const definition = WIDGET_LIBRARY.find(w => w.id === item.id);
+    if (!definition) return [];
+    seen.add(item.id);
+    return [{ id: definition.id, title: definition.title, size: definition.allowedSizes.includes(item.size) ? item.size : item.size === "1x1" && definition.allowedSizes.includes("2x1") ? "2x1" : definition.defaultSize }];
+  });
 }
 
-export function BentoGrid({
-  notes,
-  summariesCount,
-  insight,
-  tasks,
-  sessions,
-}: BentoGridProps) {
+interface BentoGridProps { notes: NoteDocument[]; summariesCount: number; insight: AcademicInsight | null; tasks: TaskDocument[]; sessions: PomodoroSession[]; unavailable?: string[]; onRetry?: () => void }
+
+export function BentoGrid({ notes, summariesCount, insight, tasks, sessions, unavailable = [], onRetry }: BentoGridProps) {
+  const { user } = useAuth();
+  const storageKey = user ? `cogniva_dashboard_layout_v4:${user.uid}` : null;
+  const [loadedKey, setLoadedKey] = useState<string | null>(null);
   const [widgets, setWidgets] = useState<BentoWidgetConfig[]>(DEFAULT_BENTO_LAYOUT);
   const [isEditMode, setIsEditMode] = useState(false);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [addWidgetModalOpen, setAddWidgetModalOpen] = useState(false);
-  const [mounted, setMounted] = useState(false);
+  const [resetPrompt, setResetPrompt] = useState(false);
+  const [saveError, setSaveError] = useState(false);
+  const [announcement, setAnnouncement] = useState("");
 
-  // Load layout from localStorage
   useEffect(() => {
-    setMounted(true);
+    if (!storageKey || !user) return;
+    let layout = DEFAULT_BENTO_LAYOUT;
+    let failed = false;
     try {
-      const saved = localStorage.getItem(STORAGE_KEY);
-      if (saved) {
-        const parsed = JSON.parse(saved) as BentoWidgetConfig[];
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          setWidgets(parsed);
+      const saved = localStorage.getItem(storageKey);
+      if (saved !== null) {
+        layout = restoreLayout(saved) ?? DEFAULT_BENTO_LAYOUT;
+      } else {
+        // Claim the old device-wide preference once; later accounts use their own layout.
+        const owner = localStorage.getItem(LEGACY_OWNER);
+        const legacy = localStorage.getItem(LEGACY_KEY);
+        if (legacy !== null && (!owner || owner === user.uid)) {
+          const previous = restoreLayout(legacy);
+          const untouched = previous?.length === OLD_DEFAULT.length && previous.every((widget, index) => widget.id === OLD_DEFAULT[index] && widget.size === OLD_SIZES[index]);
+          if (previous && !untouched) layout = previous;
+          localStorage.setItem(LEGACY_OWNER, user.uid);
         }
+        localStorage.setItem(storageKey, JSON.stringify({ version: 1, widgets: layout }));
       }
-    } catch {
-      // Ignore
-    }
-  }, []);
+    } catch { failed = true; }
+    setWidgets(layout);
+    setLoadedKey(storageKey);
+    setSaveError(failed);
+    setIsEditMode(false);
+    setActiveId(null);
+    setAddWidgetModalOpen(false);
+    setResetPrompt(false);
+  }, [storageKey, user]);
 
   const sensors = useSensors(
-    useSensor(PointerSensor, {
-      activationConstraint: {
-        distance: 5,
-      },
-    }),
-    useSensor(KeyboardSensor, {
-      coordinateGetter: sortableKeyboardCoordinates,
-    })
+    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
   );
 
-  const saveLayout = (newWidgets: BentoWidgetConfig[]) => {
-    setWidgets(newWidgets);
-    if (typeof window !== "undefined") {
-      try {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(newWidgets));
-      } catch {
-        // Ignore
-      }
-    }
+  const ready = storageKey !== null && loadedKey === storageKey;
+  const visibleWidgets = ready ? widgets : DEFAULT_BENTO_LAYOUT;
+  const gridRef = usePackedWidgetGrid(`${isEditMode}:${visibleWidgets.map(widget => `${widget.id}:${widget.size}`).join(",")}`);
+  const saveLayout = (next: BentoWidgetConfig[], message = "Susunan diperbarui.") => {
+    if (!ready || !storageKey) return;
+    setWidgets(next);
+    setAnnouncement(message);
+    try {
+      localStorage.setItem(storageKey, JSON.stringify({ version: 1, widgets: next }));
+      setSaveError(false);
+    } catch { setSaveError(true); }
   };
 
-  const handleDragStart = (event: DragStartEvent) => {
-    setActiveId(event.active.id as string);
-  };
-
-  const handleDragEnd = (event: DragEndEvent) => {
-    const { active, over } = event;
-    if (over && active.id !== over.id) {
-      const oldIndex = widgets.findIndex((w) => w.id === active.id);
-      const newIndex = widgets.findIndex((w) => w.id === over.id);
-      if (oldIndex !== -1 && newIndex !== -1) {
-        const reordered = arrayMove(widgets, oldIndex, newIndex);
-        saveLayout(reordered);
-      }
+  function moveWidget(id: string, direction: -1 | 1) {
+    const from = widgets.findIndex(widget => widget.id === id);
+    const to = from + direction;
+    if (!isEditMode || from < 0 || to < 0 || to >= widgets.length) return;
+    saveLayout(arrayMove(widgets, from, to), `${widgets[from].title} dipindahkan ke posisi ${to + 1}.`);
+  }
+  function handleDragEnd({ active, over }: DragEndEvent) {
+    if (isEditMode && over && active.id !== over.id) {
+      const from = widgets.findIndex(widget => widget.id === active.id);
+      const to = widgets.findIndex(widget => widget.id === over.id);
+      if (from >= 0 && to >= 0) saveLayout(arrayMove(widgets, from, to), `${widgets[from].title} dipindahkan ke posisi ${to + 1}.`);
     }
     setActiveId(null);
-  };
-
-  const handleResize = (id: string, newSize: WidgetSize) => {
-    const updated = widgets.map((w) => (w.id === id ? { ...w, size: newSize } : w));
-    saveLayout(updated);
-  };
-
-  const handleRemove = (id: string) => {
-    const updated = widgets.filter((w) => w.id !== id);
-    saveLayout(updated);
-  };
-
-  const handleAddWidget = (newWidget: BentoWidgetConfig) => {
-    if (widgets.some((w) => w.id === newWidget.id)) return;
-    const updated = [...widgets, newWidget];
-    saveLayout(updated);
-  };
-
-  const handleResetLayout = () => {
-    saveLayout(DEFAULT_BENTO_LAYOUT);
-  };
-
-  // Render individual widget component by ID
-  const renderWidgetContent = (id: string) => {
-    switch (id) {
-      case "notes-stat":
-        return <NotesStatWidget totalNotes={notes.length} />;
-      case "ai-summaries-stat":
-        return <AiSummariesStatWidget summariesCount={summariesCount} />;
-      case "productivity-chart":
-        return <ProductivityChartWidget sessions={sessions} />;
-      case "pomodoro-timer":
-        return <PomodoroBentoWidget />;
-      case "priority-tasks":
-        return <PriorityTasksWidget tasks={tasks} />;
-      case "academic-insight":
-        return <AcademicInsightWidget insight={insight} />;
-      case "recent-notes":
-        return <RecentNotesBentoWidget notes={notes} />;
-      case "upcoming-deadlines":
-        return <UpcomingDeadlinesBentoWidget tasks={tasks} />;
-      case "clock":
-        return <ClockBentoWidget />;
-      case "calendar":
-        return <CalendarBentoWidget tasks={tasks} />;
-      case "streak-badge":
-        return <StreakBentoWidget sessions={sessions} />;
-      default:
-        return null;
-    }
-  };
-
-  const activeWidget = widgets.find((w) => w.id === activeId);
-
-  if (!mounted) {
-    return (
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 auto-rows-[minmax(180px,auto)]">
-        {DEFAULT_BENTO_LAYOUT.map((widget) => (
-          <div
-            key={widget.id}
-            className={`${SIZE_CLASS_MAP[widget.size]} bg-white rounded-3xl border border-border shadow-card min-h-[160px]`}
-          >
-            {renderWidgetContent(widget.id)}
-          </div>
-        ))}
-      </div>
-    );
   }
+  function resizeWidget(id: string, size: WidgetSize) {
+    const definition = WIDGET_LIBRARY.find(widget => widget.id === id);
+    if (!isEditMode || !definition?.allowedSizes.includes(size)) return;
+    saveLayout(widgets.map(widget => widget.id === id ? { ...widget, size } : widget), `Ukuran ${definition.title} diperbarui.`);
+  }
+  function renderWidget(id: string, size: WidgetSize) {
+    const source: Record<string, string[]> = {
+      "daily-focus": ["tasks"], "notes-stat": ["notes"], "ai-summaries-stat": ["summaries"],
+      "productivity-chart": ["sessions"], "priority-tasks": ["tasks"], "academic-insight": ["insight"],
+      "recent-notes": ["notes"], "upcoming-deadlines": ["tasks"], "calendar": ["tasks"], "streak-badge": ["sessions"],
+    };
+    if (source[id]?.some(key => unavailable.includes(key))) return <div className={s.unavailable}><h2>{WIDGET_LIBRARY.find(widget => widget.id === id)?.title}</h2><p>Bagian ini belum bisa dimuat.</p>{onRetry && <button className={s.secondaryButton} onClick={onRetry}>Coba lagi</button>}</div>;
+    switch (id) {
+      case "daily-focus": return <DailyFocus tasks={tasks} />;
+      case "notes-stat": return <QuietStat value={notes.filter(n => !n.isTrashed && !n.isArchived).length} title="Catatan tersimpan" description="Buka catatanmu" href="/notes" />;
+      case "ai-summaries-stat": return <QuietStat value={summariesCount} title="Rangkuman tersimpan" description="Buka asisten" href="/assistant" />;
+      case "productivity-chart": return <StudyRhythm sessions={sessions} />;
+      case "pomodoro-timer": return <PomodoroBentoWidget />;
+      case "priority-tasks": return <OpenTasks tasks={tasks} />;
+      case "academic-insight": return <QuietInsight insight={insight} />;
+      case "recent-notes": return <OpenNotes notes={notes} />;
+      case "upcoming-deadlines": return <OpenTasks tasks={tasks} upcoming />;
+      case "clock": return <ClockBentoWidget />;
+      case "calendar": return <CalendarBentoWidget tasks={tasks} size={size} />;
+      case "streak-badge": return <StreakBentoWidget sessions={sessions} />;
+      default: return null;
+    }
+  }
+  const activeWidget = visibleWidgets.find(widget => widget.id === activeId);
 
-  return (
-    <div className="space-y-6">
-      {/* Add Widget Modal */}
-      <AddWidgetModal
-        isOpen={addWidgetModalOpen}
-        onClose={() => setAddWidgetModalOpen(false)}
-        activeWidgetIds={widgets.map((w) => w.id)}
-        onAddWidget={handleAddWidget}
-      />
-
-      {/* Top Controls Bar */}
-      <div className="flex flex-wrap items-center justify-between gap-4 bg-white/70 backdrop-blur-md p-4 px-5 rounded-2xl border border-border shadow-sm">
-        <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-xl bg-primary/10 text-primary flex items-center justify-center font-bold">
-            <LayoutGrid className="w-5 h-5" />
-          </div>
-          <div>
-            <h2 className="text-sm font-bold text-gray-900 flex items-center gap-2">
-              Workspace Overview
-              <span className="text-[10px] bg-primary/10 text-primary font-bold px-2 py-0.5 rounded-full">
-                Bento Grid
-              </span>
-            </h2>
-            <p className="text-[11px] text-gray-500">
-              {isEditMode
-                ? "Drag cards, adjust sizes, or add & remove widgets to customize your layout."
-                : "Personalized dashboard widgets for notes, focus, and tasks."}
-            </p>
-          </div>
-        </div>
-
-        {/* Action Controls */}
-        <div className="flex items-center gap-2.5">
-          {isEditMode ? (
-            <>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setAddWidgetModalOpen(true)}
-                icon={<Plus className="w-3.5 h-3.5 text-primary" />}
-                className="text-xs font-semibold border-primary/40 text-primary hover:bg-primary-50"
-              >
-                + Add Widget
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleResetLayout}
-                icon={<RotateCcw className="w-3.5 h-3.5" />}
-                className="text-xs"
-              >
-                Reset
-              </Button>
-              <Button
-                variant="primary"
-                size="sm"
-                onClick={() => setIsEditMode(false)}
-                icon={<Check className="w-4 h-4" />}
-                className="text-xs font-bold px-5 bg-emerald-600 hover:bg-emerald-700 shadow-sm"
-              >
-                Done
-              </Button>
-            </>
-          ) : (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setIsEditMode(true)}
-              icon={<SlidersHorizontal className="w-3.5 h-3.5 text-primary" />}
-              className="text-xs font-semibold hover:border-primary shadow-xs"
-            >
-              Customize Dashboard
-            </Button>
-          )}
-        </div>
+  return <section className={s.workspace} aria-label="Dashboard yang bisa diatur">
+    <div className={s.toolbar}>
+      <div><h2>{isEditMode ? "Atur dashboard" : "Ruang belajar"}</h2><p>{isEditMode ? "Geser widget, tarik sudut untuk mengubah ukuran, atau pilih lewat menu." : "Catatan, tugas, dan aktivitas belajarmu."}</p></div>
+      <div className={s.toolbarActions}>
+        {isEditMode ? <><button className={s.secondaryButton} onClick={() => setAddWidgetModalOpen(true)}><Plus size={16} />Tambah widget</button><button className={s.resetButton} onClick={() => setResetPrompt(!resetPrompt)} aria-label="Kembalikan susunan awal"><RotateCcw size={17} /></button><button className={s.primaryButton} onClick={() => { setIsEditMode(false); setResetPrompt(false); setAddWidgetModalOpen(false); }}><Check size={17} />Selesai</button></> : <button className={s.secondaryButton} disabled={!ready} onClick={() => setIsEditMode(true)}><SlidersHorizontal size={16} />Atur dashboard</button>}
       </div>
-
-      {/* Edit Mode Instruction Banner */}
-      {isEditMode && (
-        <div className="p-3.5 px-5 bg-primary/10 border-2 border-dashed border-primary/40 rounded-2xl flex items-center justify-between gap-3 text-xs text-primary font-semibold animate-scale-in">
-          <div className="flex items-center gap-2">
-            <Info className="w-4 h-4 shrink-0" />
-            <span>
-              <strong>Edit Mode Active:</strong> Drag cards to reorder, drag bottom-right corner to resize, or click trash to remove widgets.
-            </span>
-          </div>
-          <button
-            onClick={() => setIsEditMode(false)}
-            className="underline font-bold hover:text-primary-700 cursor-pointer"
-          >
-            Finish
-          </button>
-        </div>
-      )}
-
-      {/* Main Drag-and-Drop Bento Grid */}
-      <DndContext
-        sensors={sensors}
-        collisionDetection={closestCenter}
-        onDragStart={handleDragStart}
-        onDragEnd={handleDragEnd}
-      >
-        <SortableContext
-          items={widgets.map((w) => w.id)}
-          strategy={rectSortingStrategy}
-        >
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 auto-rows-[minmax(180px,auto)]">
-            {widgets.map((widget, index) => (
-              <BentoItemWrapper
-                key={widget.id}
-                widget={widget}
-                isEditMode={isEditMode}
-                index={index}
-                onResize={handleResize}
-                onRemove={handleRemove}
-              >
-                {renderWidgetContent(widget.id)}
-              </BentoItemWrapper>
-            ))}
-
-            {/* In Edit Mode: Dotted "+ Add More Widget" slot */}
-            {isEditMode && (
-              <button
-                type="button"
-                onClick={() => setAddWidgetModalOpen(true)}
-                className="col-span-1 min-h-[160px] rounded-3xl border-2 border-dashed border-primary/40 hover:border-primary bg-primary-50/20 hover:bg-primary-50/50 flex flex-col items-center justify-center gap-2 text-primary font-bold text-xs transition-all cursor-pointer group"
-              >
-                <div className="w-10 h-10 rounded-2xl bg-primary/10 group-hover:bg-primary text-primary group-hover:text-white flex items-center justify-center transition-colors">
-                  <Plus className="w-5 h-5" />
-                </div>
-                <span>Add Widget</span>
-              </button>
-            )}
-          </div>
-        </SortableContext>
-
-        {/* Drag Overlay with Ghosting / Floating Shadow Preview */}
-        <DragOverlay>
-          {activeWidget ? (
-            <div
-              className={`${
-                SIZE_CLASS_MAP[activeWidget.size]
-              } rounded-3xl bg-white border-2 border-primary shadow-2xl scale-105 opacity-90 overflow-hidden ring-8 ring-primary/10`}
-            >
-              {renderWidgetContent(activeWidget.id)}
-            </div>
-          ) : null}
-        </DragOverlay>
-      </DndContext>
     </div>
-  );
+    {isEditMode && <div className={s.editStatus}><span>{saveError ? "Susunan belum tersimpan." : "Perubahan tersimpan otomatis di perangkat ini."}</span><span>Keyboard: Space untuk angkat, panah untuk pindah, Escape untuk batal drag.</span></div>}
+    {resetPrompt && isEditMode && <div className={s.resetPrompt}><p>Kembalikan susunan awal? Catatan dan tugas tetap tersimpan.</p><div><button className={s.secondaryButton} onClick={() => setResetPrompt(false)}>Batal</button><button className={s.primaryButton} onClick={() => { saveLayout(DEFAULT_BENTO_LAYOUT, "Susunan awal dipulihkan."); setResetPrompt(false); }}>Kembalikan</button></div></div>}
+    {saveError && <div className={s.saveError} role="alert">Perubahan tampil di sini, tetapi belum bisa disimpan. <button onClick={() => saveLayout(widgets)}>Coba simpan lagi</button></div>}
+    <span className={s.srOnly} role="status" aria-live="polite">{announcement}</span>
+    <AddWidgetModal isOpen={addWidgetModalOpen && isEditMode} onClose={() => setAddWidgetModalOpen(false)} activeWidgetIds={widgets.map(widget => widget.id)} onAddWidget={widget => {
+      const definition = WIDGET_LIBRARY.find(item => item.id === widget.id);
+      if (!definition || !isEditMode || widgets.some(item => item.id === widget.id)) return;
+      saveLayout([...widgets, { id: definition.id, title: definition.title, size: definition.allowedSizes.includes(widget.size) ? widget.size : definition.defaultSize }], `${definition.title} ditambahkan.`);
+    }} />
+    <DndContext sensors={sensors} collisionDetection={closestCenter} onDragStart={event => { if (isEditMode) setActiveId(String(event.active.id)); }} onDragEnd={handleDragEnd} onDragCancel={() => setActiveId(null)}>
+      <SortableContext items={visibleWidgets.map(widget => widget.id)} strategy={rectSortingStrategy}>
+        <div ref={gridRef} className={s.grid} data-editing={isEditMode}>
+          {visibleWidgets.map((widget, index) => <BentoItemWrapper key={widget.id} widget={widget} isEditMode={isEditMode} index={index} count={visibleWidgets.length} onMove={moveWidget} onResize={resizeWidget} onRemove={id => saveLayout(widgets.filter(item => item.id !== id), `${widget.title} disembunyikan.`)}>{renderWidget(widget.id, widget.size)}</BentoItemWrapper>)}
+          {isEditMode && <button className={s.addSlot} onClick={() => setAddWidgetModalOpen(true)}><Plus size={22} />Tambah widget</button>}
+        </div>
+      </SortableContext>
+      <DragOverlay dropAnimation={{ duration: 220, easing: "cubic-bezier(.22,1,.36,1)" }}>{activeWidget && <div className={s.dragGhost}>{activeWidget.title}<span>Lepaskan untuk menempatkan</span></div>}</DragOverlay>
+    </DndContext>
+    {ready && !widgets.length && !isEditMode && <div className={s.emptyWorkspace}><h3>Ruang kosong untuk caramu sendiri.</h3><p>Tambahkan catatan, fokus, atau widget lain yang kamu butuhkan.</p><button className={s.primaryButton} onClick={() => { setIsEditMode(true); setAddWidgetModalOpen(true); }}><Plus size={17} />Tambah widget</button></div>}
+  </section>;
 }
