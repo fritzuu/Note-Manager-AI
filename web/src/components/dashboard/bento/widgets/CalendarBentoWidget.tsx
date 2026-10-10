@@ -1,148 +1,57 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
-import { Calendar as CalendarIcon, ChevronLeft, ChevronRight } from "lucide-react";
-import { TaskDocument } from "@/lib/firestore";
-import { useMounted } from "@/hooks/useMounted";
+import { useEffect, useState } from "react";
+import Link from "next/link";
+import { ChevronLeft, ChevronRight, ArrowUpRight } from "lucide-react";
+import type { TaskDocument } from "@/lib/firestore";
+import s from "./time-widgets.module.css";
+import type { WidgetSize } from "../types";
 
-interface CalendarBentoWidgetProps {
-  tasks: TaskDocument[];
-}
+const weekdays = ["Sen", "Sel", "Rab", "Kam", "Jum", "Sab", "Min"];
+const sameDay = (a: Date, b: Date) => a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
 
-export function CalendarBentoWidget({ tasks }: CalendarBentoWidgetProps) {
-  const mounted = useMounted();
-  const [currentDate, setCurrentDate] = useState<Date>(() => new Date());
-
+export function CalendarBentoWidget({ tasks, size = "2x1" }: { tasks: TaskDocument[]; size?: WidgetSize }) {
+  const compact = size === "1x1";
+  const taskLimit = size === "2x2" ? 5 : 1;
+  const [month, setMonth] = useState<Date | null>(null);
+  const [selected, setSelected] = useState<Date | null>(null);
+  const [today, setToday] = useState<Date | null>(null);
   useEffect(() => {
-    setCurrentDate(new Date());
+    const now = new Date(); setMonth(new Date(now.getFullYear(), now.getMonth(), 1)); setSelected(now); setToday(now);
+    const interval = window.setInterval(() => setToday(new Date()), 60000);
+    return () => window.clearInterval(interval);
   }, []);
-
-  const year = currentDate.getFullYear();
-  const month = currentDate.getMonth();
-
-  const monthNames = [
-    "Januari", "Februari", "Maret", "April", "Mei", "Juni",
-    "Juli", "Agustus", "September", "Oktober", "November", "Desember"
-  ];
-
-  const daysInMonth = new Date(year, month + 1, 0).getDate();
-  const firstDayIndex = new Date(year, month, 1).getDay();
-
-  const prevMonth = () => {
-    setCurrentDate(new Date(year, month - 1, 1));
+  const deadlines = tasks.flatMap(task => {
+    const date = task.deadline?.toDate?.();
+    return task.status !== "done" && date && Number.isFinite(date.getTime()) ? [{ task, date }] : [];
+  });
+  const year = month?.getFullYear() || 2000;
+  const monthIndex = month?.getMonth() || 0;
+  const blanks = month ? (month.getDay() + 6) % 7 : 0;
+  const days = month ? new Date(year, monthIndex + 1, 0).getDate() : 0;
+  const selectedTasks = selected ? deadlines.filter(item => sameDay(item.date, selected)).sort((a, b) => a.date.getTime() - b.date.getTime()) : [];
+  const goMonth = (direction: number) => {
+    if (!month || !today) return;
+    const next = new Date(year, monthIndex + direction, 1);
+    setMonth(next);
+    setSelected(next.getFullYear() === today.getFullYear() && next.getMonth() === today.getMonth() ? today : next);
   };
-
-  const nextMonth = () => {
-    setCurrentDate(new Date(year, month + 1, 1));
+  const goToday = () => {
+    const now = new Date(); setToday(now); setSelected(now); setMonth(new Date(now.getFullYear(), now.getMonth(), 1));
   };
-
-  const today = mounted ? new Date() : currentDate;
-  const isCurrentMonth = today.getFullYear() === year && today.getMonth() === month;
-
-  // Extract task deadline dates for dots
-  const taskDates = new Set(
-    tasks
-      .map((t) => (t.deadline?.toDate ? t.deadline.toDate() : null))
-      .filter((d): d is Date => d !== null && d.getFullYear() === year && d.getMonth() === month)
-      .map((d) => d.getDate())
-  );
-
-  const daysArray = Array.from({ length: daysInMonth }, (_, i) => i + 1);
-  const blankDays = Array.from({ length: firstDayIndex }, (_, i) => i);
-
-  return (
-    <div className="p-5 flex flex-col justify-between h-full group bg-white" suppressHydrationWarning>
-      {/* Header Month Navigation */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <div className="w-8 h-8 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center">
-            <CalendarIcon className="w-4 h-4" />
-          </div>
-          <div>
-            <h4 className="text-xs font-bold text-gray-900" suppressHydrationWarning>
-              {monthNames[month]} {year}
-            </h4>
-            <p className="text-[10px] text-gray-400">Mini Planner</p>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-1">
-          <button
-            onClick={prevMonth}
-            className="p-1 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors cursor-pointer"
-            title="Bulan Sebelumnya"
-          >
-            <ChevronLeft className="w-3.5 h-3.5" />
-          </button>
-          <button
-            onClick={nextMonth}
-            className="p-1 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors cursor-pointer"
-            title="Bulan Berikutnya"
-          >
-            <ChevronRight className="w-3.5 h-3.5" />
-          </button>
-        </div>
-      </div>
-
-      {/* Mini Calendar Grid */}
-      <div className="my-auto py-1" suppressHydrationWarning>
-        {/* Days of week */}
-        <div className="grid grid-cols-7 text-center text-[10px] font-bold text-gray-400 mb-1">
-          <span>Min</span>
-          <span>Sen</span>
-          <span>Sel</span>
-          <span>Rab</span>
-          <span>Kam</span>
-          <span>Jum</span>
-          <span>Sab</span>
-        </div>
-
-        {/* Days matrix */}
-        <div className="grid grid-cols-7 gap-y-1 text-center text-xs">
-          {blankDays.map((_, i) => (
-            <div key={`blank-${i}`} className="h-6" />
-          ))}
-
-          {daysArray.map((day) => {
-            const isToday = isCurrentMonth && today.getDate() === day;
-            const hasTask = taskDates.has(day);
-
-            return (
-              <div
-                key={`day-${day}`}
-                className="h-6 flex flex-col items-center justify-center relative group/day"
-              >
-                <span
-                  className={`w-6 h-6 rounded-full flex items-center justify-center text-[11px] font-medium transition-all ${
-                    isToday
-                      ? "bg-primary text-white font-bold shadow-xs scale-105"
-                      : "text-gray-700 hover:bg-primary-50 hover:text-primary"
-                  }`}
-                  suppressHydrationWarning
-                >
-                  {day}
-                </span>
-                {hasTask && !isToday && (
-                  <span className="w-1 h-1 bg-amber-500 rounded-full absolute bottom-0.5" />
-                )}
-              </div>
-            );
-          })}
-        </div>
-      </div>
-
-      {/* Footer */}
-      <div className="flex items-center justify-between text-[10px] text-gray-400 pt-1.5 border-t border-border/50">
-        <span className="flex items-center gap-1">
-          <span className="w-1.5 h-1.5 bg-amber-500 rounded-full inline-block" /> Deadline tugas
-        </span>
-        <button
-          onClick={() => setCurrentDate(new Date())}
-          className="text-primary font-bold hover:underline cursor-pointer"
-        >
-          Hari Ini
-        </button>
-      </div>
+  return <div className={s.calendar} data-calendar-size={size}>
+    <header className={s.calendarHeader}><div><p>Kalender</p><h2>{month ? month.toLocaleDateString("id-ID", { month: "long" }) : "Memuat…"}<span>{month?.getFullYear()}</span></h2></div><nav aria-label="Pilih bulan"><button type="button" disabled={!month} onClick={() => goMonth(-1)} aria-label="Bulan sebelumnya"><ChevronLeft size={18} /></button><button type="button" disabled={!month} onClick={() => goMonth(1)} aria-label="Bulan berikutnya"><ChevronRight size={18} /></button></nav></header>
+    <div className={s.weekdays} aria-hidden="true">{weekdays.map(day => <span key={day}>{day}</span>)}</div>
+    <div className={s.days} aria-label="Tanggal bulan ini">
+      {Array.from({ length: blanks }, (_, index) => <span key={`blank-${index}`} />)}
+      {Array.from({ length: days }, (_, index) => {
+        const date = new Date(year, monthIndex, index + 1);
+        const isToday = !!today && sameDay(date, today);
+        const count = deadlines.filter(item => sameDay(item.date, date)).length;
+        return <button key={index} type="button" className={s.day} data-today={isToday} aria-current={isToday ? "date" : undefined} aria-pressed={!!selected && sameDay(date, selected)} aria-label={`${date.toLocaleDateString("id-ID", { day: "numeric", month: "long", year: "numeric" })}${count ? `, ${count} deadline tugas` : ""}`} onClick={() => setSelected(date)}><span>{index + 1}</span>{count > 0 && <i aria-hidden="true" />}</button>;
+      })}
     </div>
-  );
+    <div className={s.calendarLegend}><span><i />Ada deadline</span><button type="button" onClick={goToday}>Hari ini</button></div>
+    {!compact && <div className={s.agenda}><h3>{selected ? sameDay(selected, today || selected) ? "Hari ini" : selected.toLocaleDateString("id-ID", { day: "numeric", month: "long" }) : "Deadline"}<span>{selectedTasks.length ? `${selectedTasks.length} tugas` : ""}</span></h3>{selectedTasks.length ? <>{selectedTasks.slice(0, taskLimit).map(({ task }) => <Link key={task.id} href={`/tasks/${task.id}/edit`}><span>{task.title}</span><ArrowUpRight size={15} /></Link>)}{selectedTasks.length > taskLimit && <Link href="/tasks">Lihat semua tugas<ArrowUpRight size={15} /></Link>}</> : <p>{month ? "Tidak ada deadline untuk tanggal ini." : "Menyiapkan kalender…"}</p>}</div>}
+  </div>;
 }

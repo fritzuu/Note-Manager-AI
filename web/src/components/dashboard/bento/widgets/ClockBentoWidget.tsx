@@ -1,112 +1,29 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
-import { Clock, Sun, Moon } from "lucide-react";
-import { useMounted } from "@/hooks/useMounted";
+import { useEffect, useState } from "react";
+import { Moon, Sun } from "lucide-react";
+import s from "./time-widgets.module.css";
 
 export function ClockBentoWidget() {
-  const mounted = useMounted();
   const [time, setTime] = useState<Date | null>(null);
-
+  const [zone, setZone] = useState("");
   useEffect(() => {
-    setTime(new Date());
-    const interval = setInterval(() => {
-      setTime(new Date());
-    }, 1000);
-    return () => clearInterval(interval);
+    const update = () => setTime(new Date());
+    update();
+    setZone(Intl.DateTimeFormat().resolvedOptions().timeZone || "Lokal");
+    const interval = window.setInterval(update, 1000);
+    return () => window.clearInterval(interval);
   }, []);
-
-  if (!mounted || !time) {
-    return (
-      <div className="p-5 flex flex-col justify-between h-full bg-gradient-to-br from-white via-gray-50/50 to-primary-50/20 animate-pulse">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-xl bg-primary/10 text-primary flex items-center justify-center">
-              <Clock className="w-4 h-4" />
-            </div>
-            <div>
-              <div className="h-3 w-16 bg-gray-200 rounded" />
-              <div className="h-2 w-20 bg-gray-100 rounded mt-1" />
-            </div>
-          </div>
-        </div>
-        <div className="space-y-1 my-auto py-2">
-          <div className="h-8 w-28 bg-gray-200 rounded" />
-          <div className="h-3 w-32 bg-gray-100 rounded" />
-        </div>
-        <div className="space-y-1 pt-1 border-t border-border/50">
-          <div className="h-2 w-full bg-gray-100 rounded" />
-        </div>
-      </div>
-    );
-  }
-
-  const hours = time.getHours();
-  const minutes = time.getMinutes().toString().padStart(2, "0");
-  const seconds = time.getSeconds().toString().padStart(2, "0");
-  const isNight = hours < 6 || hours >= 18;
-  const timeStr = `${hours.toString().padStart(2, "0")}:${minutes}`;
-  const dateStr = time.toLocaleDateString("id-ID", {
-    weekday: "long",
-    month: "short",
-    day: "numeric",
-  });
-  const tzName = Intl.DateTimeFormat().resolvedOptions().timeZone || "Local";
-
-  // Day progress percentage
-  const totalMinutesInDay = hours * 60 + time.getMinutes();
-  const dayProgress = Math.round((totalMinutesInDay / 1440) * 100);
-
-  return (
-    <div
-      className="p-5 flex flex-col justify-between h-full group bg-gradient-to-br from-white via-gray-50/50 to-primary-50/20"
-      suppressHydrationWarning
-    >
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <div className="w-8 h-8 rounded-xl bg-primary/10 text-primary flex items-center justify-center">
-            <Clock className="w-4 h-4" />
-          </div>
-          <div>
-            <h4 className="text-xs font-bold text-gray-900">Local Time</h4>
-            <p className="text-[10px] text-gray-400 truncate max-w-[120px]">{tzName}</p>
-          </div>
-        </div>
-        <div className="flex items-center gap-1 text-[10px] font-bold text-gray-500 bg-gray-100 px-2 py-0.5 rounded-full">
-          {isNight ? <Moon className="w-3 h-3 text-indigo-500" /> : <Sun className="w-3 h-3 text-amber-500" />}
-          <span>{isNight ? "Malam" : "Siang"}</span>
-        </div>
-      </div>
-
-      {/* Main Digital Clock Display */}
-      <div className="space-y-1 my-auto py-2" suppressHydrationWarning>
-        <div className="flex items-baseline gap-1.5" suppressHydrationWarning>
-          <span className="text-3xl font-extrabold font-mono text-gray-900 tracking-tight" suppressHydrationWarning>
-            {timeStr}
-          </span>
-          <span className="text-sm font-mono font-bold text-primary" suppressHydrationWarning>
-            :{seconds}
-          </span>
-        </div>
-        <p className="text-xs font-semibold text-gray-500" suppressHydrationWarning>
-          {dateStr}
-        </p>
-      </div>
-
-      {/* Footer: Day Progress */}
-      <div className="space-y-1 pt-1 border-t border-border/50">
-        <div className="flex items-center justify-between text-[10px] text-gray-400 font-semibold">
-          <span>Day Progress</span>
-          <span className="text-primary font-bold">{dayProgress}%</span>
-        </div>
-        <div className="w-full h-1.5 bg-gray-200 rounded-full overflow-hidden">
-          <div
-            style={{ width: `${dayProgress}%` }}
-            className="h-full bg-primary rounded-full transition-all"
-          />
-        </div>
-      </div>
-    </div>
-  );
+  const hours = time?.getHours() || 0;
+  const night = hours < 6 || hours >= 18;
+  const progress = time ? (hours * 3600 + time.getMinutes() * 60 + time.getSeconds()) / 86400 : 0;
+  const location = zone.includes("/") ? zone.split("/").slice(1).join(" / ").replace(/_/g, " ") : zone;
+  const offset = time ? new Intl.DateTimeFormat("id-ID", { timeZoneName: "shortOffset" }).formatToParts(time).find(part => part.type === "timeZoneName")?.value : "";
+  const clock = time ? `${String(hours).padStart(2, "0")}:${String(time.getMinutes()).padStart(2, "0")}` : "––:––";
+  return <div className={s.clock}>
+    <div className={s.clockOrbit} aria-hidden="true"><i /><i /><span style={{ transform: `rotate(${progress * 360}deg)` }}><b /></span></div>
+    <header className={s.clockHeader}><h2>Waktu sekarang</h2>{time && (night ? <Moon size={17} strokeWidth={1.5} aria-label="Malam" /> : <Sun size={19} strokeWidth={1.5} aria-label="Siang" />)}</header>
+    <div className={s.clockMain}><time className={s.clockDigits} dateTime={time?.toISOString()}>{clock}</time><p>{time ? time.toLocaleDateString("id-ID", { weekday: "long", day: "numeric", month: "long" }) : "Menyiapkan waktu lokal…"}</p></div>
+    <footer className={s.clockFooter}><span>{location || "Waktu lokal"}</span><span>{offset}</span></footer>
+  </div>;
 }
